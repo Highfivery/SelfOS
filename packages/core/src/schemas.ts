@@ -1072,40 +1072,56 @@ export const AdaptiveItemSchema = z.object({
 });
 export type AdaptiveItem = z.infer<typeof AdaptiveItemSchema>;
 
-/** One turn of an adaptive take: the item, the answer, when. Order is the array's order. */
+/**
+ * One turn of an adaptive take: the item, the answer, when. Order is the array's order.
+ *
+ * 74 §3.6.35 — `answer` is OPTIONAL, and an absent one means "this was put in front of them and they have not
+ * responded yet". That is the whole of the fix for the three AI steps: the generated set used to live in
+ * renderer state alone, so every line not reacted to, every question not answered and every moment not picked
+ * vanished on a reload and could never be reviewed. The set is stamped the moment it is generated now, so it
+ * is the take's own record rather than a screenful of state.
+ *
+ * Every consumer of an answer already had to narrow the union, so an absent one falls out correctly:
+ * `isAnsweredTurn` and `takeCarriesDistress` are `typeof === 'string'` checks, `answersDigest` filters
+ * `undefined`, and the report's "what you told it" reads through `isAnsweredTurn`.
+ */
 export const AdaptiveTurnSchema = z.object({
   phase: z.string().min(1),
   item: AdaptiveItemSchema,
-  answer: z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.string()),
-    z.record(z.string(), z.number()),
-  ]),
+  answer: z
+    .union([
+      z.string(),
+      z.number(),
+      z.boolean(),
+      z.array(z.string()),
+      z.record(z.string(), z.number()),
+    ])
+    .optional(),
   at: z.string(),
+  /**
+   * 74 §3.6.37 — deleted by the person, and kept as a tombstone.
+   *
+   * Skipping and deleting are different acts: a skip stays on screen and stays answerable, a delete means
+   * "get this off my screen for good". The row cannot simply be dropped from `turns`, because the same list
+   * is what stops a phase re-offering something — the bridge builds each phase's avoid-list from it and
+   * reads back which ambiguities have been put to them. Erasing the row would let the model write the same
+   * question again and let "Ask me more" spend a call re-asking the ambiguity behind it, which is the
+   * opposite of what deleting a bad question is for.
+   *
+   * So the row survives carrying its TEXT, and the ANSWER is dropped with it. That is what makes the rest
+   * fall out with no new filters: `answersDigest`, the report's "what you told it" and `takeCarriesDistress`
+   * all key on there being an answer, so a deleted item stops feeding the profile the moment it is deleted.
+   */
+  deleted: z.boolean().optional(),
 });
 export type AdaptiveTurn = z.infer<typeof AdaptiveTurnSchema>;
 
 /**
- * How one entry landed (74 §3.6.2). `never` is a permanent boundary — suppressed everywhere, never
- * re-offered, never requiring a reason. `okay` is a MILD YES: fine, works, not a favourite. Absent ⇒ simply
- * unrated, which is NEVER read as a no (74 §7).
+ * 74 §3.6.8/§3.6.26 — one direction's answer: the three marks BOTH marking phases use.
  *
- * `notYet` ("makes me cringe") is the superseded middle state and is accepted only so an existing vault still
- * parses; it is coerced to `okay` on read and never written again. The coercion is real — the two meanings
- * differ — and its blast radius is bounded because a COMPLETED take persists its derived goals onto the
- * lexicon, so only an unfinished draft loses a goal contribution (74 §3.6.2).
- */
-export const LexiconStateSchema = z
-  .enum(['never', 'okay', 'notYet'])
-  .transform((state) => (state === 'notYet' ? ('okay' as const) : state));
-export type LexiconState = z.infer<typeof LexiconStateSchema>;
-
-/**
- * 74 §3.6.8 — one direction's answer for a name: the three marks the deck already uses. Distinct from
- * `LexiconState`, which has no `love` because love is carried by the ratings; a per-direction mark needs all
- * three in one value, since there is no second number to put it in.
+ * This is the only mark there is. The deck used to carry a whole-entry `state` plus a separate 0–4 split to
+ * pull the two directions apart; that pair is gone, and with it the shape where an entry had one answer
+ * standing in for two.
  */
 export const LexiconDirectionMarkSchema = z.enum(['love', 'okay', 'never']);
 export type LexiconDirectionMark = z.infer<typeof LexiconDirectionMarkSchema>;
@@ -1123,15 +1139,14 @@ export const LexiconEntrySchema = z.object({
   tier: z.number().int().min(1).max(5),
   hear: LexiconRatingSchema.catch(0).default(0),
   say: LexiconRatingSchema.catch(0).default(0),
-  state: LexiconStateSchema.optional(),
   /**
-   * 74 §3.6.8 — the per-DIRECTION marks, written by the pet-name phase, where a name is answered twice: once
-   * for being called it and once for calling them it. The two genuinely diverge — wanting to call her
-   * "good girl" says nothing about wanting to be called it — so one `state` cannot hold the answer.
+   * 74 §3.6.8/§3.6.26 — the per-DIRECTION marks, written by BOTH marking phases: every term is answered
+   * twice, once for hearing it and once for saying it. The two genuinely diverge — wanting to call her
+   * "good girl" says nothing about wanting to be called it.
    *
-   * `hear`/`say` are still derived from these (love → 4, okay → 2, never → 0), so the spine, the steer, the
-   * report and every existing consumer keep reading the same two numbers they always did. Absent on a phrase
-   * entry, which is marked once and split afterwards.
+   * `hear`/`say` are derived from these (love → 4, okay → 2, never → 0), so the spine, the steer, the report
+   * and every existing consumer keep reading the same two numbers they always did. A side is absent when it
+   * was not answered — which is not the same as a zero, and `directionAnswered` is what tells them apart.
    */
   hearState: LexiconDirectionMarkSchema.optional(),
   sayState: LexiconDirectionMarkSchema.optional(),
@@ -1429,18 +1444,87 @@ export function ambiguityOfProbeTurn(turnId: string): string {
 }
 
 /**
- * What a SKIPPED probe question records (74 §3.6.17).
+ * 74 §3.6.35 — a scenario turn's id, and the context it belongs to. The `probeTurnId` pair, one phase over.
+ *
+ * This format was built inline in the renderer when a moment was answered, and taken apart inline in the
+ * renderer when the answered moments were grouped by category — two hand-written copies of one format, with a
+ * third about to be written by the bridge now that a generated moment is recorded before anyone picks
+ * anything. The offer and the answer MUST land on the same id or `stampTurn` appends a second turn instead of
+ * filling in the first, and the moment would appear twice: once unanswered, once answered.
+ */
+export function scenarioTurnId(context: string, scene: string): string {
+  return `${context}#${scene.slice(0, 40)}`;
+}
+
+/** The moment category a scenario turn belongs to. */
+export function contextOfScenarioTurn(turnId: string): string {
+  return turnId.split('#')[0] ?? '';
+}
+
+/**
+ * What a SKIPPED question or moment records (74 §3.6.17, widened §3.6.37).
+ *
+ * Named for the probe when it was the only step that could skip; moments are skippable now, and a constant
+ * called `PROBE_SKIPPED` stamped onto a scenario turn is the kind of name that goes quietly wrong later. The
+ * VALUE is on disk and does not change — this is a rename, not a migration.
  *
  * Skipping has to record the question as asked, or "skip this" hands back the same one forever. It used to
  * record `''` — which is a string, so every consumer that tested `typeof answer === 'string'` counted a skip
  * as an answer: the review list showed skipped questions under an "Answered" label with an empty box. A
  * distinct marker keeps them visible, honestly labelled, and still answerable.
  */
-export const PROBE_SKIPPED = ' skipped';
+export const SKIPPED_ANSWER = ' skipped';
+
+/**
+ * What a skip was recorded as before 2026-08-20 (74 §3.6.38), and why it had to change.
+ *
+ * The value carried a literal NUL where its own docstring said a space — `'\0skipped'`, not `' skipped'`.
+ * Self-consistent, because every reader compares against the constant rather than the text, and a landmine
+ * for three reasons: it was the single NUL byte in a 330KB file, which is why `grep` treated `schemas.ts` as
+ * binary and printed nothing (a trap this project had written down rather than fixed); any comparison
+ * written literally instead of against the constant would fail with no visible cause; and the value is
+ * persisted, so it sits in every skipped turn already on disk.
+ *
+ * Written as an ESCAPE, so the byte itself is gone from the source. `healSkippedAnswers` rewrites any row
+ * still carrying it, at the two points a result is read — nothing else may reference this, because after
+ * that a skip is one value again.
+ */
+export const LEGACY_NUL_SKIPPED_ANSWER = '\u0000skipped';
+
+/**
+ * 74 §3.6.38 — rewrite any turn still recorded with the old NUL-bearing skip marker.
+ *
+ * Pure, idempotent, and it reports whether it changed anything, because a read-time migration that only heals
+ * IN MEMORY hides the write that should persist it — the §3.6.34 lesson, where a heal-on-read silently stopped
+ * anything writing back and the stale rows sat on disk being re-healed forever.
+ *
+ * This is not optional politeness. `String.trim` does not strip NUL (it is not whitespace), so once the
+ * constant changed, an unhealed row would satisfy `isAnsweredTurn` — every question anyone had ever SKIPPED
+ * would read back as ANSWERED, render under an "Answered" chip, and reach the model as `\u0000skipped`. That
+ * is exactly the defect §3.6.17 fixed, reintroduced by a one-character change.
+ */
+export function healSkippedAnswers(result: TestResult): {
+  result: TestResult;
+  changed: boolean;
+} {
+  const turns = result.turns;
+  if (!turns?.some((turn) => turn.answer === LEGACY_NUL_SKIPPED_ANSWER)) {
+    return { result, changed: false };
+  }
+  return {
+    result: {
+      ...result,
+      turns: turns.map((turn) =>
+        turn.answer === LEGACY_NUL_SKIPPED_ANSWER ? { ...turn, answer: SKIPPED_ANSWER } : turn,
+      ),
+    },
+    changed: true,
+  };
+}
 
 /** Whether a turn's answer is a real answer rather than a recorded skip. */
 export function isAnsweredTurn(answer: unknown): answer is string {
-  return typeof answer === 'string' && answer.trim() !== '' && answer !== PROBE_SKIPPED;
+  return typeof answer === 'string' && answer.trim() !== '' && answer !== SKIPPED_ANSWER;
 }
 
 /**
@@ -1462,14 +1546,13 @@ export interface AdaptiveSynthesisView {
 
 /** The edits a person may make to their own lexicon (74 §3.4). */
 export type AdaptiveLexiconEdit =
-  | { kind: 'rate'; key: string; hear?: number; say?: number }
-  | { kind: 'setState'; key: string; state: 'never' | 'okay' | null }
   /**
-   * Take back ONE direction of a pet-name mark. `setState` is whole-entry (what the deck writes); a name is
-   * answered per direction, so its `never` lives in `hearState`/`sayState` and needs its own op — which is
-   * what makes the report's hard-no list actionable even for a name no longer in the bank (74 §3.2/§3.6.8).
+   * Take back ONE direction of a mark — the names AND, since §3.6.26, the words, which are answered the same
+   * way. It is what makes the report's per-direction hard-no lists actionable even for a term no longer in
+   * the bank, which is the only thing standing between a retired row and a preference nobody can lift
+   * (74 §3.2/§3.6.8/§3.6.26). The whole-entry `rate`/`setState` ops it replaces went with the 0–4 split.
    */
-  | { kind: 'clearNameSide'; key: string; side: 'hear' | 'say' }
+  | { kind: 'clearSide'; key: string; side: 'hear' | 'say' }
   | {
       // 74 §3.6.4 — the two address taps. A DISPLAY filter: writes no mark, lifts no boundary.
       kind: 'setAddress';
@@ -1479,7 +1562,13 @@ export type AdaptiveLexiconEdit =
       identity?: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' };
     }
   | { kind: 'addWord'; text: string; family: string; wordKind: 'word' | 'phrase' }
-  | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' };
+  | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' }
+  /**
+   * 74 §3.6.35 — lift a themed boundary. The counterpart `addBoundary` never had: a `never` is a preference
+   * (§3.2), and the lines step's "never anything like this again" was minting one that nothing in the app
+   * could take back.
+   */
+  | { kind: 'removeBoundary'; text: string };
 
 /**
  * One taking of a self-assessment ("Test"), per-person + encrypted at `people/<id>/tests/<result-id>.enc`

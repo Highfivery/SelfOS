@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bankByFamily,
   bankEntry,
+  bankFamily,
   bankSlug,
   deckFamilies,
   nameFamilies,
@@ -10,6 +11,9 @@ import {
 } from './bank';
 import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
+
+/** A throwaway family for testing the key scheme itself. */
+const FAM = { label: 'x', kind: 'phrase', directions: ['hear', 'say'] } as const;
 
 describe('the dirty-talk bank (74 §13)', () => {
   it('is comprehensive — hundreds of entries across every family', () => {
@@ -30,13 +34,39 @@ describe('the dirty-talk bank (74 §13)', () => {
     expect(bankSlug("don't stop")).toBe('don-t-stop');
   });
 
-  it('scopes keys by family, so the same phrase can appear in two families', () => {
-    // "taste me" is both a demand and a taste-family entry; they must not collide.
-    const demand = bankEntry(DIRTY_TALK_BANK, 'demands-receiving:taste-me');
-    const taste = bankEntry(DIRTY_TALK_BANK, 'taste:taste-me');
-    expect(demand?.text).toBe('taste me');
-    expect(taste?.text).toBe('taste me');
-    expect(demand?.family).not.toBe(taste?.family);
+  it('scopes keys by family, so two families CAN hold the same phrase without colliding', () => {
+    // The property is the key scheme's, not the content's — `bankFamily` prefixes every key with its family.
+    // It used to be demonstrated with "taste me", which lived in three families until 74 §3.6.29 deduped
+    // them; the mechanism still has to hold, because a future family may legitimately reuse a phrase.
+    const [a, b] = [
+      bankFamily({ ...FAM, id: 'fam-a' }, { 3: ['taste me'] }),
+      bankFamily({ ...FAM, id: 'fam-b' }, { 3: ['taste me'] }),
+    ];
+    expect(a.entries[0]?.key).toBe('fam-a:taste-me');
+    expect(b.entries[0]?.key).toBe('fam-b:taste-me');
+    expect(a.entries[0]?.key).not.toBe(b.entries[0]?.key);
+  });
+
+  it('holds each line exactly once — no duplicates and no near-duplicates (74 §3.6.29)', () => {
+    /*
+     * 82 lines used to appear in two or three families ("taste me" in demands-receiving, oral AND taste), so
+     * a person marked the same words up to three times — 92 redundant rows, 184 taps — and, worse, the copies
+     * could disagree: `suppressedTexts` keys on TEXT, so a `never` on one copy suppressed the word everywhere,
+     * including where another copy was loved.
+     */
+    const seen = new Map<string, string>();
+    const clashes: string[] = [];
+    for (const entry of DIRTY_TALK.bank.entries) {
+      const text = entry.text.trim().toLowerCase();
+      const prior = seen.get(text);
+      if (prior) clashes.push(`"${entry.text}" in ${prior} and ${entry.family}`);
+      else seen.set(text, entry.family);
+    }
+    expect(clashes).toEqual([]);
+    // …and the keys stay unique, which is what a rating is actually stored against (46 §4.2).
+    expect(new Set(DIRTY_TALK.bank.entries.map((e) => e.key)).size).toBe(
+      DIRTY_TALK.bank.entries.length,
+    );
   });
 
   it('tiers every entry 1..5 and carries both directions', () => {
@@ -98,7 +128,8 @@ describe('the dirty-talk bank (74 §13)', () => {
       say: 0,
       source: 'test:1',
     });
-    expect(entry.state).toBeUndefined();
+    expect(entry.hearState).toBeUndefined();
+    expect(entry.sayState).toBeUndefined();
   });
 });
 
@@ -140,6 +171,32 @@ describe('74 §3.6.1 #1 — the examples', () => {
     expect(lazy.map((e) => e.key)).toEqual([]);
   });
 
+  /*
+   * 74 §3.6.34 — and never illustrates one entry with ANOTHER entry's whole line.
+   *
+   * The sibling above catches an example that restates its OWN entry. This catches the other shape, which is
+   * what the production audit actually found: five word entries in `sensation` whose examples were verbatim
+   * copies of a `praise-him`/`narration`/`size-fit` line, so the same string appeared twice on screen as two
+   * separate rows — and `anatomy-her:your holes`, illustrated with the t5 entry `all your holes`, which made
+   * the two rows indistinguishable in practice.
+   *
+   * A word entry SHOULD be shown inside a sentence; the rule is only that the sentence must not itself be a
+   * row the person is separately asked to mark.
+   */
+  it('never illustrates one entry with ANOTHER entry’s whole line (74 §3.6.34)', () => {
+    const byText = new Map<string, string[]>();
+    for (const entry of DIRTY_TALK.bank.entries) {
+      const t = entry.text.trim().toLowerCase();
+      byText.set(t, [...(byText.get(t) ?? []), entry.key]);
+    }
+    const collisions = DIRTY_TALK.bank.entries.flatMap((entry) => {
+      const ex = (entry.example ?? '').trim().toLowerCase();
+      const owners = (byText.get(ex) ?? []).filter((k) => k !== entry.key);
+      return owners.length > 0 ? [`${entry.key} → is verbatim ${owners.join(', ')}`] : [];
+    });
+    expect(collisions).toEqual([]);
+  });
+
   it('keeps every example inside the boundary the bank itself sets', () => {
     // The content standard is the same one the entries carry (74 §8.1) — the examples are not an exception.
     const forbidden = /\b(child|kid|minor|teen|underage)\b/i;
@@ -165,7 +222,16 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   it('splits every family into exactly one phase — never both, never neither', () => {
     expect(names.length + deck.length).toBe(DIRTY_TALK.bank.families.length);
     expect(names.some((f) => deck.some((d) => d.id === f.id))).toBe(false);
-    expect(names.length).toBeGreaterThan(20);
+    // 19 since §3.6.33 retired `names-breeding` (20 after §3.6.30's `names-masculine`). A floor, not a
+    // target — the phase has to stay substantial, and a retirement that halved it should fail here rather
+    // than pass quietly. It did exactly that on the breeding retirement, which is the point: each step down
+    // is a deliberate, owner-approved edit, never a quiet drift.
+    // 74 §3.6.33 — 10 after the owner retired nine more registers. Each step down is a deliberate,
+    // owner-approved edit that had to come here and change this number, never a quiet drift.
+    // 74 §3.6.33 — 9 after `names-aftercare` was retired too. The floor has now caught three separate
+    // retirements in one pass, which is exactly its job: each is a deliberate, owner-approved edit that had
+    // to come here and change this number, never a quiet drift.
+    expect(names.length).toBeGreaterThanOrEqual(9);
   });
 
   it('gives every name a line showing it in use — a bare word is never the whole row', () => {
@@ -180,15 +246,72 @@ describe('74 §3.6.8 — the pet-name bank', () => {
     expect(missing).toEqual([]);
   });
 
-  it('keys every name uniquely, including the ones that appear in two registers', () => {
+  it('keys every name uniquely, and says the same thing only once', () => {
     const keys = nameEntries.map((e) => e.key);
     expect(new Set(keys).size).toBe(keys.length);
-    // "papi" is masculine AND other-tongues; each copy is its own row with its own line. The key is
-    // scoped by FAMILY, which is what lets the same word mean different things in two registers --
-    // and is why the 2026-08-19 purge had to cut by (family, text): "my gifted girl" is achievement
-    // praise in names-praise and a girl who was GIVEN AWAY in names-sharing, so a text-keyed cut
-    // would have taken the on-register one with it.
-    expect(keys.filter((k) => k.endsWith(':papi')).length).toBeGreaterThan(1);
+    /*
+     * The key is scoped by FAMILY, which is what lets the same word mean different things in two
+     * registers -- and is why a cut must be by (family, text): "my gifted girl" is achievement praise
+     * in names-praise and a girl who was GIVEN AWAY in names-sharing, so a text-keyed cut would have
+     * taken the on-register one with it.
+     *
+     * That scoping is a licence for a genuine second MEANING, never for the same name twice. `papi`
+     * was in masculine and other-tongues meaning exactly the same thing, so it was marked twice, and
+     * one copy could hold a love while the other held a no -- the same defect the deck/names overlap
+     * had (#534). Both halves are pinned: keys stay unique, and no text repeats.
+     */
+    const texts = nameEntries.map((e) => e.text.trim().toLowerCase());
+    expect(new Set(texts).size).toBe(texts.length);
+  });
+
+  it('renders every example as grammatical English (74 §3.6.33)', () => {
+    /*
+     * 61 names carried an example built from a BARE-NOUN template applied to a name that already owns a
+     * possessive: "you're such a my cock queen", "someone's been a my sassy girl", "you filthy my greedy
+     * slut", "you pathetic my imbecile". Broken English, on the one screen a person reads several hundred
+     * rows of. The tell is an article or a bare modifier sitting immediately before `my`/`your`/`our`.
+     */
+    const broken = DIRTY_TALK.bank.entries.filter((e) =>
+      /\b(a|an|little|filthy|pretty|pathetic|good)\s+(my|your|our)\b/i.test(e.example ?? ''),
+    );
+    expect(broken.map((e) => `${e.family}:${e.text} — ${e.example}`)).toEqual([]);
+  });
+
+  it('never ships a double-encoded dash or ellipsis (74 §3.6.33)', () => {
+    // Four examples stored the mojibake ESCAPED (`\u00e2\u0080\u0094`), so it read as ASCII in the source
+    // and only became U+00E2 + a C1 control at runtime — invisible to a decoded-text scan of the file.
+    const mojibake = DIRTY_TALK.bank.entries.filter((e) =>
+      /[\u00e2][\u0080-\u009f]/.test(`${e.text}${e.example ?? ''}`),
+    );
+    expect(mojibake.map((e) => `${e.family}:${e.text}`)).toEqual([]);
+  });
+
+  it('never lets an example flip the direction its own text names (74 §3.6.33)', () => {
+    // `anatomy-her: your fuckhole` illustrated itself with "you're just MY fuckhole tonight" — the opposite
+    // person's body from the one the entry names, on a screen whose whole job is hear-vs-say.
+    const flipped = DIRTY_TALK.bank.entries.filter((e) => {
+      const m = /^your\s+(.+)$/i.exec(e.text.trim());
+      return m ? new RegExp(`\\bmy\\s+${m[1]}\\b`, 'i').test(e.example ?? '') : false;
+    });
+    expect(flipped.map((e) => `${e.family}:${e.text} — ${e.example}`)).toEqual([]);
+  });
+
+  it('never carries a name and its bare form as two rows', () => {
+    // "my love" beside "love" is one name asked twice: the possessive changes nothing about what is
+    // being decided, so it doubled the taps for nothing (owner, 2026-08-19). 184 pairs were cut.
+    const byFamily = new Map<string, Set<string>>();
+    for (const entry of nameEntries) {
+      const set = byFamily.get(entry.family) ?? new Set<string>();
+      set.add(entry.text.trim());
+      byFamily.set(entry.family, set);
+    }
+    const pairs: string[] = [];
+    for (const [family, texts] of byFamily) {
+      for (const text of texts) {
+        if (text.startsWith('my ') && texts.has(text.slice(3))) pairs.push(`${family}: ${text}`);
+      }
+    }
+    expect(pairs).toEqual([]);
   });
 
   it('asks every name BOTH ways — the whole point of the phase', () => {
@@ -198,9 +321,16 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   });
 
   it('carries the roleplay framing on every register that needs it', () => {
-    for (const id of ['names-kinship', 'names-roleplay', 'names-innocence', 'names-agegap']) {
-      const family = names.find((f) => f.id === id);
-      expect(family?.note?.toLowerCase()).toMatch(/adult|roleplay/);
+    /*
+     * 74 §3.6.33 — `names-roleplay` and `names-innocence` were the two registers named here, and both were
+     * retired. Rather than delete the rule or pin it to dead ids, it is now DERIVED: any surviving name
+     * register that presents itself as a roleplay must say so in its own note. That re-arms automatically
+     * the moment such a register is added again, which pinning ids never would.
+     */
+    for (const family of names) {
+      const blob = `${family.label} ${family.note ?? ''}`.toLowerCase();
+      if (!/roleplay/.test(blob)) continue;
+      expect(family.note?.toLowerCase()).toMatch(/adult|roleplay/);
     }
   });
 

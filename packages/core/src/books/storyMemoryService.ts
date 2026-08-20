@@ -36,10 +36,11 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { BIOGRAPHY_BOOK_TYPE, MCADAMS_SCENES, getBookType } from './bookTypes';
 import { resolvePersonOptionNames } from './castRegister';
-import { subjectLexiconBlock } from './storyGenerationService';
+import { subjectLexiconBlocks } from './storyGenerationService';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { gatherBiographerReference } from './storyReference';
 import { getInterviewState, listBooks, listChapters, saveInterviewState } from './storyService';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * "Share a memory" (64-your-story §14) — the biographer interview chat + its synthesized memory. A person
@@ -327,7 +328,7 @@ async function buildMemorySystem(
     // The biographer CHAT is a live conversational surface inside an adult-gated book, so it carries the
     // same vocabulary + hard-no block the chapter passes do (74 §8.4). It was the one prose surface here
     // generating in that register with no boundary list at all.
-    await subjectLexiconBlock(fs, key, bookType, personId),
+    await subjectLexiconBlocks(fs, key, bookType, personId),
   );
   const guidance = MEMORY_INTERVIEW_GUIDANCE.replace('${name}', name || 'this person');
   // What it already knows (72 §5.5). Without this the conversation opens cold and asks about things the
@@ -666,7 +667,15 @@ async function maybeGenerateWorkingTitle(
     {
       apiKey,
       model,
-      system: 'You give a personal memory a short, evocative working title in a few words.',
+      // 74 §5.8a — the title is prose the person reads, in their memory list, unreviewed. Its three siblings
+      // in this file all route through `buildMemorySystem` → `subjectLexiconBlocks`, which carries this; this
+      // one builds its own system string and so was the last path in the file without it.
+      system: [
+        'You give a personal memory a short, evocative working title in a few words.',
+        await buildOwnSuppressionBlock(fs, key, personId),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       messages: [
         ...transcript.messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: WORKING_TITLE_INSTRUCTION },

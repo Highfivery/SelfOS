@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextStepAfter, stepStatuses, TAKE_STEPS, type StepInput } from './takeSteps';
+import {
+  markCount,
+  nextStepAfter,
+  stepStatuses,
+  TAKE_STEPS,
+  type StepInput,
+  type StepStatus,
+} from './takeSteps';
 
 /**
  * 74 §3.6.9 — the step model. These pin the cases the walk turned up, all of which were reachable in the old
@@ -13,8 +20,6 @@ const BASE: StepInput = {
   skipped: [],
   nameMarks: 0,
   bankMarks: 0,
-  splitNeeded: 0,
-  splitAnswered: 0,
   lineReactions: 0,
   probesAnswered: 0,
   scenariosAnswered: 0,
@@ -159,5 +164,39 @@ describe('nextStepAfter', () => {
     expect(nextStepAfter(statuses, 'bank')?.step.id).toBe('lines');
     expect(nextStepAfter(statuses, 'scenario')?.step.id).toBe('profile');
     expect(nextStepAfter(statuses, 'profile')).toBeNull();
+  });
+});
+
+/*
+ * 74 §3.6.34 — the map's total counts MARKS, and three of the five counted steps are not marks.
+ *
+ * `TakeMap` summed every counted step and rendered it as "N marks so far" and, on the retake screen, "You
+ * have N marks on record from last time" — the number someone weighs when deciding whether to keep them or
+ * start from an empty sheet. Line reactions, answered probe questions and worked moment categories are not
+ * marks; `TakeMap`'s own `doneLabel` docstring already said why they cannot be added.
+ */
+describe('markCount', () => {
+  const statuses = (over: Partial<StepInput> = {}): StepStatus[] =>
+    stepStatuses({
+      ...BASE,
+      phase: 'map',
+      nameMarks: 12,
+      bankMarks: 7,
+      lineReactions: 5,
+      probesAnswered: 6,
+      scenariosAnswered: 4,
+      identityAnswered: true,
+      loved: 9,
+      ...over,
+    });
+
+  it('counts the two MARKING steps and nothing else', () => {
+    // 12 + 7 — never + 5 line reactions + 6 probe answers + 4 moment categories.
+    expect(markCount(statuses())).toBe(19);
+  });
+
+  it('does not move when a non-marking step advances', () => {
+    const before = markCount(statuses());
+    expect(markCount(statuses({ probesAnswered: 6 + 10, scenariosAnswered: 6 }))).toBe(before);
   });
 });

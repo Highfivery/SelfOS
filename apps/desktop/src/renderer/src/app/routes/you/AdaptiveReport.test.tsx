@@ -142,7 +142,7 @@ describe('AdaptiveReport (74 §3.3)', () => {
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
-  it('shows an entry dialled DOWN in the split, instead of losing it entirely', async () => {
+  it('shows a middle mark under its own heading, instead of losing it entirely', async () => {
     // Marked love in the deck, then rated 1 in the split: below the >= 3 bar for loved, not a boundary, not
     // the middle mark. Recorded and shown nowhere. It reads as "fine, not a favourite".
     const one = [result('r1', '2026-06-01T00:00:00Z', 0.4)];
@@ -156,13 +156,16 @@ describe('AdaptiveReport (74 §3.3)', () => {
               ...state().lexicon,
               entries: [
                 {
-                  key: 'names-power:good-girl',
+                  // A WORD, not a pet name: the names have their own section, and since §3.6.26 the words
+                  // section excludes them rather than listing a loved name twice.
+                  key: 'praise:good-girl',
                   text: 'good girl',
                   kind: 'word',
-                  family: 'names-power',
+                  family: 'praise',
                   tier: 2,
-                  hear: 1,
+                  hear: 2,
                   say: 0,
+                  hearState: 'okay' as const,
                 },
               ],
             },
@@ -224,7 +227,7 @@ describe('AdaptiveReport (74 §3.3)', () => {
       sides: ['hear' as const],
       hear: state_ ? 0 : 4,
       say: 0,
-      ...(state_ ? { state: state_ } : {}),
+      ...(state_ ? { hearState: state_ } : { hearState: 'love' as const }),
     });
     const entries = [
       ...Array.from({ length: 15 }, (_, i) => entry(i, undefined)),

@@ -147,14 +147,14 @@ function suggestGuidance(adultAllowed: boolean, suppressed: readonly string[] = 
   const intimacy = adultAllowed
     ? `If — and only if — their own material clearly points to intimacy/sexual growth they want, a consensual-adult \
 intimacy challenge is allowed (set "adult": true, "domain": "intimacy"); draw it only from their interests and \
-curiosities, NEVER anything they'd treat as a hard no, and keep it gentle and consent-forward.${nos}`
+curiosities, NEVER anything they'd treat as a hard no, and keep it gentle and consent-forward.`
     : `Do NOT suggest any sexual or intimate challenge.`;
   return `You are SelfOS's challenge coach, proposing ONE small "challenge" — a deliberately-stretching little \
 experiment this person could try between now and a check-in, grounded in what they have actually been \
 reflecting on. It is an INVITATION, never a verdict on them: small, specific, time-boxed, and \
 achievable-but-stretching. Draw it from their own goals, avoided situations, stated values, or curiosities. \
 Respect every boundary: never propose anything unsafe, coercive, clinical (a phobia/addiction/eating pattern \
-→ that's for a professional, not a challenge), or anything they'd find shaming. ${intimacy} If there isn't \
+→ that's for a professional, not a challenge), or anything they'd find shaming. ${intimacy}${nos} If there isn't \
 enough to ground an honest, specific suggestion, say so rather than inventing one.
 
 Respond with ONLY a JSON object: {"action": string (the suggested action, in warm second-person, the only \

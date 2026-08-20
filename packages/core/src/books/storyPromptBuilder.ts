@@ -249,6 +249,19 @@ function closingDirective(bookType: BookType, options: Record<string, string>): 
  * The shared Biographer system prompt (§5.2): SAFETY boundary + the book type's doctrine + banned-prose
  * contract + the voice/style/length directives. Pure — no I/O, no cost.
  */
+/**
+ * 74 §5.8a — the two halves of a subject's lexicon, kept apart because they have different rules.
+ *
+ * `steer` is their explicit vocabulary and is ADULT-GATED. `suppression` is their hard-no list and applies to
+ * every book: a biography chapter about a marriage reaches the same ground, and a hard no can only ever
+ * PREVENT a line. They travelled as one string and were re-tested against `gates.adult` here, which dropped
+ * the suppression for exactly the books that had no other source of it.
+ */
+export interface LexiconBlocks {
+  steer?: string | undefined;
+  suppression?: string | undefined;
+}
+
 export function buildBiographerSystem(
   bookType: BookType,
   config: BookConfig,
@@ -278,9 +291,11 @@ export function buildBiographerSystem(
    * never the intensity — `optionDirectives` still decides how explicit the book is. Absent ⇒ the prompt is
    * byte-unchanged, which is what keeps this from colliding with the register work it sits on top of.
    */
-  lexiconBlock?: string,
+  lexiconBlock?: string | LexiconBlocks,
 ): string {
   const name = subjectName.trim() || 'the subject';
+  const blocks: LexiconBlocks =
+    typeof lexiconBlock === 'string' ? { steer: lexiconBlock } : (lexiconBlock ?? {});
   const typeOptions = resolveTypeOptions(bookType, config.typeOptions);
   return [
     SAFETY,
@@ -302,13 +317,26 @@ export function buildBiographerSystem(
     // Their own words, last but one — after the register that governs intensity, before the closing
     // directive that outranks everything. A book written in the vocabulary they actually use is the whole
     // point of having mapped it (74 §5.8).
-    ...(lexiconBlock && lexiconBlock.trim().length > 0 && bookType.gates?.adult === true
+    // Their own words, last but one — after the register that governs intensity, before the closing
+    // directive that outranks everything. ADULT-GATED: a bare string is treated as the positive steer, so a
+    // caller that hands the full vocabulary to a biography still has it dropped here (the belt to
+    // `subjectLexiconBlocks`' braces).
+    ...(blocks.steer && blocks.steer.trim().length > 0 && bookType.gates?.adult === true
       ? [
           `THEIR OWN VOCABULARY — this book is for them, so write it in the words they actually use. This ` +
             `REFINES the register above; it never softens it, and it never overrides how explicit the book ` +
-            `is.\n${lexiconBlock}`,
+            `is.\n${blocks.steer}`,
         ]
       : []),
+    /*
+     * 74 §5.8a — and the hard-no list, on EVERY book type.
+     *
+     * `subjectLexiconBlocks` already splits the two upstream, and this layer used to re-test `gates.adult`
+     * over the merged value — which threw the suppression-only block away, so a biography chapter about a
+     * marriage had no idea what its subject had ruled out. The split is carried in the TYPE now rather than
+     * inferred from a string, so neither layer has to guess which half it is holding.
+     */
+    ...(blocks.suppression && blocks.suppression.trim().length > 0 ? [blocks.suppression] : []),
     ...closingDirective(bookType, typeOptions),
   ]
     .filter((part) => part.trim().length > 0)

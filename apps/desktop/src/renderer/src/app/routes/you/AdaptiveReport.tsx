@@ -20,7 +20,7 @@ import { AdaptiveHead } from './AdaptiveHead';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
-import { bothSidesAnswered, DIRTY_TALK_SPINE } from '@selfos/core/adaptive-spine';
+import { hasSayGap, DIRTY_TALK_SPINE } from '@selfos/core/adaptive-spine';
 import adaptive from './Adaptive.module.css';
 
 /**
@@ -231,7 +231,14 @@ export function AdaptiveReport(): JSX.Element {
     e.sides === undefined || e.sides.includes('say');
   // 74 §3.6.8 — pet names, per direction. A name is answered twice, so it belongs in its own section rather
   // than folded into the loved-lines list where the direction would be lost.
-  const nameEntries = lexicon.entries.filter((e) => e.family.startsWith('names-'));
+  const isName = (e: (typeof lexicon.entries)[number]): boolean => e.family.startsWith('names-');
+  const nameEntries = lexicon.entries.filter(isName);
+  /*
+   * ...and the WORDS section must exclude them, which it never did. A name loved-to-hear carries `hear: 4`,
+   * so it was listed under "Love to hear" as well as under "Call me" — 18 duplicated rows on the owner's own
+   * report, measured. The two sections were separated on purpose (§3.6.23); only one half of that landed.
+   */
+  const wordEntries = lexicon.entries.filter((e) => !isName(e));
   const pickNames = (side: 'hearState' | 'sayState', mark: 'love' | 'okay' | 'never'): string[] =>
     nameEntries.filter((e) => e[side] === mark).map((e) => e.text);
   // The hard-no lists carry the KEY as well, because unlike the other two they need to be actionable: this
@@ -246,17 +253,26 @@ export function AdaptiveReport(): JSX.Element {
     okaySaying: pickNames('sayState', 'okay'),
     neverSaying: pickNames('sayState', 'never'),
   };
-  const loves = lexicon.entries.filter((e) => e.state === undefined && e.hear >= 3 && askedHear(e));
-  const says = lexicon.entries.filter((e) => e.state === undefined && e.say >= 3 && askedSay(e));
+  const loves = wordEntries.filter((e) => e.hear >= 3 && askedHear(e));
+  const says = wordEntries.filter((e) => e.say >= 3 && askedSay(e));
   // 74 §3.6.2/§3.6.6 — sourced from the hear/say GAP, not the middle mark (which is a mild yes now), and only
   // where BOTH sides were actually asked: a side the orientation never offered is not a thing they freeze on.
   // 74 §3.6.11 — ANSWERED, not merely offered. This had its own inlined copy of the rule and so its own copy
   // of the bug: every pet-name row offers both directions, so leaving one blank read as a rated zero and put
   // "want to, and freeze" in front of someone who had simply not answered that side.
-  const notYet = lexicon.entries.filter(
-    (e) => e.state === undefined && e.hear >= 3 && e.say <= 1 && bothSidesAnswered(e),
-  );
-  const never = lexicon.entries.filter((e) => e.state === 'never');
+  // The gap, in the vocabulary it is answered in (74 §3.6.26): loved to hear, only okay to say.
+  const notYet = wordEntries.filter((e) => hasSayGap(e));
+  /*
+   * 74 §3.6.26 — the words are answered per direction now, exactly as the names are, so their hard nos are
+   * too. This read `state === 'never'`, which the writer no longer produces: left alone the list would have
+   * gone quietly empty and taken the only control that can LIFT one with it — the un-gettable-rid-of
+   * preference §3.2 abolished, reached by deleting the thing that reads the mark rather than the mark.
+   */
+  const wordNos = (side: 'hearState' | 'sayState'): typeof wordEntries =>
+    wordEntries.filter((e) => e[side] === 'never');
+  const neverHeard = wordNos('hearState');
+  const neverSaid = wordNos('sayState');
+  const neverCount = new Set([...neverHeard, ...neverSaid].map((e) => e.key)).size;
   // The middle mark. It used to appear nowhere: recorded, restored in the deck, then absent from the report
   // AND from every prompt — so hundreds of taps bought the person nothing, and their own profile silently
   // omitted their own answers. Shown last, plainly second-tier, so it can't be read as a favourite.
@@ -265,11 +281,7 @@ export function AdaptiveReport(): JSX.Element {
   // to do ("I like it a little"), and it fell out of every bucket: below the >= 3 bar for loved, not a
   // boundary, not the middle mark. Recorded, and shown nowhere. It reads exactly as "fine, not a favourite",
   // so it belongs here. Prompts still take only >= 3 — a 1 should not lead.
-  const okay = lexicon.entries.filter(
-    (e) =>
-      e.state === 'okay' ||
-      (e.state === undefined && Math.max(e.hear, e.say) > 0 && Math.max(e.hear, e.say) < 3),
-  );
+  const okay = wordEntries.filter((e) => e.hearState === 'okay' || e.sayState === 'okay');
 
   // Oldest → newest, so the chart reads left-to-right like time does. `history` arrives newest-first.
   const takes = [...state.history].reverse();
@@ -690,7 +702,7 @@ export function AdaptiveReport(): JSX.Element {
                                     variant="ghost"
                                     onClick={() =>
                                       void editLexicon({
-                                        kind: 'clearNameSide',
+                                        kind: 'clearSide',
                                         key,
                                         side: col.side,
                                       })
@@ -791,33 +803,50 @@ export function AdaptiveReport(): JSX.Element {
                       Each band appears only when it holds something, and if none of them do it says so. */}
                   <FoldedChips entries={loves} label="Love to hear" tone="love" />
                   <FoldedChips entries={says} label="Comfortable saying" tone="say" />
-                  {loves.length + says.length + notYet.length + never.length + okay.length === 0 ? (
+                  {loves.length + says.length + notYet.length + neverCount + okay.length === 0 ? (
                     <Text tone="secondary">
                       Nothing from the words yet — this fills in as you mark them.
                     </Text>
                   ) : null}
                   <FoldedChips entries={okay} label="Fine either way — usable, not favourites" />
-                  {never.length > 0 ? (
+                  {neverCount > 0 ? (
                     <div className={adaptive.noBox}>
-                      <strong>{never.length} not for you.</strong> Nothing in SelfOS will suggest
+                      <strong>{neverCount} not for you.</strong> Nothing in SelfOS will suggest
                       these for as long as they&rsquo;re marked &mdash; and changing your mind about
                       one is yours alone to do, any time.
                       <details className={adaptive.fold}>
                         <summary>See them, and change your mind</summary>
-                        <Chips entries={never} never />
-                        <Stack gap={2}>
-                          {never.map((entry) => (
-                            <Button
-                              key={entry.key}
-                              variant="ghost"
-                              onClick={() =>
-                                void editLexicon({ kind: 'setState', key: entry.key, state: null })
-                              }
-                            >
-                              Changed my mind about &ldquo;{entry.text}&rdquo;
-                            </Button>
+                        {/* Per direction, because the answer is: ruling out hearing a word says nothing
+                            about saying it. Each list carries its own control, so lifting one side leaves
+                            the other standing. */}
+                        {(
+                          [
+                            { head: 'Never say to me', nos: neverHeard, side: 'hear' },
+                            { head: 'Never for me to say', nos: neverSaid, side: 'say' },
+                          ] as const
+                        )
+                          .filter((col) => col.nos.length > 0)
+                          .map((col) => (
+                            <div key={col.side}>
+                              <Text size="sm" tone="secondary">
+                                {col.head}
+                              </Text>
+                              <Chips entries={col.nos} never />
+                              <Stack gap={2}>
+                                {col.nos.map(({ key, text }) => (
+                                  <Button
+                                    key={key}
+                                    variant="ghost"
+                                    onClick={() =>
+                                      void editLexicon({ kind: 'clearSide', key, side: col.side })
+                                    }
+                                  >
+                                    Changed my mind about &ldquo;{text}&rdquo;
+                                  </Button>
+                                ))}
+                              </Stack>
+                            </div>
                           ))}
-                        </Stack>
                       </details>
                     </div>
                   ) : null}

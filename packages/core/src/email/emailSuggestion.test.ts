@@ -495,12 +495,24 @@ describe('emailed answers are written for the email (#459, #523)', () => {
 });
 
 describe('74 §8.4 — the intimacy email carries the hard nos', () => {
-  /** A person who has ruled one word out. */
+  /**
+   * A person who has ruled one word out — as a live MARK, which is the only way a hard no exists since
+   * 74 §3.6.11. (A `kind:'word'` boundary record was the pre-§3.6.11 storage and is dropped on read, §3.6.29.)
+   */
   async function withBoundary(fs: ReturnType<typeof memFileSystem>): Promise<void> {
-    await writeLexicon(fs, key, {
-      ...emptyLexicon(PERSON, now),
-      boundaries: [{ text: 'whore', kind: 'word', at: now.toISOString() }],
-    });
+    const { applyDirectionalMarks } = await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    await writeLexicon(
+      fs,
+      key,
+      applyDirectionalMarks(
+        emptyLexicon(PERSON, now),
+        DIRTY_TALK.bank,
+        { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
+        'take:1',
+        now,
+      ),
+    );
   }
 
   const intimacyInput = {
@@ -527,7 +539,7 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
       },
     } as unknown as ClaudeClient;
     await generateSuggestion(deps(fs, client), intimacyInput);
-    expect(seen).toContain('whore');
+    expect(seen).toContain('manwhore');
     expect(seen).toMatch(/NEVER use any of these/i);
   });
 
@@ -536,8 +548,82 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
     // line is not enough on its own — not sending beats sending the one thing they ruled out.
     const fs = memFileSystem();
     await withBoundary(fs);
-    const client = clientReturning('{"headline":"Tonight","body":"Tell him you are his whore."}');
+    const client = clientReturning(
+      '{"headline":"Tonight","body":"Tell him you are his manwhore."}',
+    );
     expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
+  });
+
+  /*
+   * 74 §5.8a — the same guarantee on a NON-intimacy suggestion.
+   *
+   * The lexicon used to be read only for the intimacy family, which disabled the prompt constraint AND both
+   * `violatesBoundary` guards (each was written `lexicon && …`, so a null one skipped silently) for every
+   * other family. The hard-no list is not a sexual-topic preference: it holds ordinary words a warm coaching
+   * email reaches for, and this surface sends with nobody reviewing it.
+   */
+  const plainInput = {
+    openGround: [],
+    family: 'ai-suggestion' as const,
+    signals: { ...emptySignals, observation: 'Fresh ground.' },
+    avoid: { texts: [], subjects: new Set<string>() },
+  };
+
+  async function withWarmBoundary(fs: ReturnType<typeof memFileSystem>): Promise<void> {
+    const { applyDirectionalMarks } = await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    await writeLexicon(
+      fs,
+      key,
+      applyDirectionalMarks(
+        emptyLexicon(PERSON, now),
+        DIRTY_TALK.bank,
+        { 'names-warm:beautiful': { hear: 'never', say: 'never' } },
+        'take:1',
+        now,
+      ),
+    );
+  }
+
+  it('carries the hard nos on a NON-intimacy suggestion too', async () => {
+    const fs = memFileSystem();
+    await withWarmBoundary(fs);
+    let seen = '';
+    const base = clientReturning('{"headline":"h","body":"b","options":[]}');
+    const client: ClaudeClient = {
+      ...base,
+      stream: (o, onDelta) => {
+        seen = o.system ?? '';
+        return base.stream(o, onDelta);
+      },
+    };
+    await generateSuggestion(deps(fs, client), plainInput);
+    expect(seen).toContain('beautiful');
+    expect(seen).toMatch(/NEVER use any of these/i);
+  });
+
+  it('REFUSES a non-intimacy email that CALLS them a ruled-out word', async () => {
+    const fs = memFileSystem();
+    await withWarmBoundary(fs);
+    // Vocative, because that is what was ruled out. `beautiful` is an everyday word, so §3.6.13's relaxation
+    // deliberately lets "you did something beautiful" through and catches only the form that ADDRESSES them
+    // — the distinction that keeps 27% of ordinary sentences from being rejected (§3.6.29).
+    const client = clientReturning(
+      '{"headline":"A thought","body":"Take ten minutes for yourself today, beautiful.","options":[' +
+        '{"label":"Tell me more","stance":"other"},{"label":"Not now","stance":"maybe"}]}',
+    );
+    expect(await generateSuggestion(deps(fs, client), plainInput)).toBeNull();
+  });
+
+  it('still sends when the same word is NOT how they are addressed', async () => {
+    // The other half of the relaxation, pinned so a future tightening cannot quietly reject ordinary prose.
+    const fs = memFileSystem();
+    await withWarmBoundary(fs);
+    const client = clientReturning(
+      '{"headline":"A thought","body":"You made something beautiful this week.","options":[' +
+        '{"label":"Tell me more","stance":"other"},{"label":"Not now","stance":"maybe"}]}',
+    );
+    expect(await generateSuggestion(deps(fs, client), plainInput)).not.toBeNull();
   });
 
   it('refuses when a ruled-out word is in a BUTTON, not just the sentence above it', async () => {
@@ -547,7 +633,7 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
     await withBoundary(fs);
     const client = clientReturning(
       '{"headline":"Tonight","body":"What sounds good tonight?","options":[' +
-        '{"label":"Call me your whore","stance":"yes"},{"label":"Something slower","stance":"other"}]}',
+        '{"label":"Call me your manwhore","stance":"yes"},{"label":"Something slower","stance":"other"}]}',
     );
     expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
   });

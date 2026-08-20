@@ -133,8 +133,6 @@ export interface StepStatus {
    * last time's already on record; where the two differ, both are shown rather than one standing for the other.
    */
   fresh?: number;
-  /** Work that appeared after they left the step (marks added later still need splitting). */
-  outstanding?: number;
   /** Why it is blocked, in their terms. */
   reason?: string;
 }
@@ -146,9 +144,6 @@ export interface StepInput {
   skipped: readonly StepId[];
   nameMarks: number;
   bankMarks: number;
-  /** Entries still owed the hear/say question, and how many of those have an answer. */
-  splitNeeded: number;
-  splitAnswered: number;
   lineReactions: number;
   probesAnswered: number;
   scenariosAnswered: number;
@@ -172,6 +167,28 @@ function shortfall(readiness: GenerationReadiness): string {
  * The state of every step, in order. Pure, so the rail/map/frames read one answer and the tests can pin the
  * awkward cases (arriving early, coming back after adding marks, skipping) without a DOM.
  */
+/**
+ * 74 §3.6.34 — how many MARKS this person has, from the step statuses.
+ *
+ * The map summed every counted step and called the total "N marks so far" — and, on the retake screen, "You
+ * have N marks on record from last time", which is the number someone weighs when deciding whether to keep
+ * them or start from an empty sheet. Three of the five counted steps are not marks: line reactions, answered
+ * probe questions and worked moment categories. `TakeMap`'s own `doneLabel` docstring already said why they
+ * cannot be added — "132 marks beside 6 answered questions beside 8 moment picks is three different things
+ * wearing one bare number" — which is exactly what `unit` was added for.
+ *
+ * So the unit decides, and it lives here beside `unitOf` rather than as a set of magic strings at the call
+ * site. The two marking steps partition the lexicon between them, so their sum is the real count.
+ */
+const MARK_UNITS: ReadonlySet<string> = new Set(['names', 'words']);
+
+export function markCount(statuses: readonly StepStatus[]): number {
+  return statuses.reduce(
+    (sum, status) => (status.unit && MARK_UNITS.has(status.unit) ? sum + status.count : sum),
+    0,
+  );
+}
+
 export function stepStatuses(input: StepInput): StepStatus[] {
   const marked = input.nameMarks + input.bankMarks;
   // 74 §3.6.9 — enough to work FROM, not merely something. Two or three marks leave a generating step falling
@@ -189,11 +206,8 @@ export function stepStatuses(input: StepInput): StepStatus[] {
         return input.probesAnswered;
       case 'scenario':
         return input.scenariosAnswered;
-      // `split` is folded into the words (74 §3.6.13) — still a phase in the union, no longer a step of
-      // its own — so it counts nothing here, same as the two steps that have nothing to tally.
       case 'identity':
       case 'profile':
-      case 'split':
         return 0;
     }
   };
@@ -233,7 +247,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     // Blocked beats everything except being the step you are actually on: a rail that lets you jump anywhere
     // must not offer a tap whose only outcome is an empty screen (or, for an AI step, a paid call that can only
     // come back empty — `testsAdaptiveLines`/`Scenario` reach the model with no marks-guard of their own).
-    // The split needs marks; the three generating steps need enough of them. The profile is deliberately NOT
+    // The three generating steps need enough marks. The profile is deliberately NOT
     // gated on the threshold — being unable to finish is worse than a thin profile, and the report already says
     // when it is working from little (it just needs SOMETHING).
     const gate =

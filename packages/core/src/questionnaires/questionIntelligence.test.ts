@@ -1224,9 +1224,9 @@ describe("the recipient's hard nos reach EVERY tier (74 §8.4)", () => {
         context: '',
         existingPrompts: [],
         count: 5,
-        suppressedTexts: ['being called a whore'],
+        suppressedTexts: ['being called a manwhore'],
       });
-      expect(msg).toContain('being called a whore');
+      expect(msg).toContain('being called a manwhore');
       expect(msg).toMatch(/NEVER use any of these/);
       // And it never explains itself — saying "I avoided X" restates X.
       expect(msg).toMatch(/Never mention that anything was ruled out/);

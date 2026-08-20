@@ -1,7 +1,11 @@
 import { create } from 'zustand';
-// Values, not types — the probe turn id is stamped here and read back in the bridge, so both sides share one
-// definition (the `generationReadiness` precedent; `schemas` is the crypto-free half of core).
-import { probeTurnId, PROBE_SKIPPED } from '@selfos/core/schemas';
+// A value, not a type — the marker that distinguishes a recorded SKIP from an answer (74 §3.6.17), shared
+// with the bridge so both sides read one definition (`schemas` is the crypto-free half of core).
+//
+// `probeTurnId` used to be built here too. The BRIDGE mints a question's id now, at the moment the pass is
+// recorded (74 §3.6.35), so the renderer answers under the id it was given rather than reconstructing one and
+// hoping the two agree.
+import { SKIPPED_ANSWER, scenarioTurnId } from '@selfos/core/schemas';
 import type {
   AdaptiveBankView,
   AdaptiveNamesView,
@@ -36,7 +40,6 @@ export type TakePhase =
   /** 74 §3.6.8 — the pet-name phase, which runs FIRST: what the two of you call each other. */
   | 'names'
   | 'bank'
-  | 'split'
   | 'lines'
   | 'probe'
   | 'scenario'
@@ -58,12 +61,17 @@ const AUTOSAVE_DELAY_MS = 700;
  * Keeping it out of zustand means a tap re-renders the one row it changed, not the whole ~1,100-entry grid.
  */
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let dirtyMarks = new Set<string>();
-let dirtyCleared = new Set<string>();
-let dirtySplits = new Set<string>();
-/** 74 §3.6.8 — pending pet-name work: which sides of which names changed, and which were taken back. */
-let dirtyNames = new Map<string, Set<'hear' | 'say'>>();
-let dirtyNameCleared = new Map<string, Set<'hear' | 'say'>>();
+/**
+ * Pending work, per phase: which SIDES of which keys changed, and which were taken back.
+ *
+ * One shape for both since §3.6.26 — the deck answers per direction exactly as the pet names always have, so
+ * the deck's old `Set<string>` of whole-entry marks plus a third set for the 0–4 split are gone.
+ */
+type DirtySides = Map<string, Set<'hear' | 'say'>>;
+let dirtyMarks: DirtySides = new Map();
+let dirtyCleared: DirtySides = new Map();
+let dirtyNames: DirtySides = new Map();
+let dirtyNameCleared: DirtySides = new Map();
 
 /** Serializes the writes — see `flush`. */
 let inFlight: Promise<void> = Promise.resolve();
@@ -74,7 +82,7 @@ let inFlight: Promise<void> = Promise.resolve();
  */
 let generation = 0;
 /** Un-marks made anywhere in this take, so the closing call can carry them (an absent key undoes nothing). */
-let clearedThisTake = new Set<string>();
+let clearedThisTake: DirtySides = new Map();
 
 function resetPending(): void {
   if (saveTimer) clearTimeout(saveTimer);
@@ -83,12 +91,96 @@ function resetPending(): void {
   // Start a fresh chain. The old one may still be waiting on a call that never settles (a wedged IPC), and
   // every later save queues behind it — so a single hung write would silently stop autosaving for good.
   inFlight = Promise.resolve();
-  dirtyMarks = new Set();
-  dirtyCleared = new Set();
-  dirtySplits = new Set();
+  dirtyMarks = new Map();
+  dirtyCleared = new Map();
   dirtyNames = new Map();
   dirtyNameCleared = new Map();
-  clearedThisTake = new Set();
+  clearedThisTake = new Map();
+}
+
+/** A mark map keyed by entry, each side answered independently. Both phases use it. */
+type DirectionalMarks = Record<string, { hear?: BankMark; say?: BankMark }>;
+
+/** Record a side as pending (or as taken back), keeping the two maps mutually exclusive per side. */
+function markPending(
+  dirty: DirtySides,
+  cleared: DirtySides,
+  key: string,
+  side: 'hear' | 'say',
+): void {
+  const sides = dirty.get(key) ?? new Set<'hear' | 'say'>();
+  const clearedSides = cleared.get(key) ?? new Set<'hear' | 'say'>();
+  sides.add(side);
+  clearedSides.delete(side);
+  dirty.set(key, sides);
+  if (clearedSides.size > 0) cleared.set(key, clearedSides);
+  else cleared.delete(key);
+}
+
+function clearPending(
+  dirty: DirtySides,
+  cleared: DirtySides,
+  key: string,
+  side: 'hear' | 'say',
+): void {
+  const sides = dirty.get(key) ?? new Set<'hear' | 'say'>();
+  const clearedSides = cleared.get(key) ?? new Set<'hear' | 'say'>();
+  sides.delete(side);
+  clearedSides.add(side);
+  cleared.set(key, clearedSides);
+  if (sides.size > 0) dirty.set(key, sides);
+  else dirty.delete(key);
+}
+
+/**
+ * Toggle one direction of one entry. Tapping the mark that is already set takes it back.
+ *
+ * Shared by the deck and the pet names: since §3.6.26 they do the same thing to different slices of state,
+ * and keeping two copies is how one of them grows a fix the other never gets.
+ */
+function toggleMark(
+  prev: DirectionalMarks,
+  key: string,
+  side: 'hear' | 'say',
+  mark: BankMark,
+  dirty: DirtySides,
+  cleared: DirtySides,
+): DirectionalMarks {
+  // A no is a preference (74 §3.2, amended 2026-08-19): re-markable in any sitting, in either direction,
+  // exactly like every other mark.
+  const current = prev[key] ?? {};
+  const next = { ...current };
+  const takenBack = current[side] === mark;
+  if (takenBack) delete next[side];
+  else next[side] = mark;
+  const marks = { ...prev };
+  if (Object.keys(next).length === 0) delete marks[key];
+  else marks[key] = next;
+  if (takenBack) clearPending(dirty, cleared, key, side);
+  else markPending(dirty, cleared, key, side);
+  return marks;
+}
+
+/** The pending delta for one phase: only the sides that actually changed, and only where a mark survives. */
+function deltaFor(dirty: DirtySides, marks: DirectionalMarks): DirectionalMarks {
+  const out: DirectionalMarks = {};
+  for (const [key, sides] of dirty) {
+    const current = marks[key];
+    const mark: { hear?: BankMark; say?: BankMark } = {};
+    for (const side of sides) {
+      const value = current?.[side];
+      if (value) mark[side] = value;
+    }
+    if (Object.keys(mark).length > 0) out[key] = mark;
+  }
+  return out;
+}
+
+/** `Map<key, Set<side>>` → the wire shape the bridge takes. */
+function clearedFor(cleared: DirtySides): Record<string, ('hear' | 'say')[]> {
+  const out: Record<string, ('hear' | 'say')[]> = {};
+  for (const [key, sides] of cleared) out[key] = [...sides];
+  return out;
 }
 
 type Get = () => AdaptiveTestState;
@@ -105,35 +197,15 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   const mine = generation;
-  const { state, marks, splits, nameMarks } = get();
+  const { state, marks, nameMarks } = get();
   const resultId = state?.draft?.id;
-  const marksDelta: Record<string, BankMark> = {};
-  for (const key of dirtyMarks) {
-    const mark = marks[key];
-    if (mark) marksDelta[key] = mark;
-  }
-  const cleared = [...dirtyCleared];
-  const splitsDelta: Record<string, { hear?: number; say?: number }> = {};
-  for (const key of dirtySplits) {
-    const value = splits[key];
-    if (value) splitsDelta[key] = value;
-  }
-  const namesDelta: Record<string, { hear?: BankMark; say?: BankMark }> = {};
-  for (const [key, sides] of dirtyNames) {
-    const current = nameMarks[key];
-    const mark: { hear?: BankMark; say?: BankMark } = {};
-    for (const side of sides) {
-      const value = current?.[side];
-      if (value) mark[side] = value;
-    }
-    if (Object.keys(mark).length > 0) namesDelta[key] = mark;
-  }
-  const nameCleared: Record<string, ('hear' | 'say')[]> = {};
-  for (const [key, sides] of dirtyNameCleared) nameCleared[key] = [...sides];
+  const marksDelta = deltaFor(dirtyMarks, marks);
+  const cleared = clearedFor(dirtyCleared);
+  const namesDelta = deltaFor(dirtyNames, nameMarks);
+  const nameCleared = clearedFor(dirtyNameCleared);
   const nothing =
     Object.keys(marksDelta).length === 0 &&
-    cleared.length === 0 &&
-    Object.keys(splitsDelta).length === 0 &&
+    Object.keys(cleared).length === 0 &&
     Object.keys(namesDelta).length === 0 &&
     Object.keys(nameCleared).length === 0;
   if (nothing) {
@@ -146,14 +218,13 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
     return;
   }
   // Drained BEFORE the await: a tap during the write belongs to the next flush, not this one.
-  dirtyMarks = new Set();
-  dirtyCleared = new Set();
-  dirtySplits = new Set();
+  dirtyMarks = new Map();
+  dirtyCleared = new Map();
   dirtyNames = new Map();
   dirtyNameCleared = new Map();
   let ok = true;
   try {
-    if (Object.keys(marksDelta).length > 0 || cleared.length > 0) {
+    if (Object.keys(marksDelta).length > 0 || Object.keys(cleared).length > 0) {
       const res = await window.selfos?.testsAdaptiveBank({
         testId,
         resultId,
@@ -173,15 +244,6 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
       });
       ok = res !== null && res !== undefined;
     }
-    if (ok && Object.keys(splitsDelta).length > 0) {
-      const res = await window.selfos?.testsAdaptiveSplit({
-        testId,
-        resultId,
-        splits: splitsDelta,
-        autosave: true,
-      });
-      ok = res !== null && res !== undefined;
-    }
   } catch {
     ok = false;
   }
@@ -192,17 +254,23 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
     set({ saveState: 'saved' });
     return;
   }
-  for (const key of Object.keys(marksDelta)) dirtyMarks.add(key);
-  for (const key of cleared) dirtyCleared.add(key);
-  for (const key of Object.keys(splitsDelta)) dirtySplits.add(key);
-  for (const [key, mark] of Object.entries(namesDelta)) {
-    const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
-    for (const side of ['hear', 'say'] as const) if (mark[side]) sides.add(side);
-    dirtyNames.set(key, sides);
-  }
-  for (const [key, sides] of Object.entries(nameCleared)) {
-    dirtyNameCleared.set(key, new Set(sides));
-  }
+  const requeue = (
+    delta: DirectionalMarks,
+    clearedDelta: Record<string, ('hear' | 'say')[]>,
+    dirty: DirtySides,
+    dirtyClearedSet: DirtySides,
+  ): void => {
+    for (const [key, mark] of Object.entries(delta)) {
+      const sides = dirty.get(key) ?? new Set<'hear' | 'say'>();
+      for (const side of ['hear', 'say'] as const) if (mark[side]) sides.add(side);
+      dirty.set(key, sides);
+    }
+    for (const [key, sides] of Object.entries(clearedDelta)) {
+      dirtyClearedSet.set(key, new Set(sides));
+    }
+  };
+  requeue(marksDelta, cleared, dirtyMarks, dirtyCleared);
+  requeue(namesDelta, nameCleared, dirtyNames, dirtyNameCleared);
   set({ saveState: 'unsaved', error: "Couldn't save that just now — it'll retry." });
 }
 
@@ -229,31 +297,24 @@ interface AdaptiveTestState {
    * boundary display is for marks from EARLIER takes). These stay editable until the take ends.
    */
   touched: string[];
-  marks: Record<string, BankMark>;
-  splits: Record<string, { hear?: number; say?: number }>;
+  /** 74 §3.6.26 — the deck, answered per direction. Same shape as `nameMarks`; same writer behind both. */
+  marks: DirectionalMarks;
   /** 74 §3.6.8 — the pet-name phase: its registers + names, and two marks per name. */
   names: AdaptiveNamesView | null;
-  nameMarks: Record<string, { hear?: BankMark; say?: BankMark }>;
+  nameMarks: DirectionalMarks;
   /** Which register is open. `null` ⇒ the grid, which is where the phase starts. */
   openRegister: string | null;
-  lines: string[];
-  /** What the lines phase said when it could not produce anything — its words, not a guess. */
+  /**
+   * What the lines phase said when it could not produce anything — its words, not a guess.
+   *
+   * 74 §3.6.35 — the LINES themselves are no longer here. They, the probe's questions and the moments are all
+   * read from the take's own turns now, because holding a generated set in renderer state is what made it
+   * disposable: `store.lines` was hard-replaced by the next round (and blanked by a FAILED one), it started
+   * empty on every load, and the bridge's avoid-list — built from the turns — could not see any of it. The
+   * three sets were three copies of one bug.
+   */
   linesMessage: string | null;
   lineReactions: Record<string, 'love' | 'meh' | 'no'>;
-  probeQuestion: string | null;
-  /**
-   * 74 §3.6.17 — the tappable answers written for the current question, or empty for free text only.
-   *
-   * A one-line question is only answerable because concrete options carry the context that a paragraph of
-   * preamble used to. They are persisted with the turn, so an answered question can be re-opened and changed.
-   */
-  probeOptions: string[];
-  /** Remaining questions for the CURRENT ambiguity (74 §3.6.16) — one pass can ask more than one. */
-  probeQueue: { question: string; options: string[] }[];
-  /** The ambiguity the current question resolves — stamped as the turn's item id so the engine knows it has
-   *  been asked (without it the same ambiguity is returned forever). */
-  probeAmbiguityId: string | null;
-  probeAnswer: string;
   /** The probe has nothing left to ask — a real outcome, shown as one, not a silent hop to the next phase. */
   probeDone: boolean;
   /** Why the probe couldn't ask — kept apart from `probeDone`, which is the SUCCESS state. */
@@ -263,14 +324,6 @@ interface AdaptiveTestState {
    * the one that got reported over and over because of it.
    */
   synthesisMessage: string | null;
-  /**
-   * Moments written in THIS sitting (74 §3.6.19). Answered ones are read back from the take's own turns —
-   * the options are persisted now — so this only has to carry the ones nobody has answered yet.
-   *
-   * The singular `scenario` slot that used to sit beside this is gone: it held "the moment this visit
-   * fetched", which is what made leaving a category discard it.
-   */
-  scenarios: { context: string; scene: string; options: string[] }[];
   /** Why a moment produced no scene. Without it the tap read as doing nothing at all. */
   scenarioMessage: string | null;
   /**
@@ -289,8 +342,10 @@ interface AdaptiveTestState {
   skipped: string[];
 
   load(testId: string): Promise<void>;
+  /** 74 §3.6.35 — re-read the take alone, for the actions that only change its turns. See the impl. */
+  refreshState(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
-  mark(key: string, mark: BankMark | null): void;
+  mark(key: string, side: 'hear' | 'say', mark: BankMark): void;
   /** Load the pet-name phase (free — no AI). */
   loadNames(testId: string): Promise<void>;
   /** Mark one direction of one name. Passing the same mark again takes it back (74 §3.4). */
@@ -314,17 +369,40 @@ interface AdaptiveTestState {
    * theme, so "beat that pussy" also stops "gonna beat that pussy up".
    */
   banLine(line: string): Promise<void>;
+  /**
+   * 74 §3.6.35 — take that boundary back.
+   *
+   * A `never` is a PREFERENCE, not a locked door (§3.2), and this one had no way out: `addBoundary` had no
+   * counterpart in core or at the seam, so the tap above minted a suppression that nothing in the app could
+   * lift. The marks were fixed for this in §3.2's amendment because their suppression is derived from a live
+   * mark; a themed boundary is a standalone record and was left behind.
+   */
+  unbanLine(line: string): Promise<void>;
   /** Remember the deck position so resuming lands where they stopped (74 §3.6.4). */
   rememberArea(area: number): Promise<void>;
   submitBank(testId: string): Promise<void>;
-  setSplit(key: string, direction: 'hear' | 'say', value: number): void;
-  submitSplit(testId: string): Promise<void>;
   loadLines(testId: string, round: number): Promise<void>;
   reactToLine(testId: string, line: string, reaction: 'love' | 'meh' | 'no'): Promise<void>;
   nextProbe(testId: string): Promise<void>;
-  /** Answer the current question. `answer` is the tapped option; omitted, it uses the free-text box. */
-  answerProbe(testId: string, answer?: string): Promise<void>;
-  skipProbe(testId: string): Promise<void>;
+  /**
+   * 74 §3.6.37 — delete one generated item: a line, a question or a moment.
+   *
+   * Distinct from a skip, which keeps it on screen and answerable. This takes it away for good and, because
+   * the record is what stops a phase re-offering something, guarantees it never comes back.
+   */
+  deleteItem(testId: string, phase: 'lines' | 'probe' | 'scenario', itemId: string): Promise<void>;
+  /** Record a MOMENT as passed over — same act as skipping a question, on the step that had no way to. */
+  skipMoment(
+    testId: string,
+    moment: { context: string; scene: string; options: string[] },
+  ): Promise<void>;
+  /** Record a question as passed over (74 §3.6.17) — it stays visible, and stays answerable. */
+  skipProbeQuestion(
+    testId: string,
+    itemId: string,
+    question: string,
+    options?: string[],
+  ): Promise<void>;
   loadScenario(testId: string, context: string): Promise<void>;
   /** Answer (or re-answer) one moment. The moment itself is passed in — see the implementation. */
   answerScenario(
@@ -373,22 +451,14 @@ const EMPTY = {
   saveState: 'idle' as 'idle' | 'saving' | 'saved' | 'unsaved',
   touched: [] as string[],
   marks: {},
-  splits: {},
   names: null,
   nameMarks: {},
   openRegister: null,
-  lines: [],
   linesMessage: null,
   lineReactions: {},
-  probeQuestion: null,
-  probeOptions: [] as string[],
-  probeQueue: [] as { question: string; options: string[] }[],
-  probeAmbiguityId: null,
-  probeAnswer: '',
   probeDone: false,
   probeMessage: null,
   synthesisMessage: null,
-  scenarios: [],
   scenarioMessage: null,
   skipped: [] as string[],
   seeded: { names: 0, bank: 0 },
@@ -485,6 +555,24 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         error: null,
       })),
 
+    /**
+     * 74 §3.6.35 — re-read the TAKE, and nothing else.
+     *
+     * The AI steps and every turn-stamping action need one thing back from the vault: the draft, with its
+     * turns. `load` is the mount-time read — it re-fetches the oriented bank and re-seeds `marks`,
+     * `lineReactions` and `seeded` from what is on disk — and using it here would let a re-read overwrite
+     * marking state that the 700ms autosave has not written yet. That is not hypothetical for a full `load`:
+     * `marks` is rebuilt from the lexicon, so anything still in the debounce would vanish off the screen.
+     *
+     * So this sets the state alone. A failed or refused read leaves the last good one standing rather than
+     * blanking the take (the `start` lesson — a gated handler reports a closed gate with `null`, not a throw).
+     */
+    refreshState: async (testId) => {
+      const state = await (window.selfos?.testsAdaptiveState({ testId }) ?? Promise.resolve(null));
+      if (!state) return;
+      set({ state });
+    },
+
     load: async (testId) => {
       set({ activeTestId: testId });
       const [bank, state] = await Promise.all([
@@ -502,14 +590,42 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
           priorReactions[turn.item.text] = turn.answer as 'love' | 'meh' | 'no';
         }
       }
-      const marks: Record<string, BankMark> = {};
-      const splits: Record<string, { hear?: number; say?: number }> = {};
+      /*
+       * Seed from the per-direction marks, exactly as the names phase does (74 §3.6.26). Pre-Option-B deck
+       * answers were 0–4 ratings with no mark behind them; those are cleared on read by
+       * `resetPreDirectionalDeckMarks` rather than guessed at here, so an unmarked row means unmarked.
+       *
+       * 74 §3.6.34 — scoped to THIS STEP'S OWN ROWS, which is the whole of the fix below.
+       *
+       * There is ONE lexicon per person: `applyDirectionalMarks` writes the deck's marks and the pet names'
+       * marks into the same `entries`, which is why `steer.ts` and the report both have to filter names back
+       * out. Seeding from all of them made `marks` a superset of `nameMarks` rather than its sibling, and
+       * four numbers downstream read it as "the words step's marks":
+       *
+       *   - the rail's tally said "320 of 924 shown here" on a vault with 22 marked WORDS (measured), with a
+       *     numerator and a denominator drawn from different populations — so it could exceed 100%
+       *   - the rail's trailing "N words" on the words step said 320 for the same reason
+       *   - `bankTally`'s love/okay/never counted every pet name as a word
+       *   - `stepStatuses` does `nameMarks + bankMarks`, so every marked name was counted TWICE, against a
+       *     bridge that counts each entry once (`lexiconReadyForGeneration`). That one is not cosmetic: the
+       *     renderer greys an AI step on `generationReadiness(marked, loved)` and the bridge REFUSES on the
+       *     same helper, and the bridge's own comment says the two "can never disagree". With 8 marked names
+       *     and no words the renderer sees 16, offers the step, and the bridge answers "mark a few more".
+       *
+       * `bank` here is the deck view (`deckFamilies`, coreBridge `testsBank`), so its keys ARE this step's
+       * rows. Deck marks + name marks now partition the lexicon exactly, which is what makes the renderer's
+       * total agree with the bridge's again.
+       */
+      const deckKeys = new Set((bank?.entries ?? []).map((entry) => entry.key));
+      const marks: DirectionalMarks = {};
       for (const entry of state?.lexicon.entries ?? []) {
-        if (entry.state === 'never') marks[entry.key] = 'never';
-        else if (entry.state === 'okay') marks[entry.key] = 'okay';
-        else if (entry.hear > 0 || entry.say > 0) marks[entry.key] = 'love';
-        if (entry.hear > 0 || entry.say > 0)
-          splits[entry.key] = { hear: entry.hear, say: entry.say };
+        if (!deckKeys.has(entry.key)) continue;
+        if (entry.hearState || entry.sayState) {
+          marks[entry.key] = {
+            ...(entry.hearState ? { hear: entry.hearState } : {}),
+            ...(entry.sayState ? { say: entry.sayState } : {}),
+          };
+        }
       }
       set((prev) => ({
         bank,
@@ -517,7 +633,6 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         loaded: true,
         lineReactions: { ...priorReactions },
         marks,
-        splits,
         seeded: { ...prev.seeded, bank: Object.keys(marks).length },
       }));
     },
@@ -528,25 +643,27 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // 74 §3.6.9 — the map, not a phase. Both a first take and a resumed one land here: the whole reason it
       // exists is that "pick up where you left off" used to drop into whichever AI phase had been reached, with
       // no route back to the person's own words.
-      set({ state, busy: false, phase: 'map' });
+      // Never blank a state we already have. A refused or failed `testsAdaptiveStart` resolves to `null`
+      // (that is how every gated handler reports a closed gate — it does not throw), and assigning it
+      // straight through replaced the state `load` had already fetched, leaving the screen on "Loading…"
+      // with no error and no route out. Latent until §3.6.30 made this run on arrival rather than only
+      // behind a tap.
+      set((prev) => ({ state: state ?? prev.state, busy: false, phase: 'map' }));
       // Free (no AI), so the map can show the names step's real count without asking for anything.
       await get().loadNames(testId);
     },
 
-    mark: (key, mark) => {
+    mark: (key, side, mark) => {
       set((prev) => {
-        const marks = { ...prev.marks };
-        if (mark === null) {
-          delete marks[key];
-          dirtyMarks.delete(key);
-          dirtyCleared.add(key);
-          clearedThisTake.add(key);
-        } else {
-          marks[key] = mark;
-          dirtyCleared.delete(key);
-          clearedThisTake.delete(key);
-          dirtyMarks.add(key);
-        }
+        const marks = toggleMark(prev.marks, key, side, mark, dirtyMarks, dirtyCleared);
+        // Mirrored into the take-wide record so the CLOSING call can carry the un-mark: it sends the whole
+        // pass, and an un-marked side is simply absent from `marks` — absence undoes nothing, so without this
+        // a failed autosave would leave the stale mark on record for good.
+        if (marks[key]?.[side] === undefined) {
+          const sides = clearedThisTake.get(key) ?? new Set<'hear' | 'say'>();
+          sides.add(side);
+          clearedThisTake.set(key, sides);
+        } else clearedThisTake.get(key)?.delete(side);
         return {
           marks,
           saveState: 'saving',
@@ -567,7 +684,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       }
       // Seed from what they have already said, exactly as the deck seeds from the lexicon — a retake must not
       // present every answered name blank, and "pick up where you left off" must look like it did.
-      const nameMarks: Record<string, { hear?: BankMark; say?: BankMark }> = {};
+      const nameMarks: DirectionalMarks = {};
       for (const entry of names.entries) {
         if (entry.hearState || entry.sayState) {
           nameMarks[entry.key] = {
@@ -584,33 +701,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     },
 
     markName: (key, side, mark) => {
-      set((prev) => {
-        // A no is a preference (74 §3.2, amended 2026-08-19): re-markable in any sitting, in either
-        // direction, exactly like every other mark.
-        const current = prev.nameMarks[key] ?? {};
-        const next = { ...current };
-        const cleared = current[side] === mark;
-        if (cleared) delete next[side];
-        else next[side] = mark;
-        const nameMarks = { ...prev.nameMarks };
-        if (Object.keys(next).length === 0) delete nameMarks[key];
-        else nameMarks[key] = next;
-
-        const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
-        const clearedSides = dirtyNameCleared.get(key) ?? new Set<'hear' | 'say'>();
-        if (cleared) {
-          sides.delete(side);
-          clearedSides.add(side);
-        } else {
-          clearedSides.delete(side);
-          sides.add(side);
-        }
-        if (sides.size > 0) dirtyNames.set(key, sides);
-        else dirtyNames.delete(key);
-        if (clearedSides.size > 0) dirtyNameCleared.set(key, clearedSides);
-        else dirtyNameCleared.delete(key);
-        return { nameMarks, saveState: 'saving' };
-      });
+      set((prev) => ({
+        nameMarks: toggleMark(prev.nameMarks, key, side, mark, dirtyNames, dirtyNameCleared),
+        saveState: 'saving',
+      }));
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
     },
@@ -639,7 +733,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     flush: async (testId) => {
       // Chain, never overlap. The debounce guarantees one TIMER, not one flush: on a round trip slower than the
       // delay (iCloud, a big lexicon), flush B would read the lexicon before flush A's write landed and silently
-      // drop A's delta — `recordBankPass` is read-modify-write over one file and IPC handlers are not serialized.
+      // drop A's delta — `recordMarkingPass` is read-modify-write over one file and IPC handlers are not serialized.
       // A lost mark is precisely the promise this feature makes, so the writes queue.
       inFlight = inFlight.then(() => runFlush(testId, get, set)).catch(() => undefined);
       await inFlight;
@@ -674,6 +768,22 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       set((prev) => ({ state: prev.state ? { ...prev.state, lexicon } : prev.state }));
     },
 
+    /*
+     * 74 §3.6.35 — the way back out, which did not exist.
+     *
+     * The patched `state.lexicon` is what the row reads to know it is ruled out, so both halves have to write
+     * it: without this the Undo would call the seam, succeed, and leave the row saying "Ruled out" until the
+     * next full load — the same say-nothing failure the ban itself had.
+     */
+    unbanLine: async (line) => {
+      const lexicon = await (window.selfos?.testsLexiconEdit({
+        kind: 'removeBoundary',
+        text: line,
+      }) ?? Promise.resolve(null));
+      if (!lexicon) return;
+      set((prev) => ({ state: prev.state ? { ...prev.state, lexicon } : prev.state }));
+    },
+
     rememberArea: async (area) => {
       await window.selfos?.testsAdaptiveSetArea({ testId: get().activeTestId, area });
     },
@@ -693,44 +803,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         testId,
         resultId,
         marks,
-        cleared: [...clearedThisTake],
-      }) ?? Promise.resolve(null));
-      // 74 §3.6.13 — the split is folded into the words: the hear/say question is asked ON the row, so closing
-      // the deck also closes that pass. It only ever asked about DECK marks, and the pet-name phase already
-      // asks both directions per row, so for anyone marking mostly names it was a step that never had
-      // anything in it — a screen you landed on and could do nothing with.
-      const withSplit = await (window.selfos?.testsAdaptiveSplit({
-        testId,
-        resultId,
-        splits: get().splits,
+        cleared: clearedFor(clearedThisTake),
       }) ?? Promise.resolve(null));
       set({
-        state: withSplit ?? next ?? state,
+        state: next ?? state,
         busy: false,
         phase: 'lines',
         saveState: 'saved',
       });
-    },
-
-    setSplit: (key, direction, value) => {
-      set((prev) => ({
-        splits: { ...prev.splits, [key]: { ...prev.splits[key], [direction]: value } },
-        saveState: 'saving',
-      }));
-      dirtySplits.add(key);
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
-    },
-
-    submitSplit: async (testId) => {
-      const { state, splits } = get();
-      const resultId = state?.draft?.id;
-      if (!resultId) return;
-      set({ busy: true });
-      await get().flush(testId);
-      const next = await (window.selfos?.testsAdaptiveSplit({ testId, resultId, splits }) ??
-        Promise.resolve(null));
-      set({ state: next ?? state, busy: false, phase: 'lines', saveState: 'saved' });
     },
 
     loadLines: async (testId, round) => {
@@ -745,12 +825,17 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // relocating them was indistinguishable from the step having worked.
       // 74 §3.6.12 — keep the phase's OWN account of what went wrong. Without it the screen fell back to the
       // generic "AI isn't set up yet", which is a lie whenever a key is present and the call simply failed.
-      set({
-        lines: out.lines ?? [],
-        busy: false,
-        progress: null,
-        linesMessage: out.message ?? null,
-      });
+      /*
+       * 74 §3.6.35 — RE-READ, rather than assigning the round's lines into the store.
+       *
+       * `lines: out.lines ?? []` was a hard replace, and the `?? []` made it worse than that: a round that
+       * FAILED blanked the set the person was part-way through reacting to. It was half-hidden because the
+       * renderer unioned in the lines that had a reaction, so a line you had answered survived and a line you
+       * had not vanished — which reads as arbitrary rather than broken. The bridge records the whole round as
+       * offers now, so re-reading the take is what shows them, appended to what was already there.
+       */
+      set({ busy: false, progress: null, linesMessage: out.message ?? null });
+      await get().refreshState(testId);
     },
 
     reactToLine: async (testId, line, reaction) => {
@@ -778,12 +863,6 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const out = await (window.selfos?.testsAdaptiveProbe({ testId, resultId }) ??
         Promise.resolve(fallback));
       set({
-        probeQuestion: out.question ?? null,
-        probeOptions: out.questions?.[0]?.options ?? [],
-        // The rest of this ambiguity's questions, asked in turn before the next ambiguity is fetched.
-        probeQueue: (out.questions ?? []).slice(1),
-        probeAmbiguityId: out.ambiguityId ?? null,
-        probeAnswer: '',
         busy: false,
         progress: null,
         // "Nothing left to ask" is an OUTCOME, not a reason to relocate them. It used to jump to the
@@ -794,81 +873,59 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         // finished." The bridge returns the same `done` either way, so the two are separated here.
         probeDone: out.done && !out.degraded,
         probeMessage: out.degraded
-          ? (out.message ?? 'That didn’t come through — try again.')
+          ? (out.message ?? 'That didn\u2019t come through — try again.')
           : null,
       });
+      /*
+       * 74 §3.6.35 — the pass's questions come back from the TAKE, not from this reply.
+       *
+       * A pass writes up to six and only one of them existed anywhere: the first went into `probeQuestion` and
+       * the other five sat in a renderer queue that a reload, or walking to another step, threw away. They are
+       * all stamped as offers now, so re-reading is what puts the whole pass on screen — and the screen shows
+       * every question it has ever asked, which is what "reviewable" has to mean.
+       */
+      await get().refreshState(testId);
     },
 
-    answerProbe: async (testId, answer) => {
-      const { state, probeQuestion, probeOptions, probeAmbiguityId, probeAnswer } = get();
-      const resultId = state?.draft?.id;
-      if (!resultId || !probeQuestion) return;
-      const given = answer ?? probeAnswer;
-      if (given.trim() === '') return;
+    deleteItem: async (testId, phase, itemId) => {
+      const resultId = get().state?.draft?.id;
+      if (!resultId) return;
+      await window.selfos?.testsAdaptiveDeleteTurn({ testId, resultId, phase, itemId });
+      await get().refreshState(testId);
+    },
+
+    skipMoment: async (testId, moment) => {
+      const resultId = get().state?.draft?.id;
+      if (!resultId) return;
+      await window.selfos?.testsAdaptiveTurn({
+        testId,
+        resultId,
+        phase: 'scenario',
+        // The shared id format, so the skip lands on the moment's OWN offer rather than appending a second
+        // turn for the same scene (74 §3.6.35).
+        itemId: scenarioTurnId(moment.context, moment.scene),
+        text: moment.scene,
+        options: moment.options,
+        answer: SKIPPED_ANSWER,
+      });
+      await get().refreshState(testId);
+    },
+
+    skipProbeQuestion: async (testId, itemId, question, options) => {
+      const resultId = get().state?.draft?.id;
+      if (!resultId) return;
       await window.selfos?.testsAdaptiveTurn({
         testId,
         resultId,
         phase: 'probe',
-        // Per QUESTION, not per ambiguity. A pass asks up to six and `stampTurn` replaces on the item id, so
-        // stamping them all under the bare ambiguity id meant every answer overwrote the one before it: six
-        // typed, one kept. `ambiguityOfProbeTurn` reads the ambiguity back off this in the bridge.
-        itemId: probeTurnId(probeAmbiguityId ?? probeQuestion, probeQuestion),
-        text: probeQuestion,
-        options: probeOptions,
-        answer: given,
+        itemId,
+        text: question,
+        // Carried for the same reason a revision carries them: a skipped question stays ANSWERABLE, so it must
+        // not lose the taps it would be answered with.
+        ...(options ? { options } : {}),
+        answer: SKIPPED_ANSWER,
       });
-      // Re-read so the answered set below the current question reflects the write.
-      await get().load(testId);
-      // One ambiguity can ask more than one question (74 §3.6.16). Work through this pass's queue before
-      // spending another call on the next ambiguity.
-      const queue = get().probeQueue;
-      const nextInPass = queue[0];
-      if (nextInPass) {
-        set({
-          probeQuestion: nextInPass.question,
-          probeOptions: nextInPass.options,
-          probeQueue: queue.slice(1),
-          probeAnswer: '',
-        });
-        return;
-      }
-      set({ probeQuestion: null, probeOptions: [], probeAnswer: '' });
-    },
-
-    /**
-     * Skipping still RECORDS the question as asked — otherwise "skip this" hands back the same one.
-     *
-     * The marker is what distinguishes it from an answer. It used to stamp `''`, which is a string, so the
-     * review list counted a skipped question as answered and rendered it with an empty box under an
-     * "Answered" label. Skipped questions stay visible and stay answerable.
-     */
-    skipProbe: async (testId) => {
-      const { state, probeQuestion, probeOptions, probeAmbiguityId } = get();
-      const resultId = state?.draft?.id;
-      if (resultId && probeQuestion) {
-        await window.selfos?.testsAdaptiveTurn({
-          testId,
-          resultId,
-          phase: 'probe',
-          itemId: probeTurnId(probeAmbiguityId ?? probeQuestion, probeQuestion),
-          text: probeQuestion,
-          options: probeOptions,
-          answer: PROBE_SKIPPED,
-        });
-        await get().load(testId);
-      }
-      const queue = get().probeQueue;
-      const nextInPass = queue[0];
-      if (nextInPass) {
-        set({
-          probeQuestion: nextInPass.question,
-          probeOptions: nextInPass.options,
-          probeQueue: queue.slice(1),
-          probeAnswer: '',
-        });
-        return;
-      }
-      set({ probeQuestion: null, probeOptions: [], probeAnswer: '' });
+      await get().refreshState(testId);
     },
 
     loadScenario: async (testId, context) => {
@@ -878,17 +935,8 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const fallback: AdaptiveScenarioView = { ok: false, context, degraded: true };
       const out = await (window.selfos?.testsAdaptiveScenario({ testId, resultId, context }) ??
         Promise.resolve(fallback));
-      const scenes = (out.scenes ?? []).map((s) => ({ context: out.context, ...s }));
+      const scenes = out.scenes ?? [];
       set({
-        // Append, and dedupe by scene — "write more" must mean MORE. Dropping the context's existing set
-        // made the button a re-roll: five new moments replacing five you were part-way through answering.
-        scenarios:
-          scenes.length > 0
-            ? [
-                ...get().scenarios,
-                ...scenes.filter((s) => !get().scenarios.some((prior) => prior.scene === s.scene)),
-              ]
-            : get().scenarios,
         busy: false,
         progress: null,
         // A moment that produced nothing used to clear `busy` and set no scene — so the tap showed a thinking
@@ -897,6 +945,11 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         scenarioMessage:
           scenes.length > 0 ? null : (out.message ?? 'That didn’t come through — try again.'),
       });
+      // 74 §3.6.35 — the append-and-dedupe this used to do by hand happens in the bridge now, against the
+      // take's own turns, so an unpicked moment survives a reload instead of living until the next load. It
+      // was the only one of the three sets that appended at all; the other two are joining it rather than the
+      // other way round.
+      await get().refreshState(testId);
     },
 
     reviseProbeAnswer: async (testId, itemId, question, answer, options) => {
@@ -914,7 +967,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         ...(options ? { options } : {}),
         answer,
       });
-      await get().load(testId);
+      await get().refreshState(testId);
     },
 
     /*
@@ -932,8 +985,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         resultId,
         phase: 'scenario',
         // Per SCENE, not per context: a pass writes several, and keying them all to the context meant the
-        // second answer overwrote the first.
-        itemId: `${target.context}#${target.scene.slice(0, 40)}`,
+        // second answer overwrote the first. The format is shared with the bridge, which stamps the moment as
+        // an offer under this same id before anyone picks anything — two hand-written copies would mean the
+        // pick appended a second turn instead of filling in the first (74 §3.6.35).
+        itemId: scenarioTurnId(target.context, target.scene),
         text: target.scene,
         // The choices this moment offered, PERSISTED. Without them an answered moment could be seen but never
         // re-picked, and re-opening its category could only mean spending again on five different moments.
@@ -942,7 +997,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       });
       // Re-read so the answered list reflects the write — including a CHANGED answer, which replaces rather
       // than appending (`stampTurn`).
-      await get().load(testId);
+      await get().refreshState(testId);
       set({ scenarioMessage: null });
     },
 
@@ -1003,6 +1058,8 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // it is supposed to undo.
       await window.selfos?.testsAdaptiveSetArea({ testId, area: 0 });
       set({ ...EMPTY });
+      // The FULL read here, not the narrow one: `EMPTY` has just cleared the bank and every seeded mark, and
+      // start-over has to put them back (the marks live in the lexicon and are deliberately kept).
       await get().load(testId);
     },
 

@@ -153,7 +153,7 @@ describe('goalSuggestService.suggestGoals (60 §3.1.3)', () => {
 
 describe('goals finally read the goal list the profile derives (74 §5.8)', () => {
   it('carries what they want to be able to SAY, their reading, and their hard nos', async () => {
-    const { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } =
+    const { applyDirectionalMarks, emptyLexicon, writeLexicon } =
       await import('../tests/adaptive/lexicon');
     const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
     const { acknowledgeAdult } = await import('../conversations/guidanceService');
@@ -165,14 +165,16 @@ describe('goals finally read the goal list the profile derives (74 §5.8)', () =
     await acknowledgeAdult(fs, key, personId);
 
     // Loved to HEAR, would not say — which IS the hear/say gap, i.e. a goal they never had to write down.
-    let lex = applyBankMarks(
+    const lex = applyDirectionalMarks(
       emptyLexicon(personId, now),
       DIRTY_TALK.bank,
-      { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+      {
+        'names-praise:good-girl': { hear: 'love', say: 'okay' },
+        'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
+      },
       'take:1',
       now,
     );
-    lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, now);
     await writeLexicon(fs, key, lex);
 
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, personId, now);
@@ -209,7 +211,7 @@ describe('goals finally read the goal list the profile derives (74 §5.8)', () =
     // The READING, which until now was written once and consumed by nothing.
     expect(system).toContain('not pushed around');
     // And a suggested goal can never name something they ruled out.
-    expect(system).toContain('whore');
+    expect(system).toContain('manwhore');
     expect(system).toMatch(/NEVER use or suggest/);
   });
 });

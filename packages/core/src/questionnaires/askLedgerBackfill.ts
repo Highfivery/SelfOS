@@ -10,6 +10,7 @@ import {
   type AskLedgerEntry,
   type AskOutcome,
 } from './askLedger';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 import { runClaude, type AiDeps } from './aiCall';
 import { SAFETY } from './aiPrompts';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
@@ -165,10 +166,14 @@ async function writeBlurbs(
     const g = gistsFor(t.topicId);
     return `- ${t.label}${g ? ` (asked about: ${g})` : ''}`;
   });
+  // 74 §5.8a — a blurb is prose the person reads on the Explored tab, so it carries their hard-no list.
+  const suppression = await buildOwnSuppressionBlock(deps.fs, deps.key, recipientPersonId);
   const call = await runClaude(
     deps,
     BLURB_SYSTEM,
-    `Write one sentence for each topic:\n${lines.join('\n')}`,
+    [`Write one sentence for each topic:\n${lines.join('\n')}`, suppression.trim()]
+      .filter(Boolean)
+      .join('\n\n'),
     'questionnaire.classify',
     1400,
   );

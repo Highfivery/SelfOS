@@ -7696,20 +7696,21 @@ describe('update awareness (36)', () => {
         const resultId = started?.draft?.id;
         expect(resultId).toBeTruthy();
 
-        // Pass 1 — mark what lands. Free: no AI, no budget.
+        // The words, marked per direction (74 §3.6.26). Free: no AI, no budget.
         const marked = await bridge.testsAdaptiveBank({
           testId: 'dirty-talk',
           resultId: resultId!,
           marks: {
-            'names-praise:good-girl': 'love',
-            'claiming:you-re-mine': 'love',
-            'names-rough-heavy:whore': 'never',
+            // Loved to hear, only okay to say — the gap the profile is built on.
+            'names-praise:good-girl': { hear: 'love', say: 'okay' },
+            'claiming:you-re-mine': { hear: 'love', say: 'love' },
+            'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
           },
         });
-        // Suppression rides the entry's live state — no second record, which is what used to make a no
+        // Suppression rides the entry's live marks — no second record, which is what used to make a no
         // unliftable (74 §3.6.11).
         expect(
-          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:whore')?.state,
+          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:manwhore')?.hearState,
         ).toBe('never');
         expect(marked?.lexicon.boundaries).toEqual([]);
 
@@ -7729,13 +7730,6 @@ describe('update awareness (36)', () => {
           context: 'during',
         });
         expect(thinScene).toMatchObject({ ok: false, degraded: true });
-
-        // Pass 2 — the hear/say split.
-        await bridge.testsAdaptiveSplit({
-          testId: 'dirty-talk',
-          resultId: resultId!,
-          splits: { 'names-praise:good-girl': { hear: 4, say: 0 } },
-        });
 
         /*
          * Synthesize. AI is off in this host, so the written analysis cannot run — and a failure no longer
@@ -7769,7 +7763,7 @@ describe('update awareness (36)', () => {
         const insight = insights.find((i) => i.provenance?.testId === 'dirty-talk');
         expect(insight?.facts.every((f) => f.lifeArea === 'Intimacy')).toBe(true);
         // A boundary is NEVER written into the Insight — suppression is structural (74 §5.5).
-        expect(JSON.stringify(insight)).not.toContain('whore');
+        expect(JSON.stringify(insight)).not.toContain('manwhore');
       });
 
       it('always shows a person ALL of their own lexicon, and lets them edit it', async () => {
@@ -7779,21 +7773,22 @@ describe('update awareness (36)', () => {
         await bridge.testsAdaptiveBank({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
-          marks: { 'names-rough-heavy:whore': 'never' },
+          marks: { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
         });
 
         const noState = async (): Promise<string | undefined> =>
-          (await bridge.testsLexicon())?.entries.find((e) => e.key === 'names-rough-heavy:whore')
-            ?.state;
+          (await bridge.testsLexicon())?.entries.find((e) => e.key === 'names-rough-heavy:manwhore')
+            ?.hearState;
         expect(await noState()).toBe('never');
-        // The report's explicit "changed my mind" still lifts it — now one of several ways, not the only one.
+        // The report's explicit "changed my mind" still lifts it, per direction (74 §3.6.26) — and it works
+        // for a WORD as well as a name now, which is the only route back once a term leaves the bank.
         const cleared = await bridge.testsLexiconEdit({
-          kind: 'setState',
-          key: 'names-rough-heavy:whore',
-          state: null,
+          kind: 'clearSide',
+          key: 'names-rough-heavy:manwhore',
+          side: 'hear',
         });
         expect(
-          cleared?.entries.find((e) => e.key === 'names-rough-heavy:whore')?.state,
+          cleared?.entries.find((e) => e.key === 'names-rough-heavy:manwhore')?.hearState,
         ).toBeUndefined();
         // Their own word, in their own words.
         const added = await bridge.testsLexiconEdit({
@@ -7845,11 +7840,11 @@ describe('update awareness (36)', () => {
         });
         const after = await readLexicon(fs, key, ownerId);
         expect(suppressedTexts(after)).not.toContain('good girl');
-        // ...and the side he IS asked about survives untouched, which is the whole reason the unit is the
-        // direction and not the name: "good girl" is exactly what he would call her.
-        const entry = after.entries.find((e) => e.key === 'names-praise:good-girl');
-        expect(entry?.hearState).toBeUndefined();
-        expect(entry?.sides).toEqual(['say']);
+        // The mark goes with the side it belonged to — and this entry had no OTHER answer, so the entry
+        // goes too: since §3.6.26 a lexicon entry carries answers, and one with none carries nothing. The
+        // row itself comes back from the bank on the side he IS asked about, unmarked, which is the whole
+        // reason the unit is the direction and not the name: "good girl" is exactly what he would call her.
+        expect(after.entries.find((e) => e.key === 'names-praise:good-girl')).toBeUndefined();
       });
 
       /**
@@ -7884,46 +7879,70 @@ describe('update awareness (36)', () => {
       });
 
       /**
-       * 74 §3.2 — a `never` a person can no longer reach is the preference the spec was amended to abolish.
+       * 74 §3.2/§3.6.25 — a `never` a person can no longer reach is the preference the spec was amended
+       * to abolish, and a purge is one of two ways to strand one.
        *
-       * A pet-name no lives per DIRECTION, so the report's whole-entry "changed my mind" could not touch it
-       * and the only control was a row in the names phase. Retire the name from the bank — 266 went in #534
-       * and 37 animal-sex names went with this change — and there is no row, while `suppressedTexts` keeps
-       * that word out of every generated line app-wide.
+       * Cutting a name does not cut it from anyone's lexicon (#534), so the mark outlives the row that
+       * could change it while `suppressedTexts` keeps reading it. Measured on the owner's own vault before
+       * this shipped: 173 of 1,110 entries were names the bank had retired, 169 of them still suppressing.
+       * They are now cleared on the next adaptive read, without the person having to find anything.
        */
-      it('lets the report lift a per-direction no on a name the bank no longer carries', async () => {
+      it('clears a mark on a name the bank has retired, on the next read', async () => {
         const { host, bridge, ownerId } = await freshOwner();
         await bridge.testsAcknowledgeAdult();
         const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
         const { fs, key } = (await host.host.vaultAndKey())!;
 
-        // Mark a real name, then make it a retired one: the mark stays, its bank row does not.
         await bridge.testsAdaptiveNames({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
           marks: { 'names-praise:good-girl': { hear: 'never' } },
           autosave: true,
         });
+        // Retire it the way a purge does: the mark stays on disk, its bank row does not.
         const marked = await readLexicon(fs, key, ownerId);
         await writeLexicon(fs, key, {
           ...marked,
           entries: marked.entries.map((e) =>
-            e.key === 'names-praise:good-girl' ? { ...e, key: 'names-praise:retired-name' } : e,
+            e.key === 'names-praise:good-girl' ? { ...e, key: 'names-praise:a-retired-name' } : e,
           ),
         });
-        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
-        // The prune leaves it alone, correctly — it cannot resolve sides for a key the bank never had, and
-        // guessing would delete a custom word the person typed themselves.
-        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
-        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
+        /*
+         * 74 §3.6.34 — this used to assert the ORPHAN first ("`suppressedTexts` still contains it until you
+         * open the take"), which was true and was the defect: `readLexicon` is the read every consumer goes
+         * through, and until the fix it handed `chatService`, the books, the emails and the steer a word the
+         * person had no row anywhere to un-ban. Measured on the owner's real vault at the time: 242 of them.
+         *
+         * The guarantee is now the stronger one — ANY read clears it, with no visit to the take required.
+         */
+        const healed = await readLexicon(fs, key, ownerId);
+        expect(suppressedTexts(healed)).not.toContain('good girl');
+        expect(healed.entries.some((e) => e.key === 'names-praise:a-retired-name')).toBe(false);
 
-        // So the report has to be able to lift it, and now can.
+        // …and opening the take still PERSISTS it, so the row does not sit on disk being re-healed forever.
+        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        const onDisk = (await readEncryptedJson(
+          fs,
+          `people/${ownerId}/tests/lexicon.enc`,
+          key,
+        )) as { entries: { key: string }[] } | null;
+        expect(onDisk?.entries.some((e) => e.key === 'names-praise:a-retired-name')).toBe(false);
+      });
+
+      it('leaves a custom write-in alone — it was never the bank’s to retire', async () => {
+        const { host, bridge, ownerId } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
         await bridge.testsLexiconEdit({
-          kind: 'clearNameSide',
-          key: 'names-praise:retired-name',
-          side: 'hear',
+          kind: 'addWord',
+          text: 'wreck me',
+          family: 'names-warm',
+          wordKind: 'phrase',
         });
-        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).not.toContain('good girl');
+        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        const { fs, key } = (await host.host.vaultAndKey())!;
+        const after = await readLexicon(fs, key, ownerId);
+        expect(after.entries.some((e) => e.text === 'wreck me')).toBe(true);
       });
 
       it('lifts only the direction asked for, never the other one', async () => {
@@ -7935,22 +7954,183 @@ describe('update awareness (36)', () => {
         await bridge.testsAdaptiveNames({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
-          marks: { 'names-rough-heavy:slut': { hear: 'never', say: 'never' } },
+          marks: { 'names-rough-heavy:anal-slut': { hear: 'never', say: 'never' } },
           autosave: true,
         });
         await bridge.testsLexiconEdit({
-          kind: 'clearNameSide',
-          key: 'names-rough-heavy:slut',
+          kind: 'clearSide',
+          key: 'names-rough-heavy:anal-slut',
           side: 'hear',
         });
         const { fs, key } = (await host.host.vaultAndKey())!;
         const after = await readLexicon(fs, key, ownerId);
-        const entry = after.entries.find((e) => e.key === 'names-rough-heavy:slut');
+        const entry = after.entries.find((e) => e.key === 'names-rough-heavy:anal-slut');
         expect(entry?.hearState).toBeUndefined();
         expect(entry?.sayState).toBe('never');
         // Still suppressed overall — he took back being called it, not calling her it.
-        expect(suppressedTexts(after)).toContain('slut');
-        expect(suppressedTexts(after, 'hear')).not.toContain('slut');
+        expect(suppressedTexts(after)).toContain('anal slut');
+        expect(suppressedTexts(after, 'hear')).not.toContain('anal slut');
+      });
+
+      /**
+       * 74 §3.6.35 — the whole loop, through the real handlers.
+       *
+       * Three separate defects, one cause: the generated set lived in renderer state and only a RESPONSE
+       * reached the draft. So an unreacted line vanished on the next load, it was absent from the avoid-list
+       * the next round is built from (the bridge assembles that from these same turns), and "write me more"
+       * hard-replaced what was on screen. This drives the bridge itself rather than the store, because the
+       * stamping is the bridge's job now — one write per pass, before the renderer has seen anything.
+       */
+      it('records a generated pass on the take, and re-offers nothing it has already asked', async () => {
+        const { bridge, host } = await freshOwner();
+        await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+        await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+        await bridge.testsAcknowledgeAdult();
+
+        const systems: string[] = [];
+        const users: string[] = [];
+        let round = 0;
+        host.host.claude = {
+          send: () => Promise.resolve(''),
+          stream: (options) => {
+            systems.push(options.system ?? '');
+            users.push(options.messages.map((m) => m.content).join('\n'));
+            round += 1;
+            const lines =
+              round === 1 ? ['first line', 'second line'] : ['third line', 'fourth line'];
+            return Promise.resolve({
+              text: JSON.stringify({ lines }),
+              usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+            });
+          },
+        };
+
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        const resultId = started!.draft!.id;
+        // Enough to clear the §3.6.9 readiness gate, which refuses a generating phase before any model call.
+        const bank = (await bridge.testsBank({ testId: 'dirty-talk' }))!;
+        const marks: Record<string, { hear: 'love' | 'okay'; say: 'love' | 'okay' }> = {};
+        for (const [i, entry] of bank.entries.slice(0, 16).entries()) {
+          marks[entry.key] = i < 5 ? { hear: 'love', say: 'love' } : { hear: 'okay', say: 'okay' };
+        }
+        await bridge.testsAdaptiveBank({ testId: 'dirty-talk', resultId, marks });
+
+        await bridge.testsAdaptiveLines({ testId: 'dirty-talk', resultId, round: 1 });
+        const afterFirst = await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        const linesOf = (view: typeof afterFirst): string[] =>
+          (view?.draft?.turns ?? []).filter((t) => t.phase === 'lines').map((t) => t.item.text);
+        // On the draft the moment they exist, and recorded as UNANSWERED — nobody has reacted to them.
+        expect(linesOf(afterFirst)).toEqual(['first line', 'second line']);
+        expect(
+          (afterFirst?.draft?.turns ?? [])
+            .filter((t) => t.phase === 'lines')
+            .every((t) => t.answer === undefined),
+        ).toBe(true);
+
+        // React to ONE of them, then ask for more. The set must GROW: the round that follows used to replace
+        // it outright, and the renderer only kept back the lines that happened to carry a reaction.
+        await bridge.testsAdaptiveTurn({
+          testId: 'dirty-talk',
+          resultId,
+          phase: 'lines',
+          itemId: 'first line',
+          text: 'first line',
+          answer: 'love',
+        });
+        await bridge.testsAdaptiveLines({ testId: 'dirty-talk', resultId, round: 2 });
+        const afterSecond = await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        expect(linesOf(afterSecond)).toEqual([
+          'first line',
+          'second line',
+          'third line',
+          'fourth line',
+        ]);
+        // The reaction survived the second round.
+        expect(
+          (afterSecond?.draft?.turns ?? []).find((t) => t.item.id === 'first line')?.answer,
+        ).toBe('love');
+        // …and the round the model was asked for knew about BOTH of the first round's lines, including the
+        // one nobody reacted to. Without the offer on the draft that line was invisible here, so the next
+        // round could hand back the very line it had just wiped off the screen.
+        expect(systems.at(-1)).toContain('second line');
+      });
+
+      /**
+       * 74 §3.6.35 — who the two of you are reaches the model. Owner-directed.
+       *
+       * Identity and address were asked in the take's first two taps and read by exactly one thing —
+       * `orientation.ts`, deciding which half of the bank is shown. No generating prompt has ever carried
+       * them, so every line, question and scene was written for an unnamed pair.
+       */
+      it('tells a generating phase who the two of them are', async () => {
+        const { bridge, host } = await freshOwner();
+        await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+        await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+        await bridge.testsAcknowledgeAdult();
+        const systems: string[] = [];
+        host.host.claude = {
+          send: () => Promise.resolve(''),
+          stream: (options) => {
+            systems.push(options.system ?? '');
+            return Promise.resolve({
+              text: JSON.stringify({ lines: ['a line'] }),
+              usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+            });
+          },
+        };
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        const resultId = started!.draft!.id;
+        const bank = (await bridge.testsBank({ testId: 'dirty-talk' }))!;
+        const marks: Record<string, { hear: 'love' | 'okay'; say: 'love' | 'okay' }> = {};
+        for (const [i, entry] of bank.entries.slice(0, 16).entries()) {
+          marks[entry.key] = i < 5 ? { hear: 'love', say: 'love' } : { hear: 'okay', say: 'okay' };
+        }
+        await bridge.testsAdaptiveBank({ testId: 'dirty-talk', resultId, marks });
+
+        await bridge.testsLexiconEdit({
+          kind: 'setAddress',
+          self: 'man',
+          partner: 'girl',
+          identity: { self: 'man', partner: 'woman' },
+        });
+        await bridge.testsAdaptiveLines({ testId: 'dirty-talk', resultId, round: 1 });
+
+        const system = systems.at(-1) ?? '';
+        expect(system).toContain('The person taking this: a man');
+        expect(system).toContain('The person they are with: a woman');
+        // Identity is the BODY and address is what they like being CALLED — stated as two separate facts,
+        // because a man can want "good girl" (§3.6.3) and collapsing them is the conflation #62 was about.
+        expect(system).toContain('likes being addressed as a man');
+        expect(system).toContain('likes being addressed as a girl');
+      });
+
+      /**
+       * 74 §3.6.35 — a boundary the lines step mints can be taken back.
+       *
+       * `addBoundary` had no counterpart at this seam: `setAddress` / `clearSide` / `addWord` / `addBoundary`
+       * and nothing that removes one. So "never anything like this again" wrote a suppression that nothing in
+       * the app could lift — the un-gettable-rid-of preference §3.2 abolished, one record type over.
+       */
+      it('lifts a themed boundary, so a ruled-out line is not ruled out for good', async () => {
+        const { bridge } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+
+        const banned = await bridge.testsLexiconEdit({
+          kind: 'addBoundary',
+          text: 'I want to beat that pussy',
+          boundaryKind: 'theme',
+        });
+        expect(banned?.boundaries.map((b) => b.text)).toEqual(['I want to beat that pussy']);
+
+        const lifted = await bridge.testsLexiconEdit({
+          kind: 'removeBoundary',
+          text: 'I want to beat that pussy',
+        });
+        expect(lifted?.boundaries).toEqual([]);
+        // …and it is really gone from the vault, not just from the value this call happened to return.
+        const reread = await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        expect(reread?.lexicon.boundaries).toEqual([]);
       });
 
       it('denies the adaptive surface to a person without tests.own (Guest)', async () => {

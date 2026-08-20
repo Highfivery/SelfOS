@@ -6,10 +6,18 @@ import { DIRTY_TALK } from './instruments/dirtyTalk';
 import type { ClaudeClient } from '../../host';
 import { memFileSystem } from '../../host/memFileSystem';
 import type { AiDeps } from '../../questionnaires/aiCall';
-import { applyBankMarks, applyDirections, emptyLexicon, addBoundary } from './lexicon';
+import {
+  applyDirectionalMarks,
+  emptyLexicon,
+  writeLexicon,
+  addBoundary,
+  type BankMark,
+  type DirectionalMark,
+} from './lexicon';
 import {
   lexiconDigest,
   openAmbiguities,
+  openEndedAmbiguity,
   runLinesPhase,
   runProbePhase,
   runScenarioPhase,
@@ -58,21 +66,23 @@ function deps(client: ClaudeClient): AiDeps {
   };
 }
 
+/** The same mark both ways — what a whole-entry mark used to mean before §3.6.26. */
+const both = (mark: BankMark): DirectionalMark => ({ hear: mark, say: mark });
+
 function seeded() {
-  let lex = applyBankMarks(
+  return applyDirectionalMarks(
     emptyLexicon('angel', NOW),
     DIRTY_TALK.bank,
     {
-      'names-praise:good-girl': 'love',
-      'names-rough-heavy:whore': 'never',
-      'names-rough-heavy:slut': 'love',
-      'anatomy-her:cunt': 'okay',
+      // Loves hearing it, saying it is merely okay — the hear/say gap (§3.6.26).
+      'names-praise:good-girl': { hear: 'love', say: 'okay' },
+      'names-rough-heavy:manwhore': both('never'),
+      'names-rough-heavy:anal-slut': both('love'),
+      'anatomy-her:cunt': both('okay'),
     },
     'take:1',
     NOW,
   );
-  lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
-  return lex;
 }
 
 describe('the adaptive engine (74 §5.1/§5.3)', () => {
@@ -80,28 +90,164 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     const ambiguities = openAmbiguities(seeded());
     const ids = ambiguities.map((a) => a.id);
     // The family split is drawn against the MIDDLE mark now, never a hard no (74 §3.6.15). Loved `slut` +
-    // ruled out `whore` no longer produces one: a hard no is settled, and a question that names it both asks
+    // ruled out `manwhore` no longer produces one: a hard no is settled, and a question that names it both asks
     // them to justify a boundary and is then rejected for containing it.
     expect(ids).not.toContain('split:names-rough-heavy');
-    // Loves hearing "good girl", rated 0 to say → preference or goal?
+    // Loves hearing "good girl", only okay saying it → preference or goal?
     expect(ids).toContain('frozen');
-    expect(ids).toContain('cringe');
+    /*
+     * 74 §3.6.34 — ONE ambiguity per signal.
+     *
+     * This used to also assert `cringe`, which was `lexicon.entries.filter(hasSayGap)` — byte-identical to
+     * `frozen`, taking the same `[0]`. Pinning both pinned the duplicate: the probe consumes one ambiguity
+     * per pass and keys `asked` on the id, so a second billed round re-asked about the identical word, and
+     * `ambiguitiesLeft` reported one open gap as two. Its wording was also false ("rate themselves near zero
+     * on saying it" for a MIDDLE mark, an explicit mild yes) — the exact phrasing `frozen` had already been
+     * rewritten to remove.
+     */
+    expect(ids).not.toContain('cringe');
+    expect(ids.filter((id) => id === 'frozen')).toHaveLength(1);
     // Nothing marked → nothing to probe. The loop ends rather than inventing work.
     expect(openAmbiguities(emptyLexicon('angel', NOW))).toEqual([]);
+  });
+
+  /*
+   * 74 §3.6.34 — a contrast needs two DIFFERENT words, and one row is not a split.
+   *
+   * `loved` and `lukewarm` are both direction-blind over the same rows, so a single row marked
+   * love-to-hear + okay-to-say landed in both and the question came out `They loved "good girl" but were
+   * only lukewarm on "good girl"` — the same word twice, in a premise the probe is told it may quote from.
+   * That is the say-gap, which `frozen` already asks about properly, not a split in the register.
+   */
+  it('never contrasts a word with itself, and asks about a single say-gap exactly once', () => {
+    const one = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': { hear: 'love', say: 'okay' } },
+      'take:1',
+      NOW,
+    );
+    const ambiguities = openAmbiguities(one);
+    for (const a of ambiguities) {
+      expect(new Set(a.terms).size).toBe(a.terms.length);
+      expect(a.question).not.toMatch(/"([^"]+)"[^"]*"\1"/);
+    }
+    // One marked row, one open question about it — not three.
+    expect(ambiguities).toHaveLength(1);
+    expect(ambiguities[0]?.id).toBe('frozen');
+  });
+
+  /**
+   * 74 §3.6.36 — OWNER-REPORTED: `"my big cock" hit, "my beautiful pussy" only half-did. What's the split?`
+   *
+   * The model was faithful; the premise it was handed was nonsense. Both of the split's lists were
+   * direction-blind, so the contrast paired a mark made about being CALLED something with a mark made about
+   * SAYING something else — not two points on one scale. For a mixed-anatomy couple it is not even about the
+   * same person's body: orientation shows a penis name only on the side its owner can hear and a vulva name
+   * only on the side he can say (§3.6.23), which is exactly the pair he was asked about.
+   */
+  it('never contrasts what they like being CALLED with what they like SAYING', () => {
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        // His body, so he only ever sees it as something he is called.
+        'names-body:my-big-cock': { hear: 'love' },
+        // Hers, so he only ever sees it as something he says.
+        'names-body:my-beautiful-pussy': { say: 'okay' },
+      },
+      'take:1',
+      NOW,
+    );
+    // Asserted, not assumed: both marks really did land, or this passes on an empty lexicon.
+    expect(lex.entries.find((e) => e.text === 'my big cock')?.hearState).toBe('love');
+    expect(lex.entries.find((e) => e.text === 'my beautiful pussy')?.sayState).toBe('okay');
+
+    for (const ambiguity of openAmbiguities(lex)) {
+      expect(ambiguity.question).not.toContain('my beautiful pussy');
+    }
+  });
+
+  it('still asks the split when both marks are the SAME direction, and says which', () => {
+    // The other half of the fix: comparing within one direction must not disable the ambiguity that makes
+    // this phase worth running. Two penis names, both marks about being CALLED — a real register question.
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        'names-body:my-big-cock': { hear: 'love' },
+        'names-body:my-good-cock': { hear: 'okay' },
+      },
+      'take:1',
+      NOW,
+    );
+    const split = openAmbiguities(lex).find((a) => a.id.startsWith('split:'));
+    expect(split, 'the split ambiguity must survive the direction fix').toBeDefined();
+    expect(split!.id).toBe('split:names-body:hear');
+    // The DIRECTION is in the sentence the model is asked to resolve, so a question that omits it cannot be
+    // written from a premise that states it.
+    expect(split!.question).toContain('being called');
+    expect(split!.question).not.toContain('saying');
+    // …and each quoted word carries how it was marked, so the two cannot be flattened back together.
+    expect(split!.termNote?.['my big cock']).toBe('they love being called this');
+    expect(split!.termNote?.['my good cock']).toBe('only lukewarm about being called this');
+  });
+
+  it('says which way each word landed in the open-ended fallback', () => {
+    // The same conflation in the pass that runs once the derived ambiguities are used up — which is most of
+    // them. It said "they marked these as landing" and then asked the model to go deeper on "the direction".
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        'names-body:my-big-cock': { hear: 'love' },
+        'names-body:my-beautiful-pussy': { say: 'love' },
+      },
+      'take:1',
+      NOW,
+    );
+    const open = openEndedAmbiguity(lex);
+    expect(open?.question).toContain('"my big cock" as landing to be called');
+    expect(open?.question).toContain('"my beautiful pussy" as landing to say');
+    expect(open?.termNote?.['my beautiful pussy']).toBe('landed to say');
+  });
+
+  it('puts each quoted word in the prompt WITH how it was marked', async () => {
+    const { client, prompts } = fakeClient([
+      '{"questions": [{"question": "Which?", "options": ["a"]}]}',
+    ]);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        'names-body:my-big-cock': { hear: 'love' },
+        'names-body:my-good-cock': { hear: 'okay' },
+      },
+      'take:1',
+      NOW,
+    );
+    const split = openAmbiguities(lex).find((a) => a.id.startsWith('split:'))!;
+    await runProbePhase(deps(client), lex, split);
+    // The bare list gave the model two words and no idea which was which — the direction lived only in the
+    // user message while the rule about what may be quoted lived here.
+    expect(prompts[0]?.system).toContain('- "my big cock" — they love being called this');
+    expect(prompts[0]?.system).toContain(
+      '- "my good cock" — only lukewarm about being called this',
+    );
   });
 
   it('puts the hard nos in the prompt as a negative constraint', async () => {
     const { client, prompts } = fakeClient(['{"lines": ["good girl"]}']);
     await runLinesPhase(deps(client), seeded(), 1);
     expect(prompts[0]?.system).toContain('THEIR HARD NOS');
-    expect(prompts[0]?.system).toContain('whore');
+    expect(prompts[0]?.system).toContain('manwhore');
     // …and the explicit register that makes the model engage rather than deflect.
     expect(prompts[0]?.system).toContain('Frank, explicit, filthy language is appropriate');
   });
 
   it('DROPS a generated line that touches a boundary, even when the prompt was ignored', async () => {
     const { client } = fakeClient([
-      '{"lines": ["good girl, just like that", "you filthy whore", "you\'re mine"]}',
+      '{"lines": ["good girl, just like that", "you filthy manwhore", "you\'re mine"]}',
     ]);
     const out = await runLinesPhase(deps(client), seeded(), 1);
     expect(out.value).toEqual(['good girl, just like that', "you're mine"]);
@@ -154,7 +300,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     // and it is the phase that asks open questions. "Never ask them to justify a boundary" has to be
     // enforced, not requested.
     const { client } = fakeClient([
-      JSON.stringify({ questions: ['What is it about being called a whore?'] }),
+      JSON.stringify({ questions: ['What is it about being called a manwhore?'] }),
     ]);
     const ambiguity = openAmbiguities(seeded())[0]!;
     const out = await runProbePhase(deps(client), seeded(), ambiguity);
@@ -166,7 +312,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     const { client } = fakeClient([
       JSON.stringify({
         scenes: [
-          { scene: 'He calls you a whore across the room.', options: ['tease', 'escalate'] },
+          { scene: 'He calls you a manwhore across the room.', options: ['tease', 'escalate'] },
         ],
       }),
     ]);
@@ -210,7 +356,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
 
     const bad = fakeClient([
       JSON.stringify({
-        narrative: 'You loved being called a whore.',
+        narrative: 'You loved being called a manwhore.',
         registers: {},
         contexts: {},
         themes: [],
@@ -233,7 +379,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
             text: 'The praise is about effort.',
             source: 'Your onboarding answers.',
           },
-          { kind: 'gap', text: 'You loved being called a whore.' },
+          { kind: 'gap', text: 'You loved being called a manwhore.' },
         ],
         registers: {},
         contexts: {},
@@ -280,7 +426,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
         narrative: 'You want to be claimed.',
         registers: {},
         contexts: {},
-        themes: ['being claimed', 'being called a whore'],
+        themes: ['being claimed', 'being called a manwhore'],
         wantsToSay: [],
       }),
     ]);
@@ -291,12 +437,18 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
   it('carries what the bank already established, so a phase never re-asks what it knows', () => {
     const digest = lexiconDigest(seeded());
     expect(digest).toContain('good girl');
-    expect(digest).not.toContain('whore'); // a hard no is never offered back as material
+    expect(digest).not.toContain('manwhore'); // a hard no is never offered back as material
   });
 
   it('surfaces the hear/say GAP as context — the signal that replaced the old cringe list (§3.6.2)', () => {
     // Loves hearing it, rated 0 to say, and BOTH sides were asked: that is the coachable material now.
-    const lex = applyDirections(seeded(), { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
+    const lex = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': { hear: 'love', say: 'okay' } },
+      'take:1',
+      NOW,
+    );
     expect(lexiconDigest(lex)).toContain('low on saying');
   });
 
@@ -340,8 +492,11 @@ describe('74 §3.6.6 — an unasked side is never read as a refusal', () => {
           kind: 'word' as const,
           family: 'names-power',
           tier: 2,
-          hear: 3,
-          say: 0,
+          // Answered both ways, and the two answers differ — the gap (74 §3.6.26).
+          hear: 4,
+          say: 2,
+          hearState: 'love' as const,
+          sayState: 'okay' as const,
           sides: ['hear' as const, 'say' as const],
         },
       ],
@@ -388,9 +543,15 @@ describe('§3.6.11 — an unanswered side is not a rated zero', () => {
   });
 
   it('still finds the gap when they DID answer both ways', () => {
-    // A real "I love hearing it and I can't say it" — answered on both sides, and the most coachable signal
-    // in the take. The fix must not silence it.
-    const answered = name({ sayState: 'never', say: 0 });
+    // A real gap — answered on both sides, and the most coachable signal in the take. The fix must not
+    // silence it.
+    //
+    // 74 §3.6.26: the gap is love-to-hear against OKAY-to-say. It used to be `sayState: 'never'`, which
+    // three marks make a contradiction: a `never` is a boundary — `suppressedTexts` strips that word from
+    // everything generated, and §3.6.15 forbids the probe from asking anyone to justify one. Probing it
+    // would put the single thing they ruled out in front of them as homework, which is the leak §3.2's goal
+    // guard exists to stop. So "I could never say it" is respected, and "saying it is only okay" is coached.
+    const answered = name({ sayState: 'okay', say: 2 });
     const open = openAmbiguities(lexicon([answered]));
     expect(open.map((a) => a.id)).toContain('frozen');
     expect(lexiconDigest(lexicon([answered]))).toMatch(/low on saying/i);
@@ -400,7 +561,7 @@ describe('§3.6.11 — an unanswered side is not a rated zero', () => {
 describe('a heavy no-marker still gets lines (74 §8.4)', () => {
   it('does not filter out everything the model writes', async () => {
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
-    const { applyBankMarks, emptyLexicon } = await import('./lexicon');
+    const { applyDirectionalMarks, emptyLexicon } = await import('./lexicon');
     const now = new Date('2026-08-18T00:00:00.000Z');
 
     // The reported state: went through the pet-name pass and ruled out most of it. Dozens of those names are
@@ -410,8 +571,14 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
     const names = DIRTY_TALK.bank.entries
       .filter((e) => e.family.startsWith('names-'))
       .slice(0, 130);
-    const marks = Object.fromEntries(names.map((e) => [e.key, 'never' as const]));
-    const lexicon = applyBankMarks(emptyLexicon('p1', now), DIRTY_TALK.bank, marks, 'take:1', now);
+    const marks = Object.fromEntries(names.map((e) => [e.key, both('never')]));
+    const lexicon = applyDirectionalMarks(
+      emptyLexicon('p1', now),
+      DIRTY_TALK.bank,
+      marks,
+      'take:1',
+      now,
+    );
 
     const written = [
       'I love the sound you make',
@@ -419,7 +586,7 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
       'stay just like that',
       'I have wanted this all day',
       'you take it so well',
-      'come here, love', // a real vocative — this one SHOULD be dropped
+      'come here, baby', // a real vocative — this one SHOULD be dropped
     ];
     const { client } = fakeClient([JSON.stringify({ lines: written })]);
     const out = await runLinesPhase(deps(client), lexicon, 1);
@@ -427,24 +594,30 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
     expect(out.ok).toBe(true);
     expect(out.value).toContain('I love the sound you make');
     expect(out.value).toContain('you look beautiful like that');
-    // The boundary still holds where it means something: being CALLED love is off.
-    expect(out.value).not.toContain('come here, love');
+    // The boundary still holds where it means something: being CALLED baby is off.
+    expect(out.value).not.toContain('come here, baby');
   });
 });
 
 describe('the probe never asks about a hard no (74 §3.6.15)', () => {
   it('draws its contrast against the middle mark, not a boundary', async () => {
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
-    const { applyBankMarks, emptyLexicon } = await import('./lexicon');
+    const { applyDirectionalMarks, emptyLexicon } = await import('./lexicon');
     const { openAmbiguities } = await import('./engine');
     const now = new Date('2026-08-18T00:00:00.000Z');
     const names = DIRTY_TALK.bank.entries
       .filter((e) => e.family.startsWith('names-warm'))
       .slice(0, 6);
     const marks = Object.fromEntries(
-      names.map((e, i) => [e.key, i === 0 ? 'love' : i === 1 ? 'okay' : 'never'] as const),
+      names.map((e, i) => [e.key, both(i === 0 ? 'love' : i === 1 ? 'okay' : 'never')] as const),
     );
-    const lex = applyBankMarks(emptyLexicon('p1', now), DIRTY_TALK.bank, marks, 'take:1', now);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', now),
+      DIRTY_TALK.bank,
+      marks,
+      'take:1',
+      now,
+    );
 
     const banned = new Set(names.slice(2).map((e) => e.text));
     for (const ambiguity of openAmbiguities(lex)) {
@@ -526,7 +699,7 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
       JSON.stringify({
         lede: 'You want to be claimed.',
         narrative:
-          'A good paragraph about what lands.\n\nYou loved being called a whore.\n\nAnd a third.',
+          'A good paragraph about what lands.\n\nYou loved being called a manwhore.\n\nAnd a third.',
         readings: [{ kind: 'pattern', text: 'Praise lands.' }],
         registers: {},
         contexts: {},
@@ -536,7 +709,7 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
     ]);
     const out = await runSynthesis(deps(client), seeded(), 'turns…');
     // The boundary is still absolute — no sentence containing it is ever shown…
-    expect(out.value?.narrative).not.toContain('whore');
+    expect(out.value?.narrative).not.toContain('manwhore');
     // …but the other 3,000 words survive. Rejecting the whole thing for one hit is what "the psychological
     // analysis didn't come through" WAS: the model wrote it and we threw it away.
     expect(out.value?.narrative).toContain('A good paragraph');
@@ -548,7 +721,7 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
     const { client } = fakeClient([
       JSON.stringify({
         lede: 'You want to be claimed.',
-        narrative: 'You loved being called a whore.',
+        narrative: 'You loved being called a manwhore.',
         readings: [{ kind: 'pattern', text: 'Praise lands.' }],
         registers: {},
         contexts: {},
@@ -572,24 +745,23 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
   // naming it. Verified against the owner's own vault: every one of his four loved terms is this shape, so
   // the probe failed 100% of the time.
   it('lets the probe quote a word it was handed, while still filtering everything else', async () => {
-    const { applyBankMarks, applyNameMarks, emptyLexicon, suppressedTexts } =
-      await import('./lexicon');
+    const { applyDirectionalMarks, emptyLexicon, suppressedTexts } = await import('./lexicon');
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
     const now = new Date('2026-08-18T00:00:00.000Z');
     const naughtyGirl = DIRTY_TALK.bank.entries.find((e) => e.text === 'naughty girl')!;
-    const whore = DIRTY_TALK.bank.entries.find((e) => e.text === 'whore')!;
+    const manwhore = DIRTY_TALK.bank.entries.find((e) => e.text === 'manwhore')!;
 
-    let lex = applyNameMarks(
+    let lex = applyDirectionalMarks(
       emptyLexicon('p1', now),
       DIRTY_TALK.bank,
       {
         [naughtyGirl.key]: { hear: 'never', say: 'love' },
-        [whore.key]: { hear: 'never', say: 'never' },
+        [manwhore.key]: { hear: 'never', say: 'never' },
       },
       'take:1',
       now,
     );
-    lex = applyBankMarks(lex, DIRTY_TALK.bank, {}, 'take:1', now);
+    lex = applyDirectionalMarks(lex, DIRTY_TALK.bank, {}, 'take:1', now);
     // Undirected, it reads as ruled out — which is right for a line and wrong for a question about it.
     expect(suppressedTexts(lex)).toContain('naughty girl');
 
@@ -608,7 +780,7 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
 
     // …and a question that reaches for a DIFFERENT ruled-out word is still dropped.
     const bad = fakeClient([
-      JSON.stringify({ questions: ['Is "naughty girl" different from being called a whore?'] }),
+      JSON.stringify({ questions: ['Is "naughty girl" different from being called a manwhore?'] }),
     ]);
     const dropped = await runProbePhase(deps(bad.client), lex, {
       id: 'x',
@@ -616,5 +788,231 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
       terms: ['naughty girl'],
     });
     expect(dropped.ok).toBe(false);
+  });
+});
+
+describe('74 §3.6.29 — the digest keeps the two directions apart', () => {
+  /*
+   * The synthesis prompt asks for "the role they take, what they want to BE to the other person" and for the
+   * hear/say gap. Neither is answerable from a flat list, and a flat list is what it used to get: one line
+   * built from `Math.max(hear, say) >= 3`, so "call me this" and "I want to call them this" — opposite
+   * answers on a pet name (§3.6.8) — arrived as the same fact.
+   */
+  it('says which direction each loved term runs in, and carries the middle mark', () => {
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', new Date('2026-08-19T00:00:00.000Z')),
+      DIRTY_TALK.bank,
+      {
+        // Loved to be CALLED it, never to say it.
+        'names-praise:good-girl': { hear: 'love', say: 'never' },
+        // The mirror: loved to SAY, never to hear.
+        'names-praise:good-boy': { hear: 'never', say: 'love' },
+        // The middle mark, which reached the synthesis nowhere at all.
+        'anatomy-her:cunt': { hear: 'okay', say: 'okay' },
+      },
+      'take:1',
+      new Date('2026-08-19T00:00:00.000Z'),
+    );
+    const digest = lexiconDigest(lex);
+    const hearLine = digest.split('\n').find((l) => l.startsWith('They want to HEAR')) ?? '';
+    const sayLine = digest.split('\n').find((l) => l.startsWith('They want to SAY')) ?? '';
+    expect(hearLine).toContain('good girl');
+    expect(hearLine).not.toContain('good boy');
+    expect(sayLine).toContain('good boy');
+    expect(sayLine).not.toContain('good girl');
+    expect(digest).toMatch(/Fine with, not favourites.*cunt/);
+  });
+});
+
+describe('74 §3.6.34 — a truncated scenario set keeps the scenes that did arrive', () => {
+  it('salvages the complete scenes instead of losing all five', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const lexicon = emptyLexicon('p1', new Date());
+    await writeLexicon(fs, key, lexicon);
+    // Cut off mid-way through the third scene, exactly as a max_tokens stop does.
+    const truncated =
+      '{"scenes":[' +
+      '{"scene":"You get in first and wait.","options":["tell me what you want","come here"]},' +
+      '{"scene":"They text you at lunch.","options":["say it out loud","not yet"]},' +
+      '{"scene":"The third one never fini';
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(truncated),
+      stream: () =>
+        Promise.resolve({
+          text: truncated,
+          usage: { inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const result = await runScenarioPhase(
+      {
+        fs,
+        key,
+        client,
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-6',
+        personId: 'p1',
+        now: new Date(),
+      },
+      lexicon,
+      'buildUp',
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value?.map((scene) => scene.scene)).toEqual([
+      'You get in first and wait.',
+      'They text you at lunch.',
+    ]);
+  });
+});
+
+/*
+ * 74 §3.6.39 — a premise must state what the person actually marked, in the register they marked it in.
+ *
+ * §3.6.36 fixed WHICH DIRECTION a mark was made in and left what that direction MEANS for the family it came
+ * from: "being called" was used for all 42 families, so every hear-split drawn from one of the 33 LINE
+ * families said something untrue. Found live on the owner's own take — 4 of his 11 derived premises.
+ */
+describe('a hear-premise names the right register (74 §3.6.39)', () => {
+  const marked = (marks: Record<string, DirectionalMark>) =>
+    applyDirectionalMarks(emptyLexicon('p1', NOW), DIRTY_TALK.bank, marks, 'take:1', NOW);
+
+  it('a LINE family says "hearing" — you are not CALLED "suck me"', () => {
+    const lex = marked({
+      'oral:suck-me': { hear: 'love' },
+      'oral:lick-me': { hear: 'okay' },
+    });
+    const split = openAmbiguities(lex).find((a) => a.id === 'split:oral:hear');
+    expect(split).toBeDefined();
+    expect(split!.question).toContain('love hearing "suck me"');
+    expect(split!.question).toContain('lukewarm about hearing "lick me"');
+    expect(split!.question).not.toContain('being called');
+    expect(split!.termNote?.['suck me']).toBe('they love hearing this');
+    expect(split!.termNote?.['lick me']).toBe('only lukewarm about hearing this');
+  });
+
+  /*
+   * The anti-vacuity half: the fix must not simply delete the vocative wording. A name IS something you are
+   * called, and §3.6.33 established that register split deliberately — `names-body:my cock` is a vocative
+   * where `anatomy-him:cock` is descriptive.
+   */
+  it('a NAME family keeps "being called"', () => {
+    const lex = marked({
+      'names-warm:beautiful': { hear: 'love' },
+      'names-warm:babe': { hear: 'okay' },
+    });
+    const split = openAmbiguities(lex).find((a) => a.id === 'split:names-warm:hear');
+    expect(split).toBeDefined();
+    expect(split!.question).toContain('love being called "beautiful"');
+    expect(split!.question).not.toContain('love hearing');
+    expect(split!.termNote?.['beautiful']).toBe('they love being called this');
+  });
+
+  it('the SAY direction is unchanged for both — you say a name and you say a line', () => {
+    const line = marked({ 'oral:suck-me': { say: 'love' }, 'oral:lick-me': { say: 'okay' } });
+    const name = marked({
+      'names-warm:beautiful': { say: 'love' },
+      'names-warm:babe': { say: 'okay' },
+    });
+    expect(openAmbiguities(line).find((a) => a.id === 'split:oral:say')!.question).toContain(
+      'love saying "suck me"',
+    );
+    expect(openAmbiguities(name).find((a) => a.id === 'split:names-warm:say')!.question).toContain(
+      'love saying "beautiful"',
+    );
+  });
+
+  /*
+   * The same rule in the fallback that runs for most later passes. The owner's own list happened to draw four
+   * names, so it read correctly by luck — the first loved LINE to reach it would have said "landing to be
+   * called 'suck me'".
+   */
+  it('the open-ended fallback says "to hear" for a line and "to be called" for a name', () => {
+    const line = openEndedAmbiguity(marked({ 'oral:suck-me': { hear: 'love' } }));
+    expect(line!.question).toContain('"suck me" as landing to hear');
+    expect(line!.termNote?.['suck me']).toBe('landed to hear');
+
+    const name = openEndedAmbiguity(marked({ 'names-warm:beautiful': { hear: 'love' } }));
+    expect(name!.question).toContain('"beautiful" as landing to be called');
+    expect(name!.termNote?.['beautiful']).toBe('landed to be called');
+  });
+});
+
+/*
+ * 74 §3.6.39 — one bad element must not sink a whole pass.
+ *
+ * Measured live at the owner's real shape: 2 of 4 open-ended probe passes came back MALFORMED, every one of
+ * them `end_turn` — complete replies, not truncated and not refused. The model wrote ONE question with raw
+ * inner quotes while the other five escaped theirs correctly, and `extractJsonObject` returned null for the
+ * lot. This phase is the most exposed to it in the whole take, because its entire job is to quote the
+ * person's own marked terms back at them.
+ *
+ * The reply below is the real captured one, trimmed to three questions and keeping the defect verbatim.
+ */
+const PROBE_REPLY_WITH_ONE_RAW_QUOTE = `\`\`\`json
+{
+  "questions": [
+    {
+      "question": "When she says "my big cock" — what makes it land?",
+      "options": ["She means it like a fact, not a compliment", "It's the possessive"]
+    },
+    {
+      "question": "\\"My big cock\\" vs \\"my big dick\\" — do they hit differently?",
+      "options": ["\\"Cock\\" is rawer, that's the one", "Same hit, either works"]
+    },
+    {
+      "question": "You say \\"beautiful\\" — where does it belong?",
+      "options": ["Looking at her before anything starts", "Mid-fuck, no thinking"]
+    }
+  ]
+}
+\`\`\``;
+
+describe('a phase salvages what arrived (74 §3.6.39)', () => {
+  it('the probe keeps the well-formed questions when one carries unescaped quotes', async () => {
+    const { client } = fakeClient([PROBE_REPLY_WITH_ONE_RAW_QUOTE]);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { 'names-body:my-big-cock': { hear: 'love' }, 'names-body:my-good-cock': { hear: 'okay' } },
+      'take:1',
+      NOW,
+    );
+    const ambiguity = openAmbiguities(lex).find((a) => a.id.startsWith('split:'))!;
+    const out = await runProbePhase(deps(client), lex, ambiguity);
+    // Before the salvage this was ok:false / MALFORMED, and a billed call reported "an unexpected shape".
+    expect(out.ok).toBe(true);
+    expect(out.value?.map((q) => q.question)).toEqual([
+      '"My big cock" vs "my big dick" — do they hit differently?',
+      'You say "beautiful" — where does it belong?',
+    ]);
+    // The malformed element is dropped, never repaired into something the model didn't write.
+    expect(out.value?.some((q) => q.question.includes('what makes it land'))).toBe(false);
+  });
+
+  it('a reply that is genuinely unusable still fails honestly', async () => {
+    const { client } = fakeClient(['not json at all, and not a question']);
+    const lex = seeded();
+    const ambiguity = openAmbiguities(lex)[0]!;
+    const out = await runProbePhase(deps(client), lex, ambiguity);
+    expect(out.ok).toBe(false);
+    expect(out.degraded).toBe(true);
+  });
+
+  /*
+   * `parseLines` had NO callers anywhere — production parsed more strictly than the helper written for it,
+   * so a bare top-level array (a shape the model returns about as often as the wrapped one) was thrown away.
+   */
+  it('the lines phase accepts a bare top-level array, which never reached production before', async () => {
+    const { client } = fakeClient(['["hold still", "look at me"]']);
+    const out = await runLinesPhase(deps(client), emptyLexicon('p1', NOW), 1);
+    expect(out.ok).toBe(true);
+    expect(out.value).toEqual(['hold still', 'look at me']);
+  });
+
+  it('the lines phase keeps the complete lines when the array is cut off mid-element', async () => {
+    const { client } = fakeClient(['{"lines": ["hold still", "look at me", "don\'t you da']);
+    const out = await runLinesPhase(deps(client), emptyLexicon('p1', NOW), 1);
+    expect(out.ok).toBe(true);
+    expect(out.value).toEqual(['hold still', 'look at me']);
   });
 });

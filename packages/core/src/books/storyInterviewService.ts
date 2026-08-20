@@ -41,7 +41,7 @@ import { queryUsage } from '../usage';
 import { BIOGRAPHY_BOOK_TYPE, getBookType, type BookInterviewFramework } from './bookTypes';
 import { budgetCorpus } from './corpusBudget';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
-import { subjectLexiconBlock } from './storyGenerationService';
+import { subjectLexiconBlocks } from './storyGenerationService';
 import { buildBiographerSystem, buildGapPassUserMessage } from './storyPromptBuilder';
 import {
   getBook,
@@ -293,7 +293,7 @@ export async function runGapPass(
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
     // This writes QUESTIONS put to the subject of an adult-gated book. Without the block it could ask about
     // the one thing they ruled out — and nobody reviews a gap question before it lands in their Inbox.
-    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = buildGapPassUserMessage(corpus, {
     outline,

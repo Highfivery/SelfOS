@@ -100,18 +100,29 @@ function bodyMatches(entry: BankBody | undefined, person: BankBody): boolean {
  * only makes sense one way stays that way.
  */
 export function shownSides(entry: BankEntry, who: Orientation): BankDirection[] {
+  /*
+   * 74 §3.6.28 — whose body the line names decides which body each direction is checked against.
+   *
+   * A line about the LISTENER ("your cunt is dripping") is about ME when I hear it and about THEM when I
+   * say it. A line about the SPEAKER ("stretch my pussy") is the other way round — and without the flip a
+   * man is asked whether he wants to SAY it, which is the §3.6.3 bug one level down: the orientation exists,
+   * it was just pointed at the wrong person.
+   */
+  const speakerBodied = entry.bodyOf === 'speaker';
+  const hearBody = speakerBodied ? who.partnerBody : who.selfBody;
+  const sayBody = speakerBodied ? who.selfBody : who.partnerBody;
   const sides: BankDirection[] = [];
   if (
     entry.directions.includes('hear') &&
     addressMatches(entry.addresses, who.selfAddress) &&
-    bodyMatches(entry.body, who.selfBody)
+    bodyMatches(entry.body, hearBody)
   ) {
     sides.push('hear');
   }
   if (
     entry.directions.includes('say') &&
     addressMatches(entry.addresses, who.partnerAddress) &&
-    bodyMatches(entry.body, who.partnerBody)
+    bodyMatches(entry.body, sayBody)
   ) {
     sides.push('say');
   }

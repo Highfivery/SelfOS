@@ -129,7 +129,12 @@ export async function narrateResult(deps: NarrateDeps): Promise<NarrateResult> {
     PERSONA,
     SAFETY,
     NARRATIVE_GUIDANCE,
-    ...(def.sensitive ? [ADULT_BOUNDARY, suppression] : []),
+    ...(def.sensitive ? [ADULT_BOUNDARY] : []),
+    // 74 §5.8a — the hard-no list is UNCONDITIONAL. It used to ride inside the `sensitive` branch, so every
+    // other instrument's narrative (Big Five, ECR-R, PHQ-9, GAD-7, ASRS, AQ-10/RAADS-R) wrote warm prose back
+    // to the person with no idea what they had ruled out. The ADULT_BOUNDARY above is what makes the explicit
+    // register appropriate and stays gated; suppression can only ever PREVENT.
+    ...(suppression ? [suppression] : []),
     ...(def.wellbeing ? [WELLBEING_BOUNDARY] : []),
     ...(result.crisisFlag ? [CRISIS_LEAD] : []),
   ].join('\n\n');

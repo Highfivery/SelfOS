@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, Ban, Clock, Contrast, Flame, ListChecks, Lock } from 'lucide-react';
+import {
+  ArrowRight,
+  Ban,
+  Check,
+  Clock,
+  Contrast,
+  Flame,
+  ListChecks,
+  Lock,
+  Minus,
+  Trash2,
+} from 'lucide-react';
 
 /**
  * 74 §3.6.1 #5 — the three marks, as lucide icons. `Ban` (a circle-slash) rather than a bare X because a
@@ -104,12 +115,6 @@ function pairShorthand(
   return `You & ${them}`;
 }
 
-/** What a row is rating, in the person's terms. Both sides shown ⇒ nothing to disambiguate. */
-function sideLabel(sides: readonly ('hear' | 'say')[]): string {
-  if (sides.length >= 2) return 'hear & say';
-  return sides[0] === 'say' ? 'you say' : 'you hear';
-}
-
 /**
  * The direction, as a sentence, for a whole area.
  *
@@ -125,17 +130,40 @@ function directionSentence(sides: readonly ('hear' | 'say')[] | null): string {
     return 'This area mixes the two — each line says which way it goes.';
   }
   if (sides.length >= 2) {
-    return 'Rate these BOTH ways at once — hearing it from them and saying it to them. You split the two apart in the next step.';
+    // It used to say "rate these BOTH ways at once … you split the two apart in the next step" — of a step
+    // that had been folded away, so the promise pointed at nothing and the one mark it asked for stood in
+    // for two different answers (74 §3.6.26).
+    return 'Two answers per line — one for hearing it from them, one for saying it to them.';
   }
   return sides[0] === 'say'
     ? 'Things YOU SAY TO THEM — rate how much you want to say it.'
     : 'Things THEY SAY TO YOU — rate how much you want to hear it.';
 }
 
-const MARK_META: Record<BankMark, { label: string; Icon: typeof Flame }> = {
-  love: { label: 'love it', Icon: Flame },
-  okay: { label: "it's okay", Icon: Contrast },
-  never: { label: 'never', Icon: Ban },
+/** The three marks in tap order, per direction — the same set, and the same order, as the pet names. */
+const DECK_MARKS: { value: BankMark; label: string; Icon: typeof Flame }[] = [
+  { value: 'love', label: 'love it', Icon: Flame },
+  { value: 'okay', label: "it's okay", Icon: Contrast },
+  { value: 'never', label: 'never', Icon: Ban },
+];
+
+/**
+ * 74 §3.6.35 — the SAME three marks, on the lines step.
+ *
+ * A line reaction is the identical three-way answer the words and names steps take, and it was wearing a
+ * different control: a 32px accent-only button where those two use a 44×40 tinted one, with no divider before
+ * the no. One answer, two shapes, on one test. The values differ (`meh`/`no` here, `okay`/`never` there —
+ * both persisted, neither worth a migration for a rename), so the tone classes are mapped rather than shared.
+ */
+const LINE_MARKS: { value: 'love' | 'meh' | 'no'; label: string; Icon: typeof Flame }[] = [
+  { value: 'love', label: 'love it', Icon: Flame },
+  { value: 'meh', label: "it's okay", Icon: Contrast },
+  { value: 'no', label: 'not this one', Icon: Ban },
+];
+const MARK_TONE: Record<'love' | 'meh' | 'no', 'love' | 'okay' | 'never'> = {
+  love: 'love',
+  meh: 'okay',
+  no: 'never',
 };
 import {
   Banner,
@@ -147,10 +175,16 @@ import {
   Text,
   Textarea,
 } from '../../../design-system/components';
-import { isAnsweredTurn } from '@selfos/core/schemas';
+import {
+  contextOfScenarioTurn,
+  isAnsweredTurn,
+  scenarioTurnId,
+  SKIPPED_ANSWER,
+} from '@selfos/core/schemas';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
 import { PracticeSheet } from './PracticeSheet';
+import { MarkFilter, isStillUnmarked, type MarkFilterValue } from './MarkFilter';
 import { NamesPhase } from './NamesPhase';
 import { TakeMap } from './TakeMap';
 import { StepActions, StepEyebrow, TakeRail, Tally } from './TakeRail';
@@ -216,6 +250,60 @@ const CONTEXTS: { id: string; label: string; blurb: string }[] = [
  * opens by default when there is nothing to tap, or when the answer on record isn't one of the options
  * (typed, or given before options existed), since a collapsed box would make that answer look lost.
  */
+/**
+ * 74 §3.6.37 — delete one generated item, behind a two-step inline confirm.
+ *
+ * Owner-reported: *"there should be a way to delete questions, not just skip them."* A skip keeps the item on
+ * screen and answerable (§3.6.17); this takes it away for good. Two-step rather than an Undo, matching how
+ * this app already guards a delete (a book, a person, a send): an Undo that only lives until you navigate
+ * away is a promise the screen cannot keep.
+ *
+ * `answered` is not a reason to refuse — the question you most want gone is the one you answered before
+ * realising it was nonsense — but the row says plainly what removing it costs, because that answer is
+ * feeding the written profile until the moment it goes.
+ */
+function DeleteItem({
+  what,
+  answered,
+  busy,
+  onDelete,
+}: {
+  /** What is being removed, in the step's own words — "question", "line", "moment". */
+  what: string;
+  answered: boolean;
+  busy: boolean;
+  onDelete: () => void;
+}): JSX.Element {
+  const [arming, setArming] = useState(false);
+  if (!arming) {
+    return (
+      <button
+        type="button"
+        className={adaptive.deleteItem}
+        disabled={busy}
+        onClick={() => setArming(true)}
+      >
+        <Trash2 size={13} aria-hidden="true" /> Delete
+      </button>
+    );
+  }
+  return (
+    <span className={adaptive.deleteConfirm} role="group" aria-label={`Delete this ${what}?`}>
+      <Text as="span" size="sm" tone="secondary">
+        Delete this {what}?{' '}
+        {answered ? 'Your answer goes with it, and stops feeding your profile.' : null} It
+        won&rsquo;t be asked again.
+      </Text>
+      <Button variant="secondary" className={adaptive.banUndo} disabled={busy} onClick={onDelete}>
+        Delete
+      </Button>
+      <Button variant="ghost" className={adaptive.banUndo} onClick={() => setArming(false)}>
+        Keep it
+      </Button>
+    </span>
+  );
+}
+
 function SayMore({
   value,
   startOpen,
@@ -387,24 +475,30 @@ export function AdaptiveTake(): JSX.Element {
       .then(() => useAdaptiveTestStore.getState().goToStep(routeStep));
   }, [routeStep, store.state, testId]);
 
-  /*
-   * Retake goes STRAIGHT to the retake choice.
+  /**
+   * 74 §3.6.30 — the intro is for a take nobody has touched. Anything with prior work opens on the MAP.
    *
-   * It used to land on the intro — a screen explaining a test they have already taken, with a button reading
-   * "Pick up where you left off", which then led to "Taking it again". Three screens and two of them wrong:
-   * they did not ask to pick anything up, they asked to take it again, and the question that actually needs
-   * answering (keep what you marked, or start fresh?) was two taps behind an explanation they had read
-   * before.
+   * Reported as "Keep marking goes to the intro", and the cause was that the card and this screen disagreed
+   * about what "started" means. `cardStateOf` calls a test taken as soon as ANY result exists, and
+   * `listAdaptiveResults` includes the draft — so a take opened once and left mid-way reads as "Keep
+   * marking" on the card. This screen asked a stricter question: the old effect required `store.state.latest`,
+   * which `coreBridge` defines as the first result whose status is NOT draft. A draft-only take therefore had
+   * `latest === null`, the effect returned early, `start()` was never called, and the phase stayed on its
+   * `intro` initial value — an explanation of a test they were already part-way through.
+   *
+   * Keying on prior work rather than on the retake FLAG is what removes the disagreement instead of patching
+   * one route into it: a deep link, a resumed session and the card all land in the same place, and only a
+   * genuinely untouched take still gets the intro.
+   *
+   * The step deep-link owns its own `start()`, so this stands aside for it rather than racing a second one.
    */
-  const tookRetake = useRef(false);
+  const hasPriorWork = Boolean(store.state?.draft ?? store.state?.latest);
+  const tookResume = useRef(false);
   useEffect(() => {
-    if (tookRetake.current || !routeState?.retake || !store.state?.latest) return;
-    tookRetake.current = true;
-    void useAdaptiveTestStore
-      .getState()
-      .start(testId)
-      .then(() => useAdaptiveTestStore.getState().setPhase('map'));
-  }, [routeState, store.state, testId]);
+    if (tookResume.current || routeStep !== undefined || !store.state || !hasPriorWork) return;
+    tookResume.current = true;
+    void useAdaptiveTestStore.getState().start(testId);
+  }, [routeStep, store.state, hasPriorWork, testId]);
 
   // Quitting or backgrounding the app inside the 700ms debounce would otherwise drop the last taps. The
   // unmount cleanup does not fire on a window close, so this is the only thing covering that path.
@@ -425,6 +519,7 @@ export function AdaptiveTake(): JSX.Element {
   // already-marked terms to page through (the §3.4 argument, one level down).
   const [areaIndex, setAreaIndex] = useState(0);
   const areaHeadingRef = useRef<HTMLDivElement>(null);
+  const registerHeadingRef = useRef<HTMLDivElement>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   /**
    * 74 §3.6.1 — whether the two-tap practice is still owed.
@@ -487,6 +582,30 @@ export function AdaptiveTake(): JSX.Element {
     () => (bank && area ? bank.entries.filter((entry) => entry.family === area.id) : []),
     [bank, area],
   );
+  /*
+   * 74 §3.6.34 — "still unmarked", on BOTH marking steps.
+   *
+   * The hard thing on a second visit is not choosing an area, it is finding the rows inside it you have not
+   * answered — 36 areas of up to 47 rows here, a 123-row register there. The filter is per-step state rather
+   * than a store field: it is a way of LOOKING at the current screen, and it should not follow you to the
+   * next area or survive a reload as a half-hidden list.
+   */
+  const [showOnly, setShowOnly] = useState<'all' | 'new'>('all');
+  /**
+   * 74 §3.6.35 — the same filter, for the three AI steps.
+   *
+   * One piece of state across all three rather than one each: it is a way of LOOKING at whichever set is on
+   * screen, the three steps never render together, and `goTo` clears it — so carrying three would be three
+   * copies of one answer, which is how the marking steps drifted apart in the first place (§3.6.34).
+   */
+  const [aiShowOnly, setAiShowOnly] = useState<MarkFilterValue>('all');
+  const visibleAreaEntries = useMemo(
+    () =>
+      showOnly === 'all'
+        ? areaEntries
+        : areaEntries.filter((entry) => isStillUnmarked(entry.sides, store.marks[entry.key])),
+    [areaEntries, showOnly, store.marks],
+  );
   const withheld = area ? (bank?.withheldByFamily[area.id] ?? 0) : 0;
   /**
    * The direction this area is actually being rated in. Orientation resolves it per entry, and in practice an
@@ -498,20 +617,6 @@ export function AdaptiveTake(): JSX.Element {
     if (shapes.size !== 1) return null;
     return areaEntries[0]?.sides ?? null;
   }, [areaEntries]);
-  /**
-   * 74 §3.6.4 — what still needs the hear/say question after the collapse: only entries this person was
-   * offered on BOTH sides. Everything oriented to one side already knows its direction.
-   */
-  const splitNeeded = useMemo(
-    () =>
-      Object.keys(store.marks).filter((key) => {
-        if (store.marks[key] === 'never') return false;
-        const entry = bank?.entries.find((e) => e.key === key);
-        return (entry?.sides.length ?? 0) >= 2;
-      }),
-    [store.marks, bank],
-  );
-
   /**
    * 74 §3.6.9 — the step model, and the one place the rail, the map and every frame read their state from.
    *
@@ -537,13 +642,20 @@ export function AdaptiveTake(): JSX.Element {
    */
   const momentsByContext = new Map<
     string,
-    { context: string; scene: string; options: string[]; picked: string | null }[]
+    {
+      context: string;
+      scene: string;
+      options: string[];
+      picked: string | null;
+      skipped: boolean;
+    }[]
   >();
   const addMoment = (m: {
     context: string;
     scene: string;
     options: string[];
     picked: string | null;
+    skipped: boolean;
   }): void => {
     const list = momentsByContext.get(m.context) ?? [];
     if (list.some((prior) => prior.scene === m.scene)) return;
@@ -551,15 +663,25 @@ export function AdaptiveTake(): JSX.Element {
     momentsByContext.set(m.context, list);
   };
   for (const turn of store.state?.draft?.turns ?? []) {
-    if (turn.phase !== 'scenario') continue;
+    // 74 §3.6.37 — a deleted moment is gone from the screen. Its tombstone stays on the record so the phase
+    // can never write it again, which is the whole reason the row is not simply removed.
+    if (turn.phase !== 'scenario' || turn.deleted) continue;
     addMoment({
-      context: turn.item.id.split('#')[0] ?? '',
+      context: contextOfScenarioTurn(turn.item.id),
       scene: turn.item.text,
       options: turn.item.options ?? [],
-      picked: typeof turn.answer === 'string' ? turn.answer : null,
+      picked: isAnsweredTurn(turn.answer) ? String(turn.answer) : null,
+      skipped: turn.answer === SKIPPED_ANSWER,
     });
   }
-  for (const fresh of store.scenarios) addMoment({ ...fresh, picked: null });
+  /*
+   * 74 §3.6.35 — this is the WHOLE set now, answered or not.
+   *
+   * A second loop used to merge in `store.scenarios`, the moments written in this sitting, because a generated
+   * moment reached the draft only when somebody picked an option. So an unpicked one lived exactly as long as
+   * the tab did. The bridge records the pass the moment it is written, so every moment is a turn and this one
+   * loop is all of them.
+   */
   // A moment answered before options were persisted has a scene and a pick but nothing to re-pick among;
   // it still shows what was chosen, which is better than pretending the moment never happened.
   /**
@@ -583,25 +705,23 @@ export function AdaptiveTake(): JSX.Element {
         skipped: store.skipped as StepId[],
         nameMarks: Object.keys(store.nameMarks).length,
         bankMarks: marked.length,
-        splitNeeded: splitNeeded.length,
-        splitAnswered: splitNeeded.filter((key) => {
-          const split = store.splits[key];
-          return split?.hear !== undefined || split?.say !== undefined;
-        }).length,
         lineReactions: Object.keys(store.lineReactions).length,
-        probesAnswered: (store.state?.draft?.turns ?? []).filter((turn) => turn.phase === 'probe')
-          .length,
+        // Deleted items are off the screen, so they must be off the count too — a rail saying "6 asked"
+        // over five rendered cards is the §3.6.35 disagreement, reached from the other side.
+        probesAnswered: (store.state?.draft?.turns ?? []).filter(
+          (turn) => turn.phase === 'probe' && !turn.deleted,
+        ).length,
         // 74 §3.6.19 — CATEGORIES worked, not raw picks: "8" told a person nothing about how far through
         // the six moments they were, and the rail sat it beside 132 marks as though the two compared.
         scenariosAnswered: CONTEXTS.filter((c) => answeredIn(c.id) > 0).length,
         momentCategories: CONTEXTS.length,
         seeded: store.seeded,
         identityAnswered: store.bank?.address !== undefined,
-        loved:
-          Object.values(store.marks).filter((mark) => mark === 'love').length +
-          Object.values(store.nameMarks).filter(
-            (mark) => mark.hear === 'love' || mark.say === 'love',
-          ).length,
+        // Per direction on both steps now — a term loved to hear but ruled out to say is one loved answer,
+        // and before §3.6.26 the deck could only ever contribute a whole-entry one.
+        loved: [...Object.values(store.marks), ...Object.values(store.nameMarks)].filter(
+          (mark) => mark.hear === 'love' || mark.say === 'love',
+        ).length,
       }),
     [
       store.phase,
@@ -609,8 +729,7 @@ export function AdaptiveTake(): JSX.Element {
       store.skipped,
       store.nameMarks,
       marked.length,
-      splitNeeded,
-      store.splits,
+      store.marks,
       store.lineReactions,
       store.state,
       store.seeded,
@@ -620,7 +739,12 @@ export function AdaptiveTake(): JSX.Element {
   /** The two marking steps' tallies, so both render the same card from one place. */
   const bankTally = useMemo(() => {
     const out = { love: 0, okay: 0, never: 0 };
-    for (const mark of Object.values(store.marks)) out[mark] += 1;
+    // Counted per DIRECTION since §3.6.26, exactly like the names — a term can be loved one way and ruled
+    // out the other, and a single number for the row could only ever tell half of that.
+    for (const mark of Object.values(store.marks)) {
+      if (mark.hear) out[mark.hear] += 1;
+      if (mark.say) out[mark.say] += 1;
+    }
     return out;
   }, [store.marks]);
   const nameTally = useMemo(() => {
@@ -667,11 +791,27 @@ export function AdaptiveTake(): JSX.Element {
    * bug one level up: leaving a step is a save point, and only finishing was treating it as one.
    */
   const goTo = (id: StepId): void => {
+    // The AI steps' filter is a way of looking at the screen you are ON, so it never follows you to the next
+    // one — the same reasoning as the marking steps' own filter, one component over (74 §3.6.34/§3.6.35).
+    setAiShowOnly('all');
     void store.flush(testId).then(() => {
       // NOT `synthesize`. Every other AI step presents itself and waits to be asked (§3.6.9); this one ran
       // the moment you navigated to it, so the most expensive step was the only one you could not look at
       // without paying for it.
       store.goToStep(phaseForStep(id));
+      return undefined;
+    });
+  };
+  /**
+   * 74 §3.6.30 — back to the map from any step.
+   *
+   * Flushes first for the same reason `goTo` does: the marking steps autosave on a 700ms debounce, and
+   * leaving the step inside that window would drop the last few taps — the moment a person is most likely
+   * to be navigating away.
+   */
+  const goToMap = (): void => {
+    void store.flush(testId).then(() => {
+      store.setPhase('map');
       return undefined;
     });
   };
@@ -699,6 +839,7 @@ export function AdaptiveTake(): JSX.Element {
     const last = (bank?.families.length ?? 1) - 1;
     const index = next < 0 ? 0 : next > last ? last : next;
     setAreaIndex(index);
+    setShowOnly('all');
     void store.rememberArea(index);
     // A new area starts at the top; otherwise you land mid-list on a screen you have never seen. Scoped to
     // the app's own scroll container rather than every element in the document.
@@ -710,6 +851,26 @@ export function AdaptiveTake(): JSX.Element {
     requestAnimationFrame(() => areaHeadingRef.current?.focus());
   };
   const nextArea = (): void => goToArea(areaIndex + 1);
+
+  /*
+   * 74 §3.6.34 — the names step navigates like the words step, because they are two screens of one test.
+   *
+   * The words step has had an in-place area picker and Previous/Next in the rail since §3.6.22; the names
+   * step still made you leave the register, land back on a grid and choose again. Same shape now: the
+   * register list is a stable order (the bank's, never the card sort — an index that moves when you re-sort
+   * is worse than no index), and the verbs live in the rail rather than in a card of their own.
+   */
+  const registers = store.names?.registers ?? [];
+  const openRegisterIndex = registers.findIndex((r) => r.id === store.openRegister);
+  const goToRegister = (next: number): void => {
+    const last = registers.length - 1;
+    const target = registers[next < 0 ? 0 : next > last ? last : next];
+    if (!target) return;
+    store.setOpenRegister(target.id);
+    const scroller = document.querySelector('[data-app-scroll]') ?? document.scrollingElement;
+    if (scroller) scroller.scrollTop = 0;
+    requestAnimationFrame(() => registerHeadingRef.current?.focus());
+  };
 
   // Withheld in the bridge until the 18+ ack — the hub is where that ack lives.
   if (store.loaded && !bank) {
@@ -746,32 +907,89 @@ export function AdaptiveTake(): JSX.Element {
    * all (no branch handles `done`) and the redirect was suppressed. A blank page with a back link.
    * Deriving it means the very first render is already the map.
    */
-  const phase = store.phase === 'done' && routeState?.retake ? 'map' : store.phase;
+  const phase =
+    store.phase === 'done' && routeState?.retake
+      ? 'map'
+      : // …and the same for the way IN: `start()` above is two awaits deep, so without deriving it the intro
+        // renders for the whole round trip — the very screen the report was about. Deliberately NOT applied to
+        // `done`, which is handled above and only under retake intent: `hasPriorWork` is true for the whole of
+        // every take, so mapping `done` on it would land someone on the map at the end of the take they just
+        // finished instead of on the profile they finished it for.
+        store.phase === 'intro' && hasPriorWork
+        ? 'map'
+        : store.phase;
 
   /**
-   * Every line already reacted to in this take, so returning to the step shows the set rather than an empty
-   * screen. A new round used to replace `store.lines` and the previous round's reactions were unreachable —
-   * recorded, and invisible. Reacting again replaces the turn in place.
+   * 74 §3.6.35 — EVERY line it has written for this take, in the order it wrote them.
+   *
+   * This used to be `store.lines` (the current round, renderer-only) unioned with the lines that had a
+   * reaction. So the set was half-remembered: a line you had answered came back, a line you had not was gone
+   * — on a reload, and on the next round, which replaced `store.lines` outright. Both halves are turns now.
    */
-  const reactedLines = (store.state?.draft?.turns ?? [])
-    .filter((turn) => turn.phase === 'lines' && typeof turn.answer === 'string')
+  const shownLines = (store.state?.draft?.turns ?? [])
+    .filter((turn) => turn.phase === 'lines' && !turn.deleted)
     .map((turn) => turn.item.text);
-  const shownLines = [...new Set([...store.lines, ...reactedLines])];
+  /** A line is answered once it has a reaction — a ban is a second, separate act on top of a `no`. */
+  const linesAnswered = (line: string): boolean => store.lineReactions[line] !== undefined;
+
+  /**
+   * 74 §3.6.35 — the boundaries this take can lift, so a ruled-out line can SAY it is ruled out.
+   *
+   * `banLine` has always written a real themed boundary, and nothing on screen ever read `lexicon.boundaries`
+   * — so the tap changed the vault and not one pixel, and the link that fired it stayed exactly as it was.
+   * Matched the way core keys them (trimmed, case-insensitive) so the row and the record agree.
+   */
+  const bannedTexts = new Set(
+    (store.state?.lexicon?.boundaries ?? []).map((boundary) => boundary.text.trim().toLowerCase()),
+  );
+  const isBanned = (line: string): boolean => bannedTexts.has(line.trim().toLowerCase());
 
   /**
    * Every question already put to them in this take, with what they said — the reviewable, editable set.
    *
-   * A SKIPPED question is not an answered one (74 §3.6.17). It used to be recorded as `''`, which is a
-   * string, so this counted it and rendered it under an "Answered" label with an empty box.
+   * 74 §3.6.35 — every question ASKED, not every question answered. This filtered on `isAnsweredTurn`, so a
+   * question passed over was unreachable: recorded (§3.6.17 made a skip a real state so it would stay
+   * visible) and then filtered off the one screen that could show it. It also put the rail and the screen at
+   * odds — the rail counts every probe turn and says "6 asked" while four cards rendered.
+   *
+   * A SKIPPED question is still not an ANSWERED one. `answer` is `undefined` for a question nobody has
+   * responded to, and `SKIPPED_ANSWER` for one passed over; both stay on screen and both stay answerable.
    */
   const askedQuestions = (store.state?.draft?.turns ?? [])
-    .filter((turn) => turn.phase === 'probe' && isAnsweredTurn(turn.answer))
+    .filter((turn) => turn.phase === 'probe' && !turn.deleted)
     .map((turn) => ({
       id: turn.item.id,
       question: turn.item.text,
-      answer: String(turn.answer),
+      answer: isAnsweredTurn(turn.answer) ? String(turn.answer) : '',
+      skipped: turn.answer === SKIPPED_ANSWER,
+      answered: isAnsweredTurn(turn.answer),
       options: turn.item.options ?? [],
     }));
+
+  /**
+   * 74 §3.6.35 — the shared "still unanswered" filter, on all three AI steps.
+   *
+   * The set persists now, so three rounds of "write me more" is thirty lines on one screen. The two marking
+   * steps already solved exactly this, with exactly this control (§3.6.34) — so the AI steps take the same
+   * one rather than inventing a third shape. A COUNT, never a fraction (§3.6.29).
+   */
+  const visibleLines =
+    aiShowOnly === 'all' ? shownLines : shownLines.filter((l) => !linesAnswered(l));
+  const visibleQuestions =
+    aiShowOnly === 'all' ? askedQuestions : askedQuestions.filter((q) => !q.answered && !q.skipped);
+  const visibleMoments =
+    aiShowOnly === 'all'
+      ? openMoments
+      : openMoments.filter((moment) => !moment.picked && !moment.skipped);
+  /**
+   * The one to answer NEXT — the first item in the set with no response yet.
+   *
+   * Only this card is marked. Outlining every unanswered card (the first cut of this) puts the emphasis on
+   * most of the screen, which is the same as putting it nowhere: the marker exists to replace the separate
+   * "live question" box the step used to render below its review list.
+   */
+  const nextQuestionId = visibleQuestions.find((q) => !q.answered && !q.skipped)?.id;
+  const nextMomentScene = visibleMoments.find((moment) => !moment.picked && !moment.skipped)?.scene;
 
   return (
     <div className={styles.page}>
@@ -981,6 +1199,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 spendUsd={takeSpend}
                 actions={
                   <>
@@ -1015,10 +1234,13 @@ export function AdaptiveTake(): JSX.Element {
           {/* 74 §3.6.8 — the pet-name phase runs first: what the two of you call each other. */}
           {phase === 'names' ? (
             <NamesPhase
+              headingRef={registerHeadingRef}
+              onGoToRegister={goToRegister}
               rail={
                 <TakeRail
                   statuses={statuses}
                   onGo={goTo}
+                  onMap={goToMap}
                   spendUsd={takeSpend}
                   saveState={<SaveState state={store.saveState} />}
                   extra={
@@ -1033,15 +1255,51 @@ export function AdaptiveTake(): JSX.Element {
                   }
                   actions={
                     <>
-                      <Button
-                        variant="primary"
-                        disabled={store.busy}
-                        onClick={() => void store.finishNames(testId)}
-                      >
-                        Done with names →
-                      </Button>
+                      {/* Inside a register the primary moves you ON rather than out, exactly as the words
+                          step's does — walking straight out from here would step past every register you
+                          have not opened (the §3.6.9 walk, finding 3). */}
+                      {store.openRegister && openRegisterIndex + 1 < registers.length ? (
+                        <Button
+                          variant="primary"
+                          disabled={store.busy}
+                          onClick={() => goToRegister(openRegisterIndex + 1)}
+                        >
+                          Next register →
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          disabled={store.busy}
+                          onClick={() => void store.finishNames(testId)}
+                        >
+                          Done with names →
+                        </Button>
+                      )}
+                      {store.openRegister && openRegisterIndex > 0 ? (
+                        <Button
+                          variant="secondary"
+                          className={adaptive.railBack}
+                          disabled={store.busy}
+                          onClick={() => goToRegister(openRegisterIndex - 1)}
+                        >
+                          {/* ONE flex child — `Button` is a flex container with a gap (§3.6.13). */}
+                          <span>
+                            ←<span className={adaptive.tail}> Previous register</span>
+                          </span>
+                        </Button>
+                      ) : null}
+                      {store.openRegister ? (
+                        <Button
+                          variant="ghost"
+                          disabled={store.busy}
+                          onClick={() => store.setOpenRegister(null)}
+                        >
+                          All registers
+                        </Button>
+                      ) : null}
                       <Button
                         variant="ghost"
+                        className={adaptive.railDone}
                         disabled={store.busy}
                         onClick={() => void store.synthesize(testId)}
                       >
@@ -1062,7 +1320,7 @@ export function AdaptiveTake(): JSX.Element {
           {phase === 'bank' && area && practice === 'needed' ? (
             <PracticeSheet
               entries={bank.entries}
-              onMark={(key, mark) => store.mark(key, mark)}
+              onMark={(key, side, mark) => store.mark(key, side, mark)}
               onDone={() => setPractice('done')}
               onLeave={() => store.setPhase('map')}
             />
@@ -1154,20 +1412,15 @@ export function AdaptiveTake(): JSX.Element {
                     })}
                   </Select>
                 </div>
-                {/* One slim bar, not 36 dashes. */}
-                <div
-                  className={adaptive.track}
-                  role="progressbar"
-                  aria-valuenow={areaIndex + 1}
-                  aria-valuemin={1}
-                  aria-valuemax={bank.families.length}
-                  aria-label={`Area ${areaIndex + 1} of ${bank.families.length}`}
-                >
-                  <i
-                    style={{ width: `${((areaIndex + 1) / bank.families.length) * 100}%` }}
-                    aria-hidden="true"
-                  />
-                </div>
+                {/*
+                 * 74 §3.6.34 — the bar is gone; "Area N of M" stays.
+                 *
+                 * It filled toward 100% as you moved through the areas, which is a meter filling toward a
+                 * full width — the thing §3.6.29's durable rule names — and it reached full on the last area
+                 * whether you had marked everything or nothing. §3.6.29 removed exactly this from the name
+                 * register cards and left it here, which is also why the two steps read differently. The
+                 * COUNT survives: the rule's line is the denominator paired with a meter, not the count.
+                 */}
                 {area.note ? (
                   <Text tone="secondary" className={adaptive.areaNote}>
                     {area.note}
@@ -1199,6 +1452,15 @@ export function AdaptiveTake(): JSX.Element {
 
               <div className={adaptive.deckBody}>
                 <div className={adaptive.rows}>
+                  {areaEntries.length > 0 ? (
+                    <MarkFilter
+                      value={showOnly}
+                      onChange={setShowOnly}
+                      total={areaEntries.length}
+                      shown={visibleAreaEntries.length}
+                      noun="here"
+                    />
+                  ) : null}
                   {areaEntries.length === 0 ? (
                     /* Every term here is aimed at a body or a role that is neither of theirs (common on a
                        same-sex configuration, where whole areas resolve to one side). */
@@ -1206,18 +1468,35 @@ export function AdaptiveTake(): JSX.Element {
                       Nothing in this area is aimed at either of you, so there&rsquo;s nothing to
                       mark here.
                     </Text>
+                  ) : visibleAreaEntries.length === 0 ? (
+                    <Text tone="secondary">
+                      Every line in this area is marked. Switch to <b>Everything</b> to change one.
+                    </Text>
                   ) : (
-                    areaEntries.map((entry) => {
+                    visibleAreaEntries.map((entry) => {
                       // Nothing is settled: a no is a preference, changeable in any sitting
                       // (74 §3.2, amended 2026-08-19). A row used to freeze once the take that set it
                       // closed, which stranded a mis-tap noticed the next day.
-                      const mark = store.marks[entry.key];
+                      const mark = store.marks[entry.key] ?? {};
+                      const shownSides = (['hear', 'say'] as const).filter((side) =>
+                        entry.sides.includes(side),
+                      );
+                      const answered = shownSides.some((side) => mark[side] !== undefined);
+                      /*
+                       * The row greys out only when EVERY side they were shown is explicitly a no.
+                       *
+                       * It first read `(mark.hear ?? 'never') === 'never'`, which counts an UNANSWERED side
+                       * as a refusal — so ruling out one direction greyed the whole row while the other was
+                       * still blank, or worse, loved. The two directions are separate answers (§3.6.26);
+                       * only the row where both are a no is a row with nothing in it.
+                       */
+                      const allNo = answered && shownSides.every((side) => mark[side] === 'never');
                       return (
                         <div
                           key={entry.key}
-                          className={`${adaptive.row} ${mark && mark !== 'never' ? adaptive.rowOn : ''} ${
-                            mark === 'never' ? adaptive.rowNo : ''
-                          }`}
+                          className={`${adaptive.row} ${adaptive.nameRow} ${
+                            answered && !allNo ? adaptive.rowOn : ''
+                          } ${allNo ? adaptive.rowNo : ''}`}
                         >
                           <div className={adaptive.line}>
                             {/*
@@ -1254,12 +1533,6 @@ export function AdaptiveTake(): JSX.Element {
                                     {entry.tier >= 4 ? 'more intense' : 'gentler'}
                                   </span>
                                 </span>
-                                {/* Only when the area MIXES the two — the band carries it otherwise. */}
-                                {areaSides === null ? (
-                                  <span className={adaptive.sideChip}>
-                                    {sideLabel(entry.sides)}
-                                  </span>
-                                ) : null}
                               </span>
                             </div>
                             {/* The line you react to is the hero of the row — with the word you're actually
@@ -1291,75 +1564,64 @@ export function AdaptiveTake(): JSX.Element {
                               )}
                             </div>
                           </div>
-                          <span className={adaptive.marks}>
-                            {(['love', 'okay'] as BankMark[]).map((option) => {
-                              const { label, Icon } = MARK_META[option];
-                              return (
-                                <button
-                                  key={option}
-                                  type="button"
-                                  className={`${adaptive.mark} ${adaptive[option]} ${
-                                    mark === option ? adaptive.markOn : ''
-                                  }`}
-                                  aria-pressed={mark === option}
-                                  aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${label}`}
-                                  onClick={() =>
-                                    store.mark(entry.key, mark === option ? null : option)
-                                  }
-                                >
-                                  <Icon size={18} aria-hidden="true" />
-                                </button>
-                              );
-                            })}
-                            {/* A hard no is set apart, so it can never be a mis-tap neighbour. */}
-                            <span className={adaptive.markGap} aria-hidden="true" />
-                            <button
-                              type="button"
-                              className={`${adaptive.mark} ${adaptive.never} ${
-                                mark === 'never' ? adaptive.markOn : ''
-                              }`}
-                              aria-pressed={mark === 'never'}
-                              aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${MARK_META.never.label}`}
-                              onClick={() =>
-                                store.mark(entry.key, mark === 'never' ? null : 'never')
-                              }
-                            >
-                              <Ban size={18} aria-hidden="true" />
-                            </button>
-                          </span>
                           {/*
-                           * 74 §3.6.13 — the hear/say question, asked HERE rather than as a step of its own.
+                           * 74 §3.6.26 — TWO marks, one per direction, both on the row.
                            *
-                           * It was a separate pass over everything already marked, and for anyone who marked
-                           * mostly pet names — which are asked both ways on their own rows — it was a screen
-                           * you landed on with nothing on it. Asked inline it costs one extra tap on the rows
-                           * where it actually applies: an entry offered only one way already knows its
-                           * direction, and an entry they ruled out is not rated at all.
+                           * The deck used to take one mark for the whole term and then ask the hear/say
+                           * question separately: first as its own step, then (§3.6.13) folded into the row as
+                           * a 0–4 pair that appeared only AFTER a `love`, showed nothing selected over a
+                           * value that was already set, and sat under a band still promising "the next step".
+                           * So the two directions came out equal for most terms, and the gap between them —
+                           * the goal list, the practice sheet, the "wants to say but freezes" material —
+                           * could only fill from the pet names, which had asked both ways all along.
+                           *
+                           * This is the names' own layout, reused: both pills are `flex: 1 1 auto`, so where
+                           * orientation offers only one direction the survivor stretches across the row on
+                           * its own — no gap, and nothing to explain.
                            */}
-                          {mark === 'love' && entry.sides.length >= 2 ? (
-                            <div className={adaptive.rowSplit}>
-                              <span className={adaptive.rowSplitLead}>How much…</span>
-                              {(['hear', 'say'] as const).map((direction) => (
-                                <span key={direction} className={adaptive.marks}>
-                                  <span className={adaptive.dirLabel}>
-                                    {direction === 'hear' ? 'to hear' : 'to say'}
+                          <div className={adaptive.nameMarksRow}>
+                            {(['hear', 'say'] as const)
+                              .filter((side) => entry.sides.includes(side))
+                              .map((side) => {
+                                const current = mark[side];
+                                const who = side === 'hear' ? 'Them → You' : 'You → Them';
+                                return (
+                                  <span
+                                    key={side}
+                                    className={side === 'hear' ? adaptive.colMe : adaptive.colThem}
+                                  >
+                                    <span className={adaptive.colWho}>
+                                      {who}
+                                      <small>
+                                        {side === 'hear' ? 'I like hearing it' : 'I like saying it'}
+                                      </small>
+                                    </span>
+                                    <span className={adaptive.marks}>
+                                      {DECK_MARKS.map(({ value, label, Icon }, i) => (
+                                        <span key={value} className={adaptive.markSlot}>
+                                          {/* The no is set apart, so it is never a mis-tap neighbour — a
+                                              preference you can change any time, not a door that locks. */}
+                                          {i === 2 ? (
+                                            <span className={adaptive.markGap} aria-hidden="true" />
+                                          ) : null}
+                                          <button
+                                            type="button"
+                                            className={`${adaptive.mark} ${adaptive[value]} ${
+                                              current === value ? adaptive.markOn : ''
+                                            }`}
+                                            aria-pressed={current === value}
+                                            aria-label={`${entry.text} — ${who} — ${label}`}
+                                            onClick={() => store.mark(entry.key, side, value)}
+                                          >
+                                            <Icon size={17} aria-hidden="true" />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </span>
                                   </span>
-                                  {[0, 1, 2, 3, 4].map((value) => (
-                                    <button
-                                      key={value}
-                                      type="button"
-                                      className={adaptive.markButton}
-                                      aria-pressed={store.splits[entry.key]?.[direction] === value}
-                                      aria-label={`${entry.text} — ${direction} ${value} of 4`}
-                                      onClick={() => store.setSplit(entry.key, direction, value)}
-                                    >
-                                      {value}
-                                    </button>
-                                  ))}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
+                                );
+                              })}
+                          </div>
                         </div>
                       );
                     })
@@ -1392,6 +1654,7 @@ export function AdaptiveTake(): JSX.Element {
                 <TakeRail
                   statuses={statuses}
                   onGo={goTo}
+                  onMap={goToMap}
                   spendUsd={takeSpend}
                   saveState={<SaveState state={store.saveState} />}
                   extra={
@@ -1514,52 +1777,123 @@ export function AdaptiveTake(): JSX.Element {
                     </div>
                   </Stack>
                 ) : null}
-                {shownLines.map((line) => (
-                  <div key={line} className={adaptive.lineRow}>
-                    <span className={adaptive.lineText}>
-                      &ldquo;{line}&rdquo;
-                      {/*
-                       * 74 §3.6.2 — the "not like that" escape, and the ONLY place a line becomes a boundary.
-                       *
-                       * A word is loved in one line and hated in another ("fuck your pussy" vs "beat that
-                       * pussy"), and this is the phase built to catch that. But a plain "no" here means "this
-                       * line doesn't land" — it must NOT silently mint a boundary, because a boundary is
-                       * permanent and lifts only by an explicit act (§3.2). So the soft reaction keeps steering
-                       * register, and turning it into a limit takes this second, deliberate tap.
-                       */}
-                      {store.lineReactions[line] === 'no' ? (
-                        <button
-                          type="button"
-                          className={adaptive.textLink}
-                          onClick={() => void store.banLine(line)}
-                          disabled={store.busy}
+                {shownLines.length > 0 ? (
+                  <MarkFilter
+                    value={aiShowOnly}
+                    onChange={setAiShowOnly}
+                    total={shownLines.length}
+                    shown={shownLines.filter((line) => !linesAnswered(line)).length}
+                    noun="lines"
+                    unansweredLabel="not answered"
+                  />
+                ) : null}
+                {shownLines.length > 0 && visibleLines.length === 0 ? (
+                  <Text tone="secondary">
+                    You&rsquo;ve reacted to every line here. Switch to <b>Everything</b> to change
+                    one.
+                  </Text>
+                ) : null}
+                {visibleLines.map((line) => {
+                  const reaction = store.lineReactions[line];
+                  const banned = isBanned(line);
+                  return (
+                    <div
+                      key={line}
+                      className={`${adaptive.lineRow} ${
+                        reaction === 'love' || reaction === 'meh' ? adaptive.rowOn : ''
+                      } ${reaction === 'no' && !banned ? adaptive.rowNo : ''} ${
+                        banned ? adaptive.rowBanned : ''
+                      }`}
+                    >
+                      <span className={adaptive.lineMain}>
+                        {/* The LINE is the hero of its row (74 §3.6.35). It used to be italic body text with
+                            the ban link jammed against the closing quote at nearly the same size, so the one
+                            escape hatch on the screen read as part of the sentence it belonged to. */}
+                        <span
+                          className={`${adaptive.lineText} ${banned ? adaptive.lineStruck : ''}`}
                         >
-                          Never anything like this again
-                        </button>
-                      ) : null}
-                    </span>
-                    <span className={adaptive.marks}>
-                      {(['love', 'meh', 'no'] as const).map((reaction) => (
-                        <button
-                          key={reaction}
-                          type="button"
-                          className={adaptive.markButton}
-                          aria-pressed={store.lineReactions[line] === reaction}
-                          aria-label={`${line} — ${reaction}`}
-                          onClick={() => void store.reactToLine(testId, line, reaction)}
-                        >
-                          {reaction === 'love' ? (
-                            <Flame size={16} aria-hidden="true" />
-                          ) : reaction === 'meh' ? (
-                            <Contrast size={16} aria-hidden="true" />
-                          ) : (
-                            <Ban size={16} aria-hidden="true" />
-                          )}
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                ))}
+                          &ldquo;{line}&rdquo;
+                        </span>
+                        {/*
+                         * 74 §3.6.2 — the "not like that" escape, and the ONLY place a line becomes a boundary.
+                         *
+                         * A word is loved in one line and hated in another ("fuck your pussy" vs "beat that
+                         * pussy"), and this is the phase built to catch that. But a plain "no" here means "this
+                         * line doesn't land" — it must NOT silently mint a boundary, because a boundary is a
+                         * deliberate act (§3.2). So the soft reaction keeps steering register, and turning it
+                         * into a limit takes this second, deliberate tap.
+                         *
+                         * 74 §3.6.35 — and it SAYS SO afterwards, and can be undone. It wrote a real boundary
+                         * and changed nothing on screen: same link, same words, still enabled, no confirmation
+                         * — and until `removeBoundary` there was nothing anywhere in the app that could lift
+                         * it, which is the un-gettable-rid-of preference §3.2 abolished.
+                         */}
+                        {banned ? (
+                          <span className={adaptive.banState}>
+                            <span className={`${adaptive.chip} ${adaptive.chipBan}`}>
+                              <Ban size={11} aria-hidden="true" /> Ruled out
+                            </span>
+                            <Text as="span" size="sm" tone="secondary">
+                              Nothing in SelfOS will say this, or anything close to it.
+                            </Text>
+                            <Button
+                              variant="ghost"
+                              className={adaptive.banUndo}
+                              disabled={store.busy}
+                              onClick={() => void store.unbanLine(line)}
+                            >
+                              Undo
+                            </Button>
+                          </span>
+                        ) : reaction === 'no' ? (
+                          <button
+                            type="button"
+                            className={adaptive.banAsk}
+                            onClick={() => void store.banLine(line)}
+                            disabled={store.busy}
+                          >
+                            <Ban size={13} aria-hidden="true" /> Never anything like this again
+                          </button>
+                        ) : null}
+                      </span>
+                      {/* 74 §3.6.37 — the way OFF the screen. The lines step deliberately has no "skip": its
+                          three marks already include "not this one" as a real answer, so the thing it lacked
+                          was a way to remove a line rather than a second way to pass over one. */}
+                      <DeleteItem
+                        what="line"
+                        answered={reaction !== undefined}
+                        busy={store.busy}
+                        onDelete={() => void store.deleteItem(testId, 'lines', line)}
+                      />
+                      {/* A ruled-out line keeps no marks: the row is settled until they undo it, and three
+                          live buttons under a "Ruled out" chip would be two answers to one question. */}
+                      {banned ? null : (
+                        <span className={adaptive.marks}>
+                          {LINE_MARKS.map(({ value, label, Icon }, i) => (
+                            <span key={value} className={adaptive.markSlot}>
+                              {/* The no set apart by the same divider as the marking steps, so it is never a
+                                  mis-tap neighbour. */}
+                              {i === 2 ? (
+                                <span className={adaptive.markGap} aria-hidden="true" />
+                              ) : null}
+                              <button
+                                type="button"
+                                className={`${adaptive.mark} ${adaptive[MARK_TONE[value]]} ${
+                                  reaction === value ? adaptive.markOn : ''
+                                }`}
+                                aria-pressed={reaction === value}
+                                aria-label={`${line} — ${label}`}
+                                onClick={() => void store.reactToLine(testId, line, value)}
+                              >
+                                <Icon size={17} aria-hidden="true" />
+                              </button>
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
                 {shownLines.length > 0 ? (
                   <div className={take.footer}>
                     <Button
@@ -1578,6 +1912,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />
@@ -1591,22 +1926,77 @@ export function AdaptiveTake(): JSX.Element {
                 <Heading level={2}>The questions it still has</Heading>
                 {current.state === 'now' && current.reason ? (
                   <NotEnoughYet reason={current.reason} onGo={() => goTo('bank')} />
-                ) : store.probeQuestion || askedQuestions.length > 0 ? (
+                ) : askedQuestions.length > 0 ? (
                   <>
                     <Text tone="secondary">
                       Short ones, about the words themselves. Tap an answer or say more — nothing
-                      you write here is shown to anyone. Everything you&rsquo;ve answered stays
-                      below and can be changed.
+                      you write here is shown to anyone. Every question it has asked stays here,
+                      including the ones you passed over, and any of them can be changed.
                     </Text>
                     {/*
-                     * The WHOLE set, with what you said, editable. It used to show one question and nothing
-                     * else: no sense of how many there were, no way back to one you had answered, and a
-                     * changed mind meant retaking. A pass writes several now, so the set is the screen.
+                     * 74 §3.6.35 — the WHOLE set: asked, answered, and passed over, in one shape.
+                     *
+                     * Two things were wrong with the list this replaces. It filtered to `isAnsweredTurn`, so a
+                     * question you skipped was recorded (§3.6.17 made a skip a real state precisely so it
+                     * would stay visible) and then hidden from the only screen that could show it — and the
+                     * rail, which counts every probe turn, said "6 asked" over four rendered cards. And the
+                     * question being answered right now was a DIFFERENT card below the list, so the step was a
+                     * review list plus a live box rather than one set.
                      */}
+                    <MarkFilter
+                      value={aiShowOnly}
+                      onChange={setAiShowOnly}
+                      total={askedQuestions.length}
+                      shown={askedQuestions.filter((q) => !q.answered && !q.skipped).length}
+                      noun="asked"
+                      unansweredLabel="not answered"
+                    />
+                    {visibleQuestions.length === 0 ? (
+                      <Text tone="secondary">
+                        You&rsquo;ve answered everything it has asked. Switch to <b>Everything</b>{' '}
+                        to change an answer.
+                      </Text>
+                    ) : null}
                     <Stack gap={3}>
-                      {askedQuestions.map((asked) => (
-                        <Card key={asked.id} className={adaptive.probeCard}>
-                          <Text className={adaptive.probeAsk}>{asked.question}</Text>
+                      {visibleQuestions.map((asked) => (
+                        <Card
+                          key={asked.id}
+                          className={`${adaptive.probeCard} ${
+                            asked.id === nextQuestionId ? adaptive.qCardOpen : ''
+                          }`}
+                        >
+                          <div className={adaptive.qHead}>
+                            <Text className={adaptive.probeAsk}>{asked.question}</Text>
+                            {/* State as a word AND an icon, never a tint alone (§9). */}
+                            <span
+                              className={`${adaptive.chip} ${
+                                asked.answered
+                                  ? adaptive.chipDone
+                                  : asked.skipped
+                                    ? adaptive.chipSkipped
+                                    : adaptive.chipOpen
+                              }`}
+                            >
+                              {asked.answered ? (
+                                <>
+                                  <Check size={11} aria-hidden="true" /> Answered
+                                </>
+                              ) : asked.skipped ? (
+                                <>
+                                  <Minus size={11} aria-hidden="true" /> Skipped
+                                </>
+                              ) : (
+                                'Not answered yet'
+                              )}
+                            </span>
+                          </div>
+                          {/* A skip stays REACHABLE (74 §3.6.35). It was recorded and then filtered off this
+                              screen, so passing over a question lost it for the rest of the take. */}
+                          {asked.skipped ? (
+                            <Text size="sm" tone="tertiary">
+                              You passed over this one — answer it any time.
+                            </Text>
+                          ) : null}
                           {asked.options.length > 0 ? (
                             <Stack gap={2}>
                               {asked.options.map((option) => (
@@ -1639,11 +2029,13 @@ export function AdaptiveTake(): JSX.Element {
                           <SayMore
                             value={editedAnswers[asked.id] ?? asked.answer}
                             startOpen={
-                              asked.options.length === 0 || !asked.options.includes(asked.answer)
+                              asked.answered &&
+                              (asked.options.length === 0 || !asked.options.includes(asked.answer))
                             }
                             busy={store.busy}
                             dirty={(editedAnswers[asked.id] ?? asked.answer) !== asked.answer}
                             label={asked.question}
+                            {...(asked.answered ? {} : { saveLabel: 'Answer →' })}
                             onChange={(next) =>
                               setEditedAnswers((prev) => ({ ...prev, [asked.id]: next }))
                             }
@@ -1657,70 +2049,54 @@ export function AdaptiveTake(): JSX.Element {
                               )
                             }
                           />
-                        </Card>
-                      ))}
-                      {store.probeQuestion ? (
-                        <Card className={adaptive.probeCard}>
-                          <Text className={adaptive.probeAsk}>{store.probeQuestion}</Text>
-                          {store.probeOptions.length > 0 ? (
-                            <Stack gap={2}>
-                              {store.probeOptions.map((option) => (
-                                <Button
-                                  key={option}
-                                  variant="secondary"
-                                  className={adaptive.optionButton}
-                                  disabled={store.busy}
-                                  onClick={() => void store.answerProbe(testId, option)}
-                                >
-                                  {option}
-                                </Button>
-                              ))}
-                            </Stack>
-                          ) : null}
-                          <SayMore
-                            value={store.probeAnswer}
-                            // With no options there is nothing to tap, so the box IS the answer.
-                            startOpen={store.probeOptions.length === 0}
-                            busy={store.busy}
-                            dirty={store.probeAnswer.trim() !== ''}
-                            label={store.probeQuestion}
-                            saveLabel="Answer →"
-                            onChange={(next) =>
-                              useAdaptiveTestStore.setState({ probeAnswer: next })
-                            }
-                            onSave={() => void store.answerProbe(testId)}
-                          />
+                          {/* Only a question with no response yet can be passed over — a skip is a way through
+                              an unanswered one, not a way to un-answer one you have already answered. */}
                           <div className={adaptive.askRow}>
-                            <Button variant="ghost" onClick={() => void store.skipProbe(testId)}>
-                              Skip this one
-                            </Button>
-                            {store.probeQueue.length > 0 ? (
-                              <Text size="sm" tone="tertiary">
-                                {store.probeQueue.length} more in this set
-                              </Text>
+                            {/* Only an unanswered question can be passed over — a skip is a way THROUGH one,
+                                not a way to un-answer one you have already answered. Deleting is available
+                                whatever state it is in, which is the difference between the two acts. */}
+                            {!asked.answered && !asked.skipped ? (
+                              <Button
+                                variant="ghost"
+                                disabled={store.busy}
+                                onClick={() =>
+                                  void store.skipProbeQuestion(
+                                    testId,
+                                    asked.id,
+                                    asked.question,
+                                    asked.options,
+                                  )
+                                }
+                              >
+                                Skip this one
+                              </Button>
                             ) : null}
+                            <DeleteItem
+                              what="question"
+                              answered={asked.answered}
+                              busy={store.busy}
+                              onDelete={() => void store.deleteItem(testId, 'probe', asked.id)}
+                            />
                           </div>
                         </Card>
-                      ) : (
-                        <div className={adaptive.askRow}>
-                          <Button
-                            variant="secondary"
-                            disabled={store.busy}
-                            onClick={() => void store.nextProbe(testId)}
-                          >
-                            Ask me more
-                          </Button>
-                          {/* Honest about what a further set IS. Once the derived contradictions are used
-                              up it keeps going from open ground, so a tap is a choice rather than an
-                              endless loop that never says it has covered the specifics. */}
-                          <Text size="sm" tone="tertiary">
-                            {askedQuestions.length > 0
-                              ? 'a little of your AI allowance · it moves on to open ground once the contradictions are used up'
-                              : 'a little of your AI allowance'}
-                          </Text>
-                        </div>
-                      )}
+                      ))}
                     </Stack>
+                    <div className={adaptive.askRow}>
+                      <Button
+                        variant="secondary"
+                        disabled={store.busy}
+                        onClick={() => void store.nextProbe(testId)}
+                      >
+                        Ask me more
+                      </Button>
+                      {/* Honest about what a further set IS. Once the derived contradictions are used up it
+                          keeps going from open ground, so a tap is a choice rather than an endless loop that
+                          never says it has covered the specifics. */}
+                      <Text size="sm" tone="tertiary">
+                        a little of your AI allowance · it moves on to open ground once the
+                        contradictions are used up · the ones above stay
+                      </Text>
+                    </div>
                   </>
                 ) : store.probeMessage ? (
                   /* It FAILED. This used to be folded into `probeDone` below, so a failed call was reported
@@ -1796,6 +2172,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />
@@ -1839,8 +2216,16 @@ export function AdaptiveTake(): JSX.Element {
                           >
                             <span className={adaptive.momentTop}>
                               <b>{context.label}</b>
+                              {/* A COUNT, never a fraction (74 §3.6.29/§3.6.35). "2 of 5" paired an answer
+                                  count with a total that GROWS every time they ask for more moments — the
+                                  denominator moves under them, which is exactly why the name register cards
+                                  lost theirs. */}
                               <span className={adaptive.momentState}>
-                                {written === 0 ? 'not started' : `${answered} of ${written}`}
+                                {written === 0
+                                  ? 'not started'
+                                  : answered === 0
+                                    ? `${written} written`
+                                    : `${answered} answered`}
                               </span>
                             </span>
                             <span className={adaptive.momentBlurb}>{context.blurb}</span>
@@ -1855,11 +2240,67 @@ export function AdaptiveTake(): JSX.Element {
 
                     {openMoment ? (
                       <>
+                        {/* 74 §3.6.35 — the same filter the other two AI steps and the two marking steps
+                            use. A category accumulates as they ask for more, and finding the moment they
+                            have not answered is the same problem the marking steps solved. */}
                         {openMoments.length > 0 ? (
+                          <MarkFilter
+                            value={aiShowOnly}
+                            onChange={setAiShowOnly}
+                            total={openMoments.length}
+                            shown={openMoments.filter((m) => !m.picked && !m.skipped).length}
+                            noun={`${momentLabel(openMoment)} moments`}
+                            unansweredLabel="not answered"
+                          />
+                        ) : null}
+                        {openMoments.length > 0 && visibleMoments.length === 0 ? (
+                          <Text tone="secondary">
+                            You&rsquo;ve answered every moment here. Switch to <b>Everything</b> to
+                            change one.
+                          </Text>
+                        ) : null}
+                        {visibleMoments.length > 0 ? (
                           <Stack gap={3}>
-                            {openMoments.map((moment) => (
-                              <Card key={moment.scene} className={adaptive.probeCard}>
-                                <Text className={adaptive.probeAsk}>{moment.scene}</Text>
+                            {visibleMoments.map((moment) => (
+                              <Card
+                                key={moment.scene}
+                                className={`${adaptive.probeCard} ${
+                                  moment.scene === nextMomentScene ? adaptive.qCardOpen : ''
+                                }`}
+                              >
+                                <div className={adaptive.qHead}>
+                                  <Text className={adaptive.probeAsk}>{moment.scene}</Text>
+                                  {/* The same chip the questions carry — a moment and a question are the
+                                      same object: something asked, with tappable answers (74 §3.6.35). */}
+                                  <span
+                                    className={`${adaptive.chip} ${
+                                      moment.picked
+                                        ? adaptive.chipDone
+                                        : moment.skipped
+                                          ? adaptive.chipSkipped
+                                          : adaptive.chipOpen
+                                    }`}
+                                  >
+                                    {moment.picked ? (
+                                      <>
+                                        <Check size={11} aria-hidden="true" /> Answered
+                                      </>
+                                    ) : moment.skipped ? (
+                                      <>
+                                        <Minus size={11} aria-hidden="true" /> Skipped
+                                      </>
+                                    ) : (
+                                      'Not answered yet'
+                                    )}
+                                  </span>
+                                </div>
+                                {/* A skipped moment stays ANSWERABLE, exactly as a skipped question does —
+                                    passing over it is not the same as being done with it (74 §3.6.17). */}
+                                {moment.skipped ? (
+                                  <Text size="sm" tone="tertiary">
+                                    You passed over this one — answer it any time.
+                                  </Text>
+                                ) : null}
                                 {moment.options.length > 0 ? (
                                   <Stack gap={2}>
                                     {moment.options.map((option) => (
@@ -1891,6 +2332,32 @@ export function AdaptiveTake(): JSX.Element {
                                     Answered — tap another to change it.
                                   </Text>
                                 ) : null}
+                                {/* 74 §3.6.37 — owner-reported: a moment could only be answered. It had
+                                    neither of the two ways out the questions step has, so a scene that did
+                                    nothing for you sat there with the options as the only controls. */}
+                                <div className={adaptive.askRow}>
+                                  {!moment.picked && !moment.skipped ? (
+                                    <Button
+                                      variant="ghost"
+                                      disabled={store.busy}
+                                      onClick={() => void store.skipMoment(testId, moment)}
+                                    >
+                                      Skip this one
+                                    </Button>
+                                  ) : null}
+                                  <DeleteItem
+                                    what="moment"
+                                    answered={Boolean(moment.picked)}
+                                    busy={store.busy}
+                                    onDelete={() =>
+                                      void store.deleteItem(
+                                        testId,
+                                        'scenario',
+                                        scenarioTurnId(moment.context, moment.scene),
+                                      )
+                                    }
+                                  />
+                                </div>
                               </Card>
                             ))}
                           </Stack>
@@ -1923,6 +2390,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />
@@ -2025,6 +2493,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />

@@ -726,12 +726,12 @@ export const IpcChannels = {
   testsAdaptiveState: 'tests:adaptiveState',
   testsAdaptiveStart: 'tests:adaptiveStart',
   testsAdaptiveBank: 'tests:adaptiveBank',
-  testsAdaptiveSplit: 'tests:adaptiveSplit',
   testsAdaptiveSetArea: 'tests:adaptiveSetArea',
   testsAdaptiveLines: 'tests:adaptiveLines',
   testsAdaptiveProbe: 'tests:adaptiveProbe',
   testsAdaptiveScenario: 'tests:adaptiveScenario',
   testsAdaptiveTurn: 'tests:adaptiveTurn',
+  testsAdaptiveDeleteTurn: 'tests:adaptiveDeleteTurn',
   testsAdaptiveSynthesize: 'tests:adaptiveSynthesize',
   testsAdaptiveAbandon: 'tests:adaptiveAbandon',
   testsLexicon: 'tests:lexicon',
@@ -757,6 +757,25 @@ export const IpcChannels = {
   updatesCheck: 'updates:check',
   updatesGetState: 'updates:getState',
 } as const;
+
+/**
+ * 74 §3.6.26 — one payload for both marking phases (the deck and the pet names).
+ *
+ * They send the same thing: per key, a mark for each direction the person was offered. The deck used to send
+ * one mark per entry plus a separate 0–4 "split" call, which is what made its hear/say answer unreachable in
+ * practice; both are gone. A plain interface, not a schema — this file is imported by the SANDBOXED preload,
+ * so it must stay free of runtime imports.
+ */
+export interface AdaptiveMarkPass {
+  testId: string;
+  resultId: string;
+  /** Two marks per entry; either side may be absent, which means that direction is unanswered. */
+  marks: Record<string, { hear?: 'love' | 'okay' | 'never'; say?: 'love' | 'okay' | 'never' }>;
+  /** Directions taken back, per key. An absent key undoes nothing. */
+  cleared?: Record<string, ('hear' | 'say')[]>;
+  /** A debounced autosave persists the marks but does not close the pass (no turn is stamped). */
+  autosave?: boolean;
+}
 
 export type SettingScope = 'vault' | 'device';
 
@@ -2402,41 +2421,20 @@ export interface SelfosBridge {
   /** The bank an adaptive instrument works through: families + entries. Display data, no scoring spec. */
   testsBank(input: { testId: string }): Promise<AdaptiveBankView | null>;
   testsNames(input: { testId: string }): Promise<AdaptiveNamesView | null>;
-  testsAdaptiveNames(input: {
-    testId: string;
-    resultId: string;
-    /** Two marks per name; either side may be absent. */
-    marks: Record<string, { hear?: 'love' | 'okay' | 'never'; say?: 'love' | 'okay' | 'never' }>;
-    /** Directions taken back, per key. */
-    cleared?: Record<string, ('hear' | 'say')[]>;
-    autosave?: boolean;
-  }): Promise<AdaptiveStateView | null>;
+  testsAdaptiveNames(input: AdaptiveMarkPass): Promise<AdaptiveStateView | null>;
   /** Everything the take screen needs: the instrument, an in-flight draft, the person's lexicon so far. */
   testsAdaptiveState(input: { testId: string }): Promise<AdaptiveStateView | null>;
   /** Start (or resume) a take. Free — no AI, no budget. */
   testsAdaptiveStart(input: { testId: string }): Promise<AdaptiveStateView | null>;
   /**
-   * Pass 1 — mark what lands across the whole bank. Free.
+   * The deck ("The words") — mark each term per direction. Free.
    *
    * Called on a debounce as they tap (`autosave: true`, marks + `cleared` as a delta) and once more when they
    * move on (`autosave` absent), which is what closes the pass. `cleared` un-does a mark they took back.
    */
-  testsAdaptiveBank(input: {
-    testId: string;
-    resultId: string;
-    marks: Record<string, 'love' | 'never' | 'okay'>;
-    cleared?: string[];
-    autosave?: boolean;
-  }): Promise<AdaptiveStateView | null>;
+  testsAdaptiveBank(input: AdaptiveMarkPass): Promise<AdaptiveStateView | null>;
   /** Remember where they are in the deck, so resuming is honest (74 §3.6.4). Device-local, free. */
   testsAdaptiveSetArea(input: { testId: string; area: number }): Promise<void>;
-  /** Pass 2 — the hear/say split on what pass 1 marked. Free; autosaved the same way. */
-  testsAdaptiveSplit(input: {
-    testId: string;
-    resultId: string;
-    splits: Record<string, { hear?: number; say?: number }>;
-    autosave?: boolean;
-  }): Promise<AdaptiveStateView | null>;
   /** Generate a round of lines to react to. Metered `test.adaptive.lines`; degrades rather than failing. */
   testsAdaptiveLines(input: {
     testId: string;
@@ -2464,6 +2462,16 @@ export interface SelfosBridge {
      */
     options?: string[];
     answer: string | number | string[] | Record<string, number>;
+  }): Promise<void>;
+  /**
+   * 74 §3.6.37 — delete one generated item. A TOMBSTONE, not a removal: the row stays so the phase can never
+   * re-offer it, and the answer goes with the deletion, so it stops feeding the profile immediately.
+   */
+  testsAdaptiveDeleteTurn(input: {
+    testId: string;
+    resultId: string;
+    phase: string;
+    itemId: string;
   }): Promise<void>;
   /**
    * Synthesize + complete the take. Metered `test.adaptive.synthesize`.

@@ -311,8 +311,21 @@ export async function generateSuggestion(
   const intimacy = input.family === 'ai-suggestion-intimacy';
   const overlap = (input.intimacyOverlap ?? []).filter((a) => !input.avoid.subjects.has(a.key));
   if (intimacy && overlap.length === 0) return null; // shared signal exhausted / all avoided
-  // Read the recipient's own boundary list before generating anything explicit for them (74 §8.4).
-  const lexicon = intimacy ? await readLexicon(deps.fs, deps.key, deps.personId) : null;
+  /*
+   * The recipient's own boundary list, read UNCONDITIONALLY (74 §5.8a).
+   *
+   * It used to be read only for the intimacy family, which disabled three things at once for every other
+   * suggestion: the negative constraint in the prompt below, and BOTH `violatesBoundary` checks further down
+   * (each guarded on `lexicon`, so a null one silently skipped them). The comment on those checks says
+   * "nothing that touches a boundary is emailed, whatever the model returned" — true only for one family.
+   *
+   * That is the same shape §3.6.29 removed from `chatService`, where suppression sat inside `if (adultAcked)`:
+   * a hard no is not a sexual-topic preference, and the list contains ordinary words (`baby`, `beautiful`,
+   * `love`) that a warm non-intimacy coaching email can very plausibly reach for. Suppression can only ever
+   * PREVENT, so no family makes withholding it correct — and this is the one surface whose output reaches a
+   * person with nobody reviewing it first.
+   */
+  const lexicon = await readLexicon(deps.fs, deps.key, deps.personId);
 
   const suggestionType: EmailSuggestionType = intimacy ? 'intimacy' : pickType(input.signals);
   const subjectKey = intimacy
@@ -332,7 +345,7 @@ export async function generateSuggestion(
     // steer). This is the ONLY surface where explicit generated text leaves the device with nobody reviewing
     // it first, so it is the last place that should be generating in the explicit register without knowing
     // what someone has ruled out — a person who marked a word `never` could be emailed it.
-    intimacy && lexicon ? suppressionLine(lexicon) : '',
+    suppressionLine(lexicon),
     'You write ONE short, warm coaching suggestion to email a person, in their own SelfOS space. Return ' +
       'ONLY a JSON object {"headline": string, "body": string, "options": [{"label": string, "stance": ' +
       '"yes"|"maybe"|"no"|"other"}]}. The headline is a short subject line (≤ 8 words). The body is 1–3 ' +
@@ -418,8 +431,7 @@ export async function generateSuggestion(
   if (!headline || !body) return null; // a bad/empty parse → no email (scheduled family, no retry)
   // Belt and braces on top of the prompt line: nothing that touches a boundary is emailed, whatever the
   // model returned. Refusing to send beats sending the one thing they ruled out.
-  if (lexicon && (violatesBoundary(lexicon, headline) || violatesBoundary(lexicon, body)))
-    return null;
+  if (violatesBoundary(lexicon, headline) || violatesBoundary(lexicon, body)) return null;
   // Run the SAME shape rules as questionnaire generation (08 §32.8) — trim, drop blanks, reject
   // case-insensitive duplicates, require at least two. `normalizeOptions` is the single shared validator, so
   // the email surface can no longer drift from the in-app one.
@@ -453,7 +465,7 @@ export async function generateSuggestion(
   // The labels are model-written prose that both reaches the person AND is quoted into their coaching
   // context, so they carry the same boundary guarantee as the headline and body (74 §8.4). A hard-no term
   // in a button is exactly as unsendable as one in the sentence above it.
-  if (lexicon && labels.some((l) => violatesBoundary(lexicon, l))) return null;
+  if (labels.some((l) => violatesBoundary(lexicon, l))) return null;
   const stanceOf = new Map(answers.map((a) => [a.label.trim(), a.stance]));
   const options: SuggestionAnswer[] = labels.map((label) => ({
     label,

@@ -5,9 +5,12 @@ import {
   extractJsonArray,
   salvageLooseStringField,
   extractJsonObject,
+  salvageJsonObjectArrayField,
+  salvageJsonStringArrayField,
   tolerantArray,
 } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
+import { SKIPPED_ANSWER } from '../../schemas';
 import type {
   AdaptiveProfile,
   AdaptiveReading,
@@ -16,7 +19,7 @@ import type {
   LexiconEntry,
 } from '../../schemas';
 import { runClaude, type AiDeps } from '../../questionnaires/aiCall';
-import { bothSidesAnswered, suppressedTexts, violatesBoundary } from './lexicon';
+import { hasSayGap, isNameFamily, suppressedTexts, violatesBoundary } from './lexicon';
 
 /**
  * 74-adaptive-tests §5.1/§5.3 — the **adaptive half**: the phases that chase what the bank left ambiguous,
@@ -64,6 +67,38 @@ between adults who both know that is what it is — never minors, never real non
 illegal. If something they wrote suggests real harm, coercion or an assault rather than a scene, do not treat \
 it as erotic material: stop, and say gently that it belongs with a person, not a test.`;
 
+/**
+ * 74 §3.6.35 — WHO THESE TWO ARE, in every generating prompt. Owner-directed.
+ *
+ * Identity and address were asked in the take's first two taps and then read by exactly one thing:
+ * `orientation.ts`, to decide which half of the bank a person is shown. No prompt has ever carried them — so
+ * the lines, probe and scenario phases each wrote for an unnamed pair and inferred the rest from whichever
+ * words happened to get marked. That is survivable for a term the person marked themselves and wrong the
+ * moment a phase invents anything: a line "pushing slightly past" what landed has nothing telling it which
+ * bodies are in the room, and a question phrased around a term has nothing telling it whose mouth it is in.
+ *
+ * Identity is the BODY, address is what they like being CALLED, and the two are deliberately separate (a man
+ * can want "good girl", §3.6.3) — so they are stated as two different facts and never collapsed. `either`, and
+ * an absent answer, are stated as themselves rather than guessed at: fail open, exactly as orientation does.
+ */
+export function whoBlock(lexicon: EroticLexicon): string {
+  const { identity, address } = lexicon;
+  if (!identity && !address) return '';
+  const body = (value: 'man' | 'woman' | 'either' | undefined): string =>
+    value === 'man' ? 'a man' : value === 'woman' ? 'a woman' : 'not stated — do not assume one';
+  const called = (value: 'girl' | 'man' | 'either' | undefined): string =>
+    value === 'girl'
+      ? 'likes being addressed as a girl'
+      : value === 'man'
+        ? 'likes being addressed as a man'
+        : 'has no preference either way about how they are addressed';
+  return `WHO THESE TWO ARE — write for these two, never a generic pair:
+- The person taking this: ${body(identity?.self)}, and ${called(address?.self)}.
+- The person they are with: ${body(identity?.partner)}, and ${called(address?.partner)}.
+Never give either of them a body they do not have, and never swap who is saying a line and who is hearing it. \
+How someone likes to be ADDRESSED is not their body — take each from the line it is on.`;
+}
+
 /** Their boundaries, as a hard negative constraint on anything generated. Belt; `violatesBoundary` is braces. */
 function boundaryBlock(lexicon: EroticLexicon): string {
   const banned = suppressedTexts(lexicon);
@@ -82,10 +117,20 @@ function boundaryBlock(lexicon: EroticLexicon): string {
  * Every generating phase takes this, so the take compounds instead of restarting.
  */
 export function answersDigest(
-  turns: readonly { phase: string; item: { text: string }; answer: unknown }[],
+  turns: readonly { phase: string; item: { text: string }; answer?: unknown }[],
 ): string {
   const lines = turns
-    .filter((turn) => turn.answer !== undefined && turn.answer !== null && turn.answer !== '')
+    .filter(
+      (turn) =>
+        turn.answer !== undefined &&
+        turn.answer !== null &&
+        turn.answer !== '' &&
+        // 74 §3.6.35 — a SKIP is not something they told us. It is stamped as a real marker rather than `''`
+        // (§3.6.17) so the question stays reachable, and that marker was reaching the model as though the
+        // person had answered "skipped". An OFFER — a generated item they have not responded to at all — has
+        // no answer and falls out on the `undefined` check above.
+        turn.answer !== SKIPPED_ANSWER,
+    )
     .slice(-ANSWER_CONTEXT_CAP)
     .map((turn) => {
       const answer = typeof turn.answer === 'string' ? turn.answer : JSON.stringify(turn.answer);
@@ -107,16 +152,30 @@ export function lexiconDigest(lexicon: EroticLexicon): string {
           .slice(0, CONTEXT_CAP)
           .map((e) => e.text)
           .join(' · ')}`;
-  const loved = lexicon.entries.filter(
-    (e) => e.state === undefined && Math.max(e.hear, e.say) >= 3,
+  /*
+   * 74 §3.6.29 — split by DIRECTION, because a flat list destroys the one thing the take exists to find.
+   *
+   * This used to be `Math.max(hear, say) >= 3` in a single line labelled "they marked these as landing", so
+   * "I want to be called this" and "I want to call them this" arrived indistinguishable — and for a name they
+   * are opposite answers (§3.6.8: "good girl" is wrong as something he is called and exactly right as
+   * something he calls her). The synthesis prompt then asks for "the role they take, what they want to BE to
+   * the other person" and for the hear/say gap, neither of which is answerable from the flattened list. The
+   * coach's own block (`buildOwnLexiconBlock`) has always split them; this is the same split, one file over.
+   */
+  const lovedToHear = lexicon.entries.filter((e) => e.hear >= 3);
+  const lovedToSay = lexicon.entries.filter((e) => e.say >= 3);
+  // The middle mark is a MILD YES (§3.6.2) — usable, never a favourite. Left out entirely, every one of those
+  // taps was write-only for the synthesis, which is the defect §3.6.2 fixed for the coach and missed here.
+  const okay = lexicon.entries.filter(
+    (e) => (e.hearState === 'okay' || e.sayState === 'okay') && e.hear < 3 && e.say < 3,
   );
   // Re-sourced from the GAP, not the middle mark: `okay` is a mild yes now, so the old `notYet` filter would
   // be permanently empty and this context line would silently stop existing (74 §3.6.2).
-  const stuck = lexicon.entries.filter(
-    (e) => e.state === undefined && bothSidesAnswered(e) && e.hear >= 3 && e.say <= 1,
-  );
+  const stuck = lexicon.entries.filter(hasSayGap);
   return [
-    line('They marked these as landing', loved),
+    line('They want to HEAR these — said to them', lovedToHear),
+    line('They want to SAY these — in their own mouth', lovedToSay),
+    line('Fine with, not favourites — usable, never lead with them', okay),
     line('They love hearing these but rate themselves low on saying them', stuck),
     lexicon.themes.length > 0 ? `In their words: ${lexicon.themes.join(' · ')}` : '',
   ]
@@ -137,6 +196,15 @@ export interface Ambiguity {
    * produce nothing, roughly every other attempt, and it read as the model being broken.
    */
   terms: string[];
+  /**
+   * 74 §3.6.36 — how each of those words was actually marked, keyed by the word.
+   *
+   * The quote list was bare text, so the model was handed two terms with no idea which was loved and which
+   * was lukewarm, or — the part that produced a nonsense question — which DIRECTION either was marked in.
+   * "my big cock" (loved to be CALLED) beside "my beautiful pussy" (lukewarm about SAYING) are not two
+   * points on one scale; for a mixed-anatomy couple they are not even about the same person's body.
+   */
+  termNote?: Record<string, string>;
 }
 
 /**
@@ -144,7 +212,18 @@ export interface Ambiguity {
  * ambiguities remain, it probes; when they are gone, it stops. Derived from the DATA, never from the model, so
  * the loop terminates on facts rather than on a model's opinion of its own certainty.
  */
-export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
+export function openAmbiguities(
+  lexicon: EroticLexicon,
+  /**
+   * 74 §3.6.36 — what each family is CALLED, so the split can name the register it is asking about.
+   *
+   * The question is literally "is it that word specifically, or the register behind it?" and it never said
+   * what the register was — the model had two words and had to infer the category they came from. Optional
+   * and keyed by family id: the lexicon carries the id, the bank carries the label, and this function stays
+   * pure over the lexicon (its whole point is that the loop terminates on data, not on a model's opinion).
+   */
+  familyLabels: Readonly<Record<string, string>> = {},
+): Ambiguity[] {
   const out: Ambiguity[] = [];
   const byFamily = new Map<string, LexiconEntry[]>();
   for (const entry of lexicon.entries) {
@@ -165,17 +244,63 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
    *    every time, for anyone who had ruled anything out. A hard no is settled. There is nothing to probe.
    */
   for (const [family, entries] of byFamily) {
-    const loved = entries.filter((e) => e.state === undefined && Math.max(e.hear, e.say) >= 3);
-    const lukewarm = entries.filter(
-      (e) =>
-        e.state === 'okay' ||
-        (e.state === undefined && Math.max(e.hear, e.say) > 0 && Math.max(e.hear, e.say) < 3),
-    );
-    if (loved.length > 0 && lukewarm.length > 0) {
+    /*
+     * 74 §3.6.36 — a register split is a question about ONE DIRECTION, so it is drawn within one.
+     *
+     * OWNER-REPORTED: `"my big cock" hit, "my beautiful pussy" only half-did. What's the split?` — which is
+     * the model faithfully shortening the premise it was handed. Both lists here were direction-blind
+     * (`Math.max(hear, say) >= 3` against `hearState === 'okay' || sayState === 'okay'`), so the contrast
+     * could pair a mark made about being CALLED something with a mark made about SAYING something else.
+     * That is not a register split; it is two different answers to two different questions.
+     *
+     * For a mixed-anatomy couple it is worse than incoherent, and that is the reported case: orientation
+     * shows a penis name only on the side its owner can HEAR and a vulva name only on the side he can SAY
+     * (§3.6.23), so the pair is about two different people's bodies. Comparing within one direction fixes
+     * both at once, because orientation has already separated the bodies onto opposite sides.
+     *
+     * A direction the person was never SHOWN is not an answer (§3.6.6) — `directionAnswered` is what
+     * distinguishes "they said okay" from "we never asked", and reading a blank side as a mark is the
+     * conflation §3.6.11 exists to prevent.
+     */
+    for (const side of ['hear', 'say'] as const) {
+      const stateOf = (entry: LexiconEntry): 'love' | 'okay' | 'never' | undefined =>
+        side === 'hear' ? entry.hearState : entry.sayState;
+      const pick = entries.find((entry) => stateOf(entry) === 'love');
+      const contrast = pick
+        ? entries.find((entry) => entry.key !== pick.key && stateOf(entry) === 'okay')
+        : undefined;
+      if (!pick || !contrast) continue;
+      // Said in the person's own terms, and the direction is IN the sentence — the model reads this as the
+      // thing to resolve, so a premise that does not name the direction cannot produce a question that does.
+      /*
+       * 74 §3.6.39 — and in the terms of the RIGHT register, because "being called" is only true of a name.
+       *
+       * This was `side === 'hear' ? 'being called' : 'saying'` for all 42 families, so a hear-split drawn from
+       * any of the 33 LINE families stated something the person never marked: "they love being called 'suck
+       * me'", "'trembling'", "'touch me there'". You are not called those — you hear them. Measured on the
+       * owner's own take, live: 4 of 11 derived premises said it, and every one of his hear-splits did.
+       *
+       * The right wording was already six lines below in `frozen` ("They love hearing …") and the right
+       * predicate already in `steer.ts`, whose docstring says why it matters — a name is a vocative. This is
+       * §3.6.36 one level down: that fixed WHICH DIRECTION a mark was made in, and left what that direction
+       * MEANS for the family it came from.
+       */
+      const loves =
+        side === 'hear' ? (isNameFamily(family) ? 'being called' : 'hearing') : 'saying';
+      // Named where the bank told us what it is called; without it the sentence asks about "the register"
+      // and leaves the model to guess which one from two words.
+      const register = familyLabels[family];
+      const behind = register
+        ? `the register behind it (${register.replace(/^Names — /, '')})`
+        : 'the register behind it';
       out.push({
-        id: `split:${family}`,
-        question: `They loved "${loved[0]!.text}" but were only lukewarm on "${lukewarm[0]!.text}" — is it that word specifically, or the register behind it?`,
-        terms: [loved[0]!.text, lukewarm[0]!.text],
+        id: `split:${family}:${side}`,
+        question: `They love ${loves} "${pick.text}" but were only lukewarm about ${loves} "${contrast.text}" — is it that word specifically, or ${behind}?`,
+        terms: [pick.text, contrast.text],
+        termNote: {
+          [pick.text]: `they love ${loves} this`,
+          [contrast.text]: `only lukewarm about ${loves} this`,
+        },
       });
     }
   }
@@ -184,31 +309,34 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   // BOTH sides must have been asked (74 §3.6.6). Without the guard this reads a side the deck never offered
   // as a refusal — and once seeding stopped filling the unshown side, it fired for essentially every oriented
   // person, putting a FALSE statement in front of them ("rated it 0 to say") whose answer then feeds synthesis.
-  const frozen = lexicon.entries.filter(
-    (e) => e.state !== 'never' && bothSidesAnswered(e) && e.hear >= 3 && e.say === 0,
-  );
+  const frozen = lexicon.entries.filter(hasSayGap);
   if (frozen.length > 0) {
     out.push({
       id: 'frozen',
-      question: `They love hearing "${frozen[0]!.text}" but rated it 0 to say — is that "he can, I can't", or do they want to be able to and freeze?`,
+      // No longer "rated it 0 to say": there is no 0–4 scale to quote (74 §3.6.26), and a term they ruled
+      // out saying is a boundary the probe must never ask them to justify (§3.6.15) — so this fires on the
+      // softer gap, and says what they actually marked.
+      question: `They love hearing "${frozen[0]!.text}" but only marked saying it "okay" — is that "he can, I can't", or do they want to be able to and freeze?`,
       terms: [frozen[0]!.text],
     });
   }
 
-  // 3) Loves to hear it, can't say it — the most coachable signal in the take. Sourced from the gap since
-  // the middle mark stopped meaning "cringe" (74 §3.6.2); an empty probe pack is invisible, so a filter that
-  // can never match again would have removed this silently.
-  const cringe = lexicon.entries.filter(
-    (e) => e.state === undefined && bothSidesAnswered(e) && e.hear >= 3 && e.say <= 1,
-  );
-  if (cringe.length > 0) {
-    out.push({
-      id: 'cringe',
-      question: `They love hearing "${cringe[0]!.text}" but rate themselves near zero on saying it — what stops them?`,
-      terms: [cringe[0]!.text],
-    });
-  }
-
+  /*
+   * 74 §3.6.34 — there used to be a third ambiguity here, `cringe`, and it was TWO defects in one.
+   *
+   * It was `lexicon.entries.filter(hasSayGap)` — byte-identical to `frozen` above, taking the same `[0]` —
+   * so it was not a second signal at all. Both fired together, on the same entry, with the same term; the
+   * probe consumes one ambiguity per pass and keys `asked` on the id, so the take spent a SECOND billed
+   * round re-asking about the identical word, and `ambiguitiesLeft` reported one open gap as two.
+   *
+   * Its question was also false. It said they "rate themselves near zero on saying it" while `hasSayGap`
+   * requires `sayState === 'okay'` — the MIDDLE mark, an explicit mild yes (rating 2, not 0). `frozen`'s own
+   * comment six lines up records that it was rewritten away from exactly that phrasing, for exactly that
+   * reason; the sibling was fixed and this one was left, which is the §3.6.24 two-comments-disagree tell.
+   *
+   * One signal, one ambiguity, and the surviving wording is the true one. Measured before the fix: a single
+   * row marked love-to-hear / okay-to-say produced THREE ambiguities about that one word.
+   */
   return out;
 }
 
@@ -246,15 +374,39 @@ function nothingUsable(
  * data" (owner, 2026-08-18) means the step keeps its depth from the DATA, not from a fixed list.
  */
 export function openEndedAmbiguity(lexicon: EroticLexicon): Ambiguity | null {
+  /*
+   * 74 §3.6.36 — WHICH WAY each of these landed. Same defect as the split above, in the fallback that runs
+   * for most later passes: `Math.max(hear, say) >= 3` flattens the two directions into one list, so the
+   * model was told "they marked these as landing" and then asked to go deeper on "the direction" — the one
+   * fact the list had just thrown away.
+   */
   const loved = lexicon.entries
-    .filter((e) => e.state === undefined && Math.max(e.hear, e.say) >= 3)
+    .filter((entry) => entry.hearState === 'love' || entry.sayState === 'love')
     .slice(0, 4)
-    .map((e) => e.text);
+    .map((entry) => ({
+      text: entry.text,
+      way:
+        entry.hearState === 'love' && entry.sayState === 'love'
+          ? 'both ways'
+          : entry.hearState === 'love'
+            ? // 74 §3.6.39 — same rule as the split above: only a name is something you are CALLED. The
+              // owner's own fallback happened to draw four names, so it read correctly by luck; the first
+              // loved LINE to reach this list would have said "landing to be called 'suck me'".
+              isNameFamily(entry.family)
+              ? 'to be called'
+              : 'to hear'
+            : 'to say',
+    }));
   if (loved.length === 0) return null;
   return {
     id: `open:${loved.length}`,
-    question: `They marked ${loved.map((t) => `"${t}"`).join(', ')} as landing. Go deeper on what that is actually made of — the moment, the register, the direction, what would break it.`,
-    terms: loved,
+    question: `They marked ${loved
+      .map((l) => `"${l.text}" as landing ${l.way}`)
+      .join(
+        ', ',
+      )}. Go deeper on what that is actually made of — the moment, the register, what would break it.`,
+    terms: loved.map((l) => l.text),
+    termNote: Object.fromEntries(loved.map((l) => [l.text, `landed ${l.way}`])),
   };
 }
 
@@ -300,6 +452,7 @@ export async function runLinesPhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     `Write exactly ${LINES_PER_ROUND} complete lines someone could actually SAY in bed — not topics, not \
 questions, the words themselves. Vary the register deliberately across praise, claiming, command, narration, \
 degradation, begging and filth, so their reactions tell us which register lands rather than which topic. Draw \
@@ -331,8 +484,15 @@ we know.${
       ...(out.reason ? { reason: out.reason } : {}),
       ...(out.message ? { message: out.message } : {}),
     };
-  const parsed = LinesSchema.safeParse(extractJsonObject(out.text));
-  const written = parsed.success ? parsed.data.lines : [];
+  /*
+   * 74 §3.6.39 — through the shared parser, which until now had NO callers anywhere.
+   *
+   * `parseLines` was exported with a docstring saying "Exported for tests" and nothing imported it, in this
+   * repo or any test — so the production path parsed MORE strictly than the helper written for it, and the
+   * tolerant route it offers (a bare top-level array, the shape a model returns about as often as the
+   * wrapped one) was dead. One parser, one behaviour, and the salvage below reaches production.
+   */
+  const written = parseLines(out.text);
   const seen = new Set(writtenBefore.map((line) => line.trim().toLowerCase()));
   const lines = written
     // Belt and braces: the prompt forbids their hard nos, and anything that slips through is dropped here.
@@ -387,12 +547,18 @@ export interface ProbeQuestion {
 }
 
 /*
- * `probeTurnId` / `ambiguityOfProbeTurn` / `PROBE_SKIPPED` live in the crypto-free `schemas.ts` and are
+ * `probeTurnId` / `ambiguityOfProbeTurn` / `SKIPPED_ANSWER` live in the crypto-free `schemas.ts` and are
  * re-exported here beside the phase that uses them. The renderer stamps the turn and the bridge reads the
  * ambiguity back off it, so the two halves must be one definition — and the renderer cannot import this
  * module, whose barrel pulls in crypto (the `generationReadiness` precedent).
  */
-export { probeTurnId, ambiguityOfProbeTurn, PROBE_SKIPPED } from '../../schemas';
+export {
+  probeTurnId,
+  ambiguityOfProbeTurn,
+  scenarioTurnId,
+  contextOfScenarioTurn,
+  SKIPPED_ANSWER,
+} from '../../schemas';
 
 /**
  * Ask the questions that resolve ONE ambiguity — as many as it genuinely needs, not always exactly one.
@@ -416,6 +582,7 @@ export async function runProbePhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     /*
      * 74 §3.6.17 — SHORT, and answerable by tapping. Owner-directed, twice: "the questions are too long, they
      * should be quick to read, short, easy to answer, and specifically about dirty talk."
@@ -450,11 +617,15 @@ Two questions circling the same point are one question padded out — spread the
         : ''
     }
 
-You may quote ONLY these words back to them, and no others: ${ambiguity.terms
-      .map((term) => `"${term}"`)
-      .join(
-        ', ',
-      )}. Quoting anything else is wrong — you cannot see which of their other words are off, and \
+You may quote ONLY these words back to them, and no others, and each is listed with how they actually \
+marked it — a word they love being CALLED and a word they love SAYING are answers to two different \
+questions, and a question that treats them as one scale makes no sense to them:
+${ambiguity.terms
+  .map((term) =>
+    ambiguity.termNote?.[term] ? `- "${term}" — ${ambiguity.termNote[term]}` : `- "${term}"`,
+  )
+  .join('\n')}
+Quoting anything else is wrong — you cannot see which of their other words are off, and \
 naming one they have ruled out would be the worst version of this. Never ask them to justify a boundary, never \
 ask why something is a hard no, and never NAME one: a hard no is settled and is not a thing to ask about.
 
@@ -493,9 +664,29 @@ Return ONLY {"questions": [{"question": string, "options": string[]}]}.`,
       options: z.array(z.string()).catch([]).default([]),
     }),
   ]);
-  const parsed = z
-    .object({ questions: tolerantArray(questionish, '', (v) => v !== '') })
-    .safeParse(extractJsonObject(out.text));
+  const QuestionsSchema = z.object({
+    questions: tolerantArray(questionish, '', (v) => v !== ''),
+  });
+  const parsed = QuestionsSchema.safeParse(extractJsonObject(out.text));
+  /*
+   * 74 §3.6.39 — salvage the well-formed questions rather than losing the whole pass to one bad element.
+   *
+   * `tolerantArray` above is already per-element tolerant, but that only helps once the OBJECT parses — the
+   * §3.6.34 lesson, in the sibling phase that never got the fix. And this is the phase most exposed to it:
+   * its entire job is to quote the person's own marked terms back at them, so the reply is full of nested
+   * quotes, and a single unescaped one makes the whole payload invalid JSON.
+   *
+   * Measured live at the owner's real shape: 2 of 4 open-ended passes came back MALFORMED, every one of them
+   * `end_turn` — not truncated, not refused, just one question written with raw inner quotes while the other
+   * five escaped theirs correctly. On that captured reply `extractJsonObject` returns null and all six are
+   * lost; this recovers 5. A billed call was reporting "the question came back in an unexpected shape".
+   */
+  const salvagedSet =
+    parsed.success && parsed.data.questions.length > 0
+      ? parsed.data.questions
+      : (QuestionsSchema.safeParse({
+          questions: salvageJsonObjectArrayField(out.text, 'questions'),
+        }).data?.questions ?? []);
   const asQuestion = (q: z.infer<typeof questionish>): ProbeQuestion =>
     typeof q === 'string'
       ? { question: q, options: [] }
@@ -513,8 +704,8 @@ Return ONLY {"questions": [{"question": string, "options": string[]}]}.`,
     // replies look like for a one-string payload.
     (salvageLooseStringField(out.text, 'question') ?? '');
   const written: ProbeQuestion[] =
-    parsed.success && parsed.data.questions.length > 0
-      ? parsed.data.questions.map(asQuestion)
+    salvagedSet.length > 0
+      ? salvagedSet.map(asQuestion)
       : salvaged
         ? [{ question: salvaged, options: [] }]
         : [];
@@ -622,6 +813,7 @@ export async function runScenarioPhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     `Write ${MAX_SCENES} different short, concrete, explicit moments in the "${context}" context — genuinely \
 different situations, not one situation reworded — and for each, 3–4 things that could be SAID in it: real \
 lines, meaningfully different from each other in register, one of which may be "nothing, no words". The point \
@@ -656,8 +848,20 @@ Return ONLY {"scenes": [{"scene": string, "options": string[]}]}.`,
       ...(out.reason ? { reason: out.reason } : {}),
       ...(out.message ? { message: out.message } : {}),
     };
+  /*
+   * 74 §3.6.34 — salvage a truncated set rather than losing all five scenes.
+   *
+   * `SceneSchema` is already per-element tolerant, but that only helps once the OBJECT parses: a reply cut
+   * off mid-set fails `extractJsonObject` wholesale and every scene goes with it. A live run against the
+   * owner's real shape hit exactly that — one MALFORMED in four, at 3000 tokens for five scenes of 3–4 lines
+   * each — and the three complete scenes before the cut were thrown away with the fourth. This is the §37
+   * salvage the portrait and the synthesis already use, applied to the one phase that still parsed strictly.
+   */
   const parsed = ScenarioSchema.safeParse(extractJsonObject(out.text));
-  const written = parsed.success ? parsed.data.scenes : [];
+  const written = parsed.success
+    ? parsed.data.scenes
+    : (ScenarioSchema.safeParse({ scenes: salvageJsonObjectArrayField(out.text, 'scenes') }).data
+        ?.scenes ?? []);
   // The SCENE is prose shown to them too, and it used to pass through unchecked while its options were
   // filtered — a scene that sets up a boundary is the same failure as an option that names one. A scene whose
   // options are all filtered is dropped; the others in the set still stand.
@@ -734,6 +938,7 @@ export async function runSynthesis(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     `Write their profile from everything below. Two parts.
 
 NARRATIVE — 6–8 short paragraphs, second person, in their register (frank, using the words THEY use). This is \
@@ -881,5 +1086,13 @@ export function parseLines(text: string): string[] {
   const direct = extractJsonArray(text);
   if (Array.isArray(direct)) return direct.filter((x): x is string => typeof x === 'string');
   const obj = LinesSchema.safeParse(extractJsonObject(text));
-  return obj.success ? obj.data.lines : [];
+  if (obj.success && obj.data.lines.length > 0) return obj.data.lines;
+  /*
+   * 74 §3.6.39 — keep the lines that DID arrive.
+   *
+   * Same rule the scenario phase got in §3.6.34 and the probe got here: `tolerantArray` inside `LinesSchema`
+   * is per-element tolerant, which only helps once the object parses, so a reply cut off mid-array or
+   * carrying one bad element lost all six lines. Strings, not objects, so it needs the string twin.
+   */
+  return salvageJsonStringArrayField(text, 'lines');
 }

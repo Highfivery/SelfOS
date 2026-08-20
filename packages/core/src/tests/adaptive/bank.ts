@@ -51,6 +51,28 @@ export interface BankFamily {
   phase?: 'names';
 }
 
+/**
+ * 74 §3.6.25 — where a retired name's marks go.
+ *
+ * Cutting a name from the bank does not cut it from anyone's lexicon: every consumer reads the person's
+ * own store, so the mark survives the word (#534). That is right for the answer and wrong for the CONTROL —
+ * the row that could change it goes with the entry, while `suppressedTexts` keeps reading the mark, so a
+ * `never` on a retired name keeps that word out of every generated line with nothing left to lift it on.
+ *
+ * Two kinds of cut, two answers:
+ *
+ * - **retired into another entry** — "my love" was cut because "love" says the same thing, so the mark
+ *   MOVES rather than dying. The survivor's own answer always wins; this only fills a side they left blank.
+ * - **retired outright** — "my paperweight" names nothing anyone is called, so there is nowhere to move it
+ *   and the mark goes with the word.
+ *
+ * Only the first needs recording. The second is derived: an entry whose FAMILY belongs to this bank but
+ * whose KEY no longer does was cut from this bank, whenever that happened and whether or not anyone wrote
+ * it down. Scoping by family is what keeps another adaptive instrument's entries — which share the one
+ * lexicon — out of it entirely.
+ */
+export type BankRetirements = Readonly<Record<string, string>>;
+
 export interface BankEntry {
   key: string;
   text: string;
@@ -68,6 +90,21 @@ export interface BankEntry {
   addresses?: BankAddress;
   /** Whose anatomy it names. Absent ⇒ nobody's. */
   body?: BankBody;
+  /**
+   * 74 §3.6.28 — WHOSE body `body` refers to.
+   *
+   * Almost every line is about the person it is said TO ("your cunt is dripping"), which is what
+   * `shownSides` assumes: hearing it is about MY body, saying it is about THEIRS. A large minority invert
+   * that — "stretch my pussy", "suck my cock" — and for those the mapping has to flip, or a man is offered
+   * "stretch my pussy" as something to SAY.
+   *
+   * Absent ⇒ the line is about the listener, which is the common case and the pre-§3.6.28 behaviour.
+   *
+   * Note this is a different question from who has to have the organ. "cum in me" names no organ of the
+   * SPEAKER's — it requires the LISTENER to have a penis — so it is an ordinary listener-bodied line and
+   * needs only its tag, not this flag.
+   */
+  bodyOf?: 'speaker';
 }
 
 /** Deterministic, stable slug — mirrors `slug()` in `intimacy/topics.ts` so the two read the same way. */
@@ -91,6 +128,8 @@ export type TierItem =
       ex?: string;
       addresses?: BankAddress;
       body?: BankBody;
+      /** 74 §3.6.28 — whose body `body` names. Absent ⇒ the listener's, which is the common case. */
+      bodyOf?: 'speaker';
     };
 
 /** Per-tier entries for one family. A tier with no entries is simply omitted. */
@@ -122,6 +161,9 @@ export function bankFamily(
         ...(spec.ex ? { example: spec.ex } : {}),
         ...(addresses ? { addresses } : {}),
         ...(body ? { body } : {}),
+        // Entry-only: a whole family is never speaker-bodied (74 §3.6.28 — even `demands-receiving` mixes
+        // "stretch my pussy" with "use me", and only the first names an organ of the speaker's).
+        ...(typeof item === 'string' || !item.bodyOf ? {} : { bodyOf: item.bodyOf }),
       });
     }
   }
@@ -132,6 +174,17 @@ export function bankFamily(
 export interface Bank {
   families: readonly BankFamily[];
   entries: readonly BankEntry[];
+  /** Marks on a name this bank retired INTO another one (see {@link BankRetirements}). */
+  retiredInto?: BankRetirements;
+  /**
+   * 74 §3.6.27 — whole FAMILIES this bank has retired.
+   *
+   * Entry-level retirement is derived: an entry whose family is still in the bank but whose key is gone was
+   * cut (§3.6.25). That derivation cannot see a family that left entirely — `ourFamily` simply stops
+   * containing it — so those marks would survive with no row anywhere to lift them, which is the
+   * un-gettable-rid-of preference §3.2 abolished. A removed family therefore has to be listed.
+   */
+  retiredFamilies?: readonly string[];
 }
 
 export function buildBank(blocks: readonly { family: BankFamily; entries: BankEntry[] }[]): Bank {

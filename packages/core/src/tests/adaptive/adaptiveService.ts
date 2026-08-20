@@ -3,6 +3,7 @@ import { uuid } from '../../id';
 import { isSafeSegment } from '../../pathSafety';
 import { deleteInsight, getInsight, saveInsight } from '../../insights';
 import {
+  healSkippedAnswers,
   TestResultSchema,
   type EroticLexicon,
   type Insight,
@@ -11,18 +12,14 @@ import {
 } from '../../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import {
-  applyBankMarks,
-  applyDirections,
-  applyNameMarks,
-  clearNameMarks,
-  type NameMarks,
-  clearMarks,
+  applyDirectionalMarks,
+  clearDirectionalMarks,
+  type DirectionalMarks,
   derivedWantsToSay,
   lovedEntries,
   mergeLexicons,
   readLexicon,
   writeLexicon,
-  type BankMarks,
 } from './lexicon';
 import { takeCarriesDistress } from './distress';
 import { recordTakeSaturation } from './saturation';
@@ -83,7 +80,17 @@ export async function getAdaptiveResult(
   const parsed = TestResultSchema.safeParse(raw);
   if (!parsed.success) return null;
   // Defense in depth: only ever serve a result whose subject matches the folder it was read from.
-  return parsed.data.subjectPersonId === personId ? parsed.data : null;
+  if (parsed.data.subjectPersonId !== personId) return null;
+  /*
+   * 74 §3.6.38 — heal the old NUL-bearing skip marker, and WRITE IT BACK.
+   *
+   * The write is the whole point: healing only in memory leaves the row on disk to be re-healed on every
+   * read forever, and hides the fact that nothing ever persisted it (§3.6.34). Costs one write per result,
+   * once, and nothing at all for a result that never had one.
+   */
+  const { result, changed } = healSkippedAnswers(parsed.data);
+  if (changed) await saveResult(fs, key, result);
+  return result;
 }
 
 /** Every result for one adaptive test, newest first (history + trends). Drafts included — the take resumes. */
@@ -101,7 +108,12 @@ export async function listAdaptiveResults(
     const parsed = TestResultSchema.safeParse(raw);
     if (!parsed.success) continue; // a corrupt result is skipped, never thrown (the 50 precedent)
     if (parsed.data.subjectPersonId === personId && parsed.data.testId === testId) {
-      out.push(parsed.data);
+      // The other door onto a result (74 §3.6.38). A COMPLETED take is read through here and may never be
+      // fetched by id again, so healing only in `getAdaptiveResult` would leave the report and the trends
+      // reading a skip as an answer for good.
+      const { result, changed } = healSkippedAnswers(parsed.data);
+      if (changed) await saveResult(fs, key, result);
+      out.push(result);
     }
   }
   out.sort((a, b) => (a.takenAt < b.takenAt ? 1 : a.takenAt > b.takenAt ? -1 : 0));
@@ -240,19 +252,29 @@ export async function abandonAdaptiveTake(
 }
 
 /**
- * Record pass 1 of the bank — the marks. Writes straight through to the person's lexicon (the living store),
- * and stamps a turn on the draft so the take carries a record of what it asked, not just what came back.
+ * Record a marking pass — the deck ("The words") or the pet names (74 §3.6.8/§3.6.26).
+ *
+ * ONE function, because since Option B the two phases do the same thing: an entry is answered per direction,
+ * `love | okay | never` on each side it is offered. They differed only in the turn they stamp, so that is all
+ * this takes a parameter for. The deck used to have its own whole-entry writer plus a second 0–4 "split" pass
+ * — that pair is gone (§3.6.26), and with it the class of bug where one phase's writer grew a fix the other
+ * never got.
+ *
+ * Writes straight through to the person's lexicon (the living store), and stamps a turn on the draft so the
+ * take carries a record of what it asked, not just what came back.
  */
-export async function recordBankPass(
+export async function recordMarkingPass(
   fs: FileSystem,
   key: Uint8Array,
   def: AdaptiveTestDefinition,
   input: {
     personId: string;
     resultId: string;
-    marks: BankMarks;
-    /** Marks the person took back — un-marked in the same sitting (74 §3.4). */
-    cleared?: readonly string[];
+    /** Which phase is stamping — the turn record, and nothing else. */
+    phase: 'bank' | 'names';
+    marks: DirectionalMarks;
+    /** Directions the person took back, per key (74 §3.4). An absent key undoes nothing. */
+    cleared?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
     /**
      * Which sides each key was SHOWN on for this person (74 §3.6.6). Resolved by the caller, which knows the
      * orientation. Recorded on the entry so a side that was never offered is never read as a refusal —
@@ -261,7 +283,7 @@ export async function recordBankPass(
     sides?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
     /**
      * An AUTOSAVE, not the end of the pass. The lexicon is written either way — that is the point, so nothing
-     * is lost — but only completing the pass stamps a turn. A turn per tap would put ~1,100 of them in the
+     * is lost — but only completing the pass stamps a turn. A turn per tap would put thousands of them in the
      * result and make `turns` useless as a record of what was actually asked.
      */
     autosave?: boolean;
@@ -270,95 +292,41 @@ export async function recordBankPass(
 ): Promise<EroticLexicon> {
   const lexicon = await readLexicon(fs, key, input.personId, now);
   const source = `test:${input.resultId}`;
-  const marked = applyBankMarks(lexicon, def.bank, input.marks, source, now, input.sides ?? {});
-  // Un-marking is scoped to THIS take's own marks, and only while the take is still OPEN. Without the draft
-  // check, `source` scoping is only as strong as a renderer-supplied string: passing a COMPLETED take's id
-  // makes `source` match its entries and lifts a boundary that take settled. Result ids are handed to the
-  // renderer in `adaptiveState().history`, so that is a reachable string, not a hypothetical one (74 §3.2).
-  const draft = await openDraft(fs, key, input.personId, def.id);
-  const clearable = draft?.id === input.resultId ? (input.cleared ?? []) : [];
-  const next = clearMarks(marked, clearable, now);
-  await writeLexicon(fs, key, next);
-  if (input.autosave) return next;
-  await stampTurn(fs, key, input.personId, input.resultId, {
-    phase: 'bank',
-    item: {
-      id: 'bank',
-      pack: 'bank',
-      text: `${def.bank.entries.length} entries across ${def.bank.families.length} families`,
-      options: [],
-    },
-    answer: Object.keys(input.marks).length,
-    at: now.toISOString(),
-  });
-  return next;
-}
-
-/**
- * Record the PET-NAME phase (74 §3.6.8) — two marks per name, autosaved a tap at a time like the deck.
- *
- * Same shape as `recordBankPass` on purpose: the un-mark is scoped to this take's own marks AND to the take
- * still being open, because `source` on its own is only as strong as a renderer-supplied string.
- */
-export async function recordNamePass(
-  fs: FileSystem,
-  key: Uint8Array,
-  def: AdaptiveTestDefinition,
-  input: {
-    personId: string;
-    resultId: string;
-    marks: NameMarks;
-    /** Directions taken back, per key (74 §3.4). */
-    cleared?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
-    /** Which sides each key was SHOWN on (74 §3.6.3). Absent for a key ⇒ both. */
-    sides?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
-    autosave?: boolean;
-  },
-  now: Date,
-): Promise<EroticLexicon> {
-  const lexicon = await readLexicon(fs, key, input.personId, now);
-  const source = `test:${input.resultId}`;
-  const marked = applyNameMarks(lexicon, def.bank, input.marks, source, now, input.sides ?? {});
+  const marked = applyDirectionalMarks(
+    lexicon,
+    def.bank,
+    input.marks,
+    source,
+    now,
+    input.sides ?? {},
+  );
+  // Un-marking is scoped to the take still being OPEN. Without the draft check, `source` scoping is only as
+  // strong as a renderer-supplied string: passing a COMPLETED take's id makes `source` match its entries.
+  // Result ids are handed to the renderer in `adaptiveState().history`, so that is a reachable string, not a
+  // hypothetical one (74 §3.2).
   const draft = await openDraft(fs, key, input.personId, def.id);
   const clearable = draft?.id === input.resultId ? (input.cleared ?? {}) : {};
-  const next = clearNameMarks(marked, clearable, now);
+  const next = clearDirectionalMarks(marked, clearable, now);
   await writeLexicon(fs, key, next);
   if (input.autosave) return next;
+  const item =
+    input.phase === 'names'
+      ? {
+          id: 'names',
+          pack: 'names',
+          text: `${nameFamilies(def.bank).length} registers of names, marked both ways`,
+          options: [],
+        }
+      : {
+          id: 'bank',
+          pack: 'bank',
+          text: `${def.bank.entries.length} entries across ${def.bank.families.length} families`,
+          options: [],
+        };
   await stampTurn(fs, key, input.personId, input.resultId, {
-    phase: 'names',
-    item: {
-      id: 'names',
-      pack: 'names',
-      text: `${nameFamilies(def.bank).length} registers of names, marked both ways`,
-      options: [],
-    },
+    phase: input.phase,
+    item,
     answer: Object.keys(input.marks).length,
-    at: now.toISOString(),
-  });
-  return next;
-}
-
-/** Record pass 2 — the hear/say split on what pass 1 marked. */
-export async function recordSplitPass(
-  fs: FileSystem,
-  key: Uint8Array,
-  input: {
-    personId: string;
-    resultId: string;
-    splits: Record<string, { hear?: number; say?: number }>;
-    /** As above — an autosave persists the ratings but does not close the pass. */
-    autosave?: boolean;
-  },
-  now: Date,
-): Promise<EroticLexicon> {
-  const lexicon = await readLexicon(fs, key, input.personId, now);
-  const next = applyDirections(lexicon, input.splits, now);
-  await writeLexicon(fs, key, next);
-  if (input.autosave) return next;
-  await stampTurn(fs, key, input.personId, input.resultId, {
-    phase: 'split',
-    item: { id: 'split', pack: 'bank', text: 'hear / say split', options: [] },
-    answer: Object.keys(input.splits).length,
     at: now.toISOString(),
   });
   return next;
@@ -377,10 +345,93 @@ export async function stampTurn(
   // REPLACE a turn for the same item rather than appending a second one. Answers are editable (74 §3.6.16 —
   // "a way to see what has been answered, edit those answers"), and appending made a changed answer a
   // duplicate: both reached the synthesis, and the ask ledger counted the item twice.
-  const rest = (draft.turns ?? []).filter(
-    (t) => !(t.phase === turn.phase && t.item.id === turn.item.id),
+  //
+  // 74 §3.6.35 — replaced IN PLACE. The three AI steps render their set FROM the turns now, so a
+  // filter-and-append moved whatever you just answered to the bottom of the list: answer the second of six
+  // lines and it jumps past the other five. Position is the order it was written in, and answering is not a
+  // re-write of that order.
+  const turns = draft.turns ?? [];
+  const at = turns.findIndex((t) => t.phase === turn.phase && t.item.id === turn.item.id);
+  const next = at >= 0 ? turns.map((t, i) => (i === at ? turn : t)) : [...turns, turn];
+  await saveResult(fs, key, { ...draft, turns: next, updatedAt: turn.at });
+}
+
+/**
+ * 74 §3.6.37 — delete one generated item: off the screen for good, and never offered again.
+ *
+ * A skip and a delete are different acts. Skipping keeps the item visible and answerable (§3.6.17); deleting
+ * says the thing itself was no good. Owner-reported: *"there should be a way to delete questions, not just
+ * skip them."*
+ *
+ * It is a TOMBSTONE rather than a removal, and that is the whole design. The same `turns` list is what stops
+ * a phase re-offering something: the bridge builds each phase's avoid-list from these texts and reads back
+ * which ambiguities have already been put to them. Drop the row and the model is free to write the identical
+ * question again, and "Ask me more" will spend a call re-asking the ambiguity behind it — the exact opposite
+ * of what deleting a bad question is for.
+ *
+ * So the row stays, carrying its text, and the ANSWER goes with the deletion. Everything downstream then
+ * follows with no new filters, because every consumer of an answer already tests for one:
+ * `answersDigest` skips it, the report's "what you told it" reads through `isAnsweredTurn`, and
+ * `takeCarriesDistress` is a `typeof` check. Deleting an answered item stops it feeding the profile
+ * immediately, which is what the screen promises when it says so.
+ */
+export async function deleteTurn(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  resultId: string,
+  phase: string,
+  itemId: string,
+  now: Date,
+): Promise<void> {
+  const draft = await getAdaptiveResult(fs, key, personId, resultId);
+  if (!draft || draft.status !== 'draft') return;
+  const turns = draft.turns ?? [];
+  const at = turns.findIndex((turn) => turn.phase === phase && turn.item.id === itemId);
+  if (at < 0) return;
+  const next = turns.map((turn, i) =>
+    // `answer` is dropped, not blanked: an empty string is a string, and every consumer that reads one tests
+    // `typeof answer === 'string'` — which is how a skip used to be counted as an answer (§3.6.17).
+    i === at ? { phase: turn.phase, item: turn.item, at: turn.at, deleted: true } : turn,
   );
-  await saveResult(fs, key, { ...draft, turns: [...rest, turn], updatedAt: turn.at });
+  await saveResult(fs, key, { ...draft, turns: next, updatedAt: now.toISOString() });
+}
+
+/**
+ * 74 §3.6.35 — record what a generating phase just PUT IN FRONT OF THEM, before they respond to any of it.
+ *
+ * The lines, probe and scenario steps used to keep their generated set in renderer state alone, and only a
+ * reaction reached the draft. So the set was gone on the next load — a line you had not reacted to, a question
+ * you had not answered and a moment you had not picked were all unreachable, which is what made "see and change
+ * everything it generated" impossible. Worse, the bridge builds each phase's avoid-list from these same turns,
+ * so an unreacted line was not on it and "write me more" could hand back the very lines it had just replaced.
+ *
+ * An offer carries NO answer, which is what distinguishes it from a response (`isAnsweredTurn`). Existing turns
+ * are never touched: re-generating a scene or re-reading a round must not blank an answer already given.
+ */
+export async function stampOffers(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  resultId: string,
+  phase: string,
+  items: readonly NonNullable<TestResult['turns']>[number]['item'][],
+  now: Date,
+): Promise<void> {
+  if (items.length === 0) return;
+  const draft = await getAdaptiveResult(fs, key, personId, resultId);
+  if (!draft || draft.status !== 'draft') return;
+  const turns = draft.turns ?? [];
+  const known = new Set(turns.filter((t) => t.phase === phase).map((t) => t.item.id));
+  const fresh = items
+    .filter((item) => !known.has(item.id))
+    .map((item) => ({ phase, item, at: now.toISOString() }));
+  if (fresh.length === 0) return;
+  await saveResult(fs, key, {
+    ...draft,
+    turns: [...turns, ...fresh],
+    updatedAt: now.toISOString(),
+  });
 }
 
 /**
@@ -498,7 +549,7 @@ const INSIGHT_FACT_CAP = 8;
  * gate do the work: the profile reaches the taker's own intimacy-topic context only, is excluded from the
  * topic-free digests, and never reaches another person's context (50 §5.4 / 54).
  *
- * Boundaries are NOT written as facts. A coach does not need "she hates the word whore" in its context to
+ * Boundaries are NOT written as facts. A coach does not need "she hates the word manwhore" in its context to
  * behave correctly — the suppression list does that structurally, and putting a boundary in a prompt is how
  * it ends up being restated back to her.
  */

@@ -6,7 +6,6 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { AttachmentRef, Person } from '../schemas';
 import { savePerson, saveRelationship } from '../people';
 import { acknowledgeAdult } from './guidanceService';
-import { emptyLexicon, writeLexicon } from '../tests/adaptive/lexicon';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { saveInsight } from '../insights';
 import type { Insight } from '../schemas';
@@ -952,12 +951,16 @@ describe('runChatTurn — image attachments (45 §6.1 vision)', () => {
   });
 });
 
-describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intimacy-topic one', () => {
-  it('carries the partner-suppression block on a session the topic gate would have skipped', async () => {
-    // The gate this used to share was unreliable in both directions: the challenge coach is
-    // `group: 'challenge'`, so it took an explicit sexual register while being denied the hard-no list, and a
-    // free-start session's topic comes from a probabilistic classifier that fails open. Suppression only ever
-    // PREVENTS a suggestion, so it is not topic-gated.
+describe('74 §8.4/§5.8a — a hard no suppresses in EVERY session, unconditionally', () => {
+  /*
+   * Suppression can only ever PREVENT a suggestion, so no state makes withholding it correct. Two gates used
+   * to withhold it anyway, both contradicting the helpers' own docstrings:
+   *
+   * - the TOPIC gate, for the person's own nos — they ride along inside `buildOwnLexiconBlock`, which is
+   *   topic-gated, so a grief or money session carried no hard-no list at all;
+   * - the 18+ ACK, for both — so REVOKING the ack silently re-opened every word either of them had ruled out.
+   */
+  async function pair(): Promise<void> {
     await savePerson(fs, key, person('p1', 'Alex'));
     await savePerson(fs, key, person('p2', 'Sam'));
     await saveRelationship(fs, key, {
@@ -969,12 +972,27 @@ describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intima
       createdAt: 'now',
       updatedAt: 'now',
     });
-    await acknowledgeAdult(fs, key, 'p1');
-    await writeLexicon(fs, key, {
-      ...emptyLexicon('p2', now),
-      boundaries: [{ text: 'whore', kind: 'word', at: now.toISOString() }],
-    });
+  }
 
+  // A LIVE mark, not a record: `kind:'word'` records are legacy and dropped on read (74 §3.6.29).
+  async function ruleOut(personId: string): Promise<void> {
+    const { applyDirectionalMarks, emptyLexicon, writeLexicon } =
+      await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    await writeLexicon(
+      fs,
+      key,
+      applyDirectionalMarks(
+        emptyLexicon(personId, now),
+        DIRTY_TALK.bank,
+        { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
+        'take:1',
+        now,
+      ),
+    );
+  }
+
+  async function systemFor(conversationId: string): Promise<string> {
     let system = '';
     const capturing: ClaudeClient = {
       send: () => Promise.resolve(''),
@@ -987,7 +1005,6 @@ describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intima
         });
       },
     } as unknown as ClaudeClient;
-
     // No guideId and no intimacy topic override — the plainest possible session.
     await runChatTurn({
       fs,
@@ -996,19 +1013,42 @@ describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intima
       apiKey: 'sk-test',
       model: 'claude-sonnet-4-6',
       personId: 'p1',
-      conversationId: 'c-plain',
+      conversationId,
       userText: 'I want to be more vocal with my partner',
       onDelta: () => {},
       now,
     });
-    expect(system).toContain('whore');
+    return system;
+  }
+
+  it("carries the PARTNER's hard nos on a session the topic gate would have skipped", async () => {
+    await pair();
+    await acknowledgeAdult(fs, key, 'p1');
+    await ruleOut('p2');
+    expect(await systemFor('c-partner-topic')).toContain('manwhore');
+  });
+
+  it("carries the person's OWN hard nos on a non-intimate session", async () => {
+    await pair();
+    await acknowledgeAdult(fs, key, 'p1');
+    await ruleOut('p1');
+    expect(await systemFor('c-own-topic')).toContain('manwhore');
+  });
+
+  it('carries both with NO 18+ ack — revoking it must not re-open a ruled-out word', async () => {
+    await pair();
+    // Deliberately no `acknowledgeAdult`.
+    await ruleOut('p1');
+    expect(await systemFor('c-own-noack')).toContain('manwhore');
+    await ruleOut('p2');
+    expect(await systemFor('c-partner-noack')).toContain('manwhore');
   });
 });
 
 describe('the challenge coach speaks in their words too (74 §5.8)', () => {
   it('gives a challenge session the own-lexicon steer it was speaking explicitly without', async () => {
     const { upsertPerson } = await import('../people/peopleService');
-    const { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } =
+    const { applyDirectionalMarks, emptyLexicon, writeLexicon } =
       await import('../tests/adaptive/lexicon');
     const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
     const { acknowledgeAdult } = await import('./guidanceService');
@@ -1019,14 +1059,16 @@ describe('the challenge coach speaks in their words too (74 §5.8)', () => {
     const person = (await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] }))
       .id;
     await acknowledgeAdult(fs, key, person);
-    let lex = applyBankMarks(
+    const lex = applyDirectionalMarks(
       emptyLexicon(person, now),
       DIRTY_TALK.bank,
-      { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+      {
+        'names-praise:good-girl': { hear: 'love', say: 'love' },
+        'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
+      },
       'take:1',
       now,
     );
-    lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 4 } }, now);
     await writeLexicon(fs, key, lex);
 
     let system = '';
@@ -1062,6 +1104,6 @@ describe('the challenge coach speaks in their words too (74 §5.8)', () => {
     // the app deliberately speaking explicitly with the person's own words withheld.
     expect(system).toContain('good girl');
     // Suppression was already unconditional and stays so.
-    expect(system).toContain('whore');
+    expect(system).toContain('manwhore');
   });
 });

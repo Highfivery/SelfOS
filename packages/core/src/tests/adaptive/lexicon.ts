@@ -5,10 +5,10 @@ import {
   type EroticLexicon,
   type LexiconBoundary,
   type LexiconEntry,
-  type LexiconState,
 } from '../../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import { bankEntry, toLexiconEntry, type Bank, type BankEntry } from './bank';
+import { LEXICON_BANKS } from './instruments/lexiconBanks';
 import { shownSides, type Orientation } from './orientation';
 
 /**
@@ -20,11 +20,16 @@ import { shownSides, type Orientation } from './orientation';
  *
  * Two rules this module exists to make unbreakable:
  *
- * 1. **A `never` is permanent.** Nothing merges it away, no retake re-offers it, and only an explicit act by
- *    the person themselves clears it (`clearState`). A merge that could silently downgrade a hard no would be
- *    the worst bug this feature could have.
- * 2. **Boundaries UNION on merge.** Two devices editing the same lexicon resolve last-write-wins on ratings,
- *    but their boundary lists are combined — a sync conflict can never lose a hard no (74 §7).
+ * 1. **Every answer is PER DIRECTION.** A term is marked `love | okay | never` for hearing it and again for
+ *    saying it, because the two genuinely differ — wanting to call her "good girl" says nothing about wanting
+ *    to be called it. `hear`/`say` (4/2/0) stay derived from those marks, so every consumer keeps reading the
+ *    two numbers it always read. Since §3.6.26 the deck works this way too; the whole-entry writer and the
+ *    separate 0–4 "split" pass it needed are gone.
+ * 2. **A `never` is a PREFERENCE, not a locked door** (§3.2, amended 2026-08-19). It is respected for exactly
+ *    as long as it is set: suppression is DERIVED from the live mark by `suppressedTexts`, never from a
+ *    second record, so changing your mind takes effect on the next read. The one thing that must never
+ *    happen is a mark with no control left to lift it — which is why `clearDirectionalMarks` is not scoped to
+ *    the take that wrote it, and why anything that removes an entry removes the boundary record behind it.
  */
 
 const SCHEMA_VERSION = 1;
@@ -63,10 +68,96 @@ export async function readLexicon(
     const raw = await readEncryptedJson(fs, lexiconPath(personId), key);
     if (!raw) return emptyLexicon(personId, now);
     const parsed = EroticLexiconSchema.safeParse(raw);
-    return parsed.success ? parsed.data : emptyLexicon(personId, now);
+    if (!parsed.success) return emptyLexicon(personId, now);
+    return resolveLexicon(parsed.data, now).lexicon;
   } catch {
     return emptyLexicon(personId, now);
   }
+}
+
+/**
+ * Every read-time migration, and whether any of them actually changed something.
+ *
+ * 74 §3.6.26/§3.6.29 — the two legacy shapes are cleared HERE, on the one read every consumer goes through,
+ * so there is exactly one shape in the app and nothing downstream needs a branch for an old one. §3.6.34 adds
+ * the third: a mark whose bank ENTRY has been cut. All three are idempotent.
+ *
+ * `changed` is the part that has to be exposed rather than swallowed. The healing happens in memory, so the
+ * stored file is only ever compacted by a caller that writes the result back — and the ONE caller that does
+ * (`orientationForMarking`) used to detect its work via `pruneUnshownMarks`'s own `changed` flag. Once
+ * retirement moved up here, that flag went false for an already-healed lexicon and the stale rows sat on disk
+ * being re-healed on every read forever. Returning `changed` fixes that for the new migration and for the two
+ * older ones, which were never persisted either.
+ */
+export function resolveLexicon(
+  lexicon: EroticLexicon,
+  now: Date,
+): { lexicon: EroticLexicon; changed: boolean } {
+  const deck = resetPreDirectionalDeckMarks(lexicon, now);
+  const words = dropLegacyWordBoundaries(deck.lexicon, now);
+  const dead = retireDeadKeys(words.lexicon);
+  return {
+    lexicon: dead.lexicon,
+    changed: deck.changed || words.changed || dead.changed,
+  };
+}
+
+/** The same read, plus whether the stored copy is now stale and worth writing back. */
+export async function readLexiconResolved(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date = new Date(),
+): Promise<{ lexicon: EroticLexicon; changed: boolean }> {
+  if (!isSafeSegment(personId)) return { lexicon: emptyLexicon(personId, now), changed: false };
+  try {
+    const raw = await readEncryptedJson(fs, lexiconPath(personId), key);
+    if (!raw) return { lexicon: emptyLexicon(personId, now), changed: false };
+    const parsed = EroticLexiconSchema.safeParse(raw);
+    if (!parsed.success) return { lexicon: emptyLexicon(personId, now), changed: false };
+    return resolveLexicon(parsed.data, now);
+  } catch {
+    return { lexicon: emptyLexicon(personId, now), changed: false };
+  }
+}
+
+/**
+ * 74 §3.6.34 — retire a mark whose bank ENTRY no longer exists, on EVERY read.
+ *
+ * `pruneUnshownMarks` has always done this, but it needs an orientation as well as a bank, so it can only run
+ * on the Tests screens — and it is the only thing that writes the result back. Every other consumer
+ * (`chatService`, `storyGenerationService`, `emailSuggestionService`, `generationService`,
+ * `challengeSuggestService`, the steer) calls `readLexicon` directly and got the raw file.
+ *
+ * That gap is not cosmetic. `suppressedTexts` emits `entry.text` for any `never`, without asking whether the
+ * bank still has that entry — so after a purge, a mark on a removed entry keeps suppressing that word
+ * app-wide while no row anywhere can lift it. §3.6.27 closed exactly this hole for the case where the entry
+ * survives; this closes it for the case where the entry is gone. Measured on the owner's real vault before
+ * the fix: **242 orphaned suppressions**, blocking ~5% of the live bank's explicit lines (and, checked, no
+ * ordinary ones) until he next opened the take.
+ *
+ * Retirement needs only the bank, never the orientation — "this key is not in the code any more" is a fact
+ * about the data, not about the person — which is what lets it live at this level. The orientation half
+ * stays where it is.
+ *
+ * Idempotent, and `retireCutMarks` short-circuits when there is nothing retired, so the common read costs one
+ * pass over the entries. Family-scoped, so another instrument's marks and the person's own write-ins are
+ * never touched.
+ */
+export function retireDeadKeys(lexicon: EroticLexicon): {
+  lexicon: EroticLexicon;
+  changed: boolean;
+} {
+  let entries = lexicon.entries;
+  let changed = false;
+  for (const bank of LEXICON_BANKS) {
+    const out = retireCutMarks(entries, bank);
+    if (out.changed) {
+      entries = out.entries;
+      changed = true;
+    }
+  }
+  return { lexicon: changed ? { ...lexicon, entries } : lexicon, changed };
 }
 
 export async function writeLexicon(
@@ -83,11 +174,6 @@ export async function writeLexicon(
  * MILD YES — fine, works, not a favourite — not the superseded "makes me cringe".
  */
 export type BankMark = 'love' | 'never' | 'okay';
-
-/** Pass 1 — the whole bank, marking only what lands. Everything untouched stays genuinely unrated. */
-export interface BankMarks {
-  [entryKey: string]: BankMark;
-}
 
 /** The rating a `love` mark seeds before pass 2 splits it into hear/say. */
 const LOVE_SEED = 3;
@@ -117,16 +203,30 @@ export function saySideAsked(entry: LexiconEntry): boolean {
  * A name is recognised by carrying per-direction marks at all; `hear`/`say` are derived from them.
  */
 function directionAnswered(entry: LexiconEntry, side: 'hear' | 'say'): boolean {
-  const perDirection = entry.hearState !== undefined || entry.sayState !== undefined;
-  if (perDirection) return (side === 'hear' ? entry.hearState : entry.sayState) !== undefined;
-  return side === 'hear'
-    ? entry.sides === undefined || entry.sides.includes('hear')
-    : saySideAsked(entry);
+  return (side === 'hear' ? entry.hearState : entry.sayState) !== undefined;
 }
 
 /** Was saying it actually answered? Use wherever a low/zero `say` is read as a signal. */
 export function saySideAnswered(entry: LexiconEntry): boolean {
   return directionAnswered(entry, 'say');
+}
+
+/** The mirror of {@link saySideAnswered}. A hear-direction signal must not count a say-only entry as a zero. */
+export function hearSideAnswered(entry: LexiconEntry): boolean {
+  return directionAnswered(entry, 'hear');
+}
+
+/**
+ * Does this entry carry an answer AT ALL — as opposed to sitting in the lexicon unrated?
+ *
+ * The obvious test (`state !== undefined || hear > 0 || say > 0`) was right only while a hard no lived in the
+ * whole-entry `state`. Since names — and, since §3.6.26, the deck — answer per direction, a `never` on both
+ * sides is `state: undefined` with both ratings 0, which that test reads as UNRATED. It is the opposite: a no
+ * is an answer, and the spine's own comment says so ("a boundary contributes 0 — it is a no, not a missing
+ * answer") while its filter was dropping those entries before the scorer could see them.
+ */
+export function hasAnswer(entry: LexiconEntry): boolean {
+  return entry.hearState !== undefined || entry.sayState !== undefined;
 }
 
 /** Were BOTH directions actually answered? The gap between them is only real when they were. */
@@ -135,73 +235,24 @@ export function bothSidesAnswered(entry: LexiconEntry): boolean {
 }
 
 /**
- * Apply pass-1 marks onto a lexicon (pure). An entry marked `love` is seeded at {@link LOVE_SEED} in BOTH
- * directions and refined in pass 2; `never`/`notYet` set the state and zero the ratings, and a `never`
- * additionally records a global {@link LexiconBoundary}.
+ * 74 §3.6.26 — the say GAP: they love hearing it, and saying it is a step behind. The one signal the
+ * practice sheet, the goal list and the probe are all built on, expressed ONCE so they cannot drift.
  *
- * An unknown key (not in the bank) is skipped rather than inventing an entry — a custom write-in comes in
- * through {@link addCustomEntry}, which knows its text.
+ * The numeric test (`hear >= 3 && say <= 1`) only works on a 0–4 scale. Answered per direction the ratings
+ * are 4 / 2 / 0, so `say <= 1` can only mean a `never` — and a `never` is a BOUNDARY, not a gap: it
+ * suppresses the word, `violatesBoundary` strips it from anything generated, and §3.6.15 forbids the probe
+ * from asking anyone to justify one. Reading it as "the most coachable signal in the take" would put the one
+ * thing they ruled out in front of them as homework, which is the leak §3.2's goal guard exists to stop.
+ *
+ * So the gap is love-to-hear against okay-to-say: a real asymmetry, and the only one three marks can express.
  */
-export function applyBankMarks(
-  lexicon: EroticLexicon,
-  bank: Bank,
-  marks: BankMarks,
-  source: string,
-  now: Date,
-  /** Which sides each key was SHOWN on (74 §3.6.6). Absent for a key ⇒ both, the pre-orientation behaviour. */
-  sidesByKey: Readonly<Record<string, readonly ('hear' | 'say')[]>> = {},
-): EroticLexicon {
-  const byKey = new Map(lexicon.entries.map((entry) => [entry.key, entry]));
-  const boundaries = [...lexicon.boundaries];
-  for (const [key, mark] of Object.entries(marks)) {
-    const spec = bankEntry(bank, key);
-    const existing = byKey.get(key);
-    if (!spec && !existing) continue;
-    // 74 §3.2 (amended 2026-08-19): a `never` is a PREFERENCE, not a permanent boundary. It is respected
-    // for exactly as long as it is set, and the person may change it in any sitting — so nothing blocks a
-    // re-mark here. Suppression is derived from the live state by `suppressedTexts`, which is what makes
-    // lifting it instant: change the mark and the word stops being suppressed on the next read.
-    const shownSides = sidesByKey[key];
-    // Record what was ASKED, so a `0` on a side that was never offered is distinguishable from a refusal.
-    const withSides = shownSides ? { sides: [...shownSides] } : {};
-    const base = { ...(existing ?? toLexiconEntry(spec as BankEntry, source)), ...withSides };
-    if (mark === 'love') {
-      // Seed ONLY when there is nothing to preserve. Re-sending the whole pass (which closing it does) would
-      // otherwise reset a hear:4/say:1 split back to 3/3 — and quitting between the two passes, which the
-      // autosave copy actively encourages, is exactly when that lands and never gets repaired.
-      const seeded = base.hear === 0 && base.say === 0;
-      // …and seed ONLY the sides this person was actually shown (74 §3.6.6). §3.6.6 fixed a `0` on an unshown
-      // side being read as a refusal; seeding both directions is the same bug inverted — a `3` on a side that
-      // was never offered reads as an ENDORSEMENT, and the report then tells someone they are "comfortable
-      // saying" a line the deck never put to them, on the one screen §8.5 says they may read to a partner.
-      const shown = shownSides ?? (['hear', 'say'] as const);
-      const seedFor = (side: 'hear' | 'say'): number =>
-        seeded && shown.includes(side) ? LOVE_SEED : base[side];
-      byKey.set(key, {
-        ...base,
-        hear: seedFor('hear'),
-        say: seedFor('say'),
-        state: undefined,
-        source,
-      });
-    } else {
-      // No boundary RECORD is written for a bank entry any more. A second copy of the same fact is what
-      // made a `never` unliftable: the entry could change and the record could not. `boundaries` now holds
-      // only what is not a bank entry — a theme a probe named ("anything about being used").
-      byKey.set(key, { ...base, hear: 0, say: 0, state: mark, source });
-    }
-  }
-  return {
-    ...lexicon,
-    entries: [...byKey.values()],
-    boundaries: dedupeBoundaries(boundaries),
-    updatedAt: now.toISOString(),
-  };
+export function hasSayGap(entry: LexiconEntry): boolean {
+  return bothSidesAnswered(entry) && entry.hearState === 'love' && entry.sayState === 'okay';
 }
 
 /** One name's answer: a mark per direction. Either side may be absent — an unanswered side stays unanswered. */
-export type NameMark = { hear?: BankMark; say?: BankMark };
-export type NameMarks = Record<string, NameMark>;
+export type DirectionalMark = { hear?: BankMark; say?: BankMark };
+export type DirectionalMarks = Record<string, DirectionalMark>;
 
 /** love → 4, okay → 2, never → 0. The ratings stay the currency every existing consumer reads. */
 function ratingFor(mark: BankMark | undefined, current: number): number {
@@ -212,26 +263,32 @@ function ratingFor(mark: BankMark | undefined, current: number): number {
 }
 
 /**
- * The PET-NAME pass (74 §3.6.8) — a name answered twice, once per direction.
+ * The marking pass, for the pet names AND the deck (74 §3.6.8/§3.6.26) — one entry answered twice, once per
+ * direction.
  *
- * The deck's `applyBankMarks` cannot do this: it takes one mark for the whole entry and then a second pass
- * splits it. A name has no single answer to split — wanting to call her "good girl" says nothing about
- * wanting to be called it — so both marks arrive together and each writes its own side.
+ * The deck used to take ONE mark for the whole entry and then a second pass to split it 0–4. That second
+ * pass was folded into the row (§3.6.13) and then, in practice, never reached: it appeared only after a
+ * `love`, showed nothing selected over a value that was already set, and sat under copy still promising a
+ * step that no longer existed. So `hear` and `say` stayed equal for every deck word, and the hear/say GAP —
+ * the goal list, the practice sheet, the "wants to say but freezes" material in their own coach prompt —
+ * could only ever fill from the names.
  *
- * Three things it does that the deck's version does not:
+ * The owner's answer (2026-08-19) was to make the deck work like the names: two marks, both on the row,
+ * neither hidden behind the other. There is no single answer to split — wanting to call her "good girl"
+ * says nothing about wanting to be called it — so both marks arrive together and each writes its own side.
+ *
+ * Two things it does that the old whole-entry writer did not:
  *
  * 1. **`hear`/`say` stay derived** (love → 4, okay → 2, never → 0), so the spine, the steer, the report and
  *    every other consumer keep reading the two numbers they always read. `hearState`/`sayState` are what the
- *    phase itself reads back.
- * 2. **A `never` writes a DIRECTIONAL boundary.** "Never call me slut" must not stop him calling her slut,
- *    which is the whole reason `LexiconBoundary.direction` exists.
- * 3. **A settled boundary from an EARLIER take is not re-marked**, matching the deck: it lifts only by an
- *    explicit un-mark, never by marking over it.
+ *    marking screens read back.
+ * 2. **A `never` is per DIRECTION.** "Never call me slut" must not stop him calling her slut, which is the
+ *    whole reason `LexiconBoundary.direction` exists.
  */
-export function applyNameMarks(
+export function applyDirectionalMarks(
   lexicon: EroticLexicon,
   bank: Bank,
-  marks: NameMarks,
+  marks: DirectionalMarks,
   source: string,
   now: Date,
   /**
@@ -262,7 +319,6 @@ export function applyNameMarks(
       // rather than assumed. Hardcoding both used to be true and became a lie the moment names were
       // oriented; a `0` on a side that was never offered reads as a refusal (§3.6.6).
       sides: [...(sidesByKey[key] ?? (['hear', 'say'] as const))],
-      state: undefined,
       source,
     });
   }
@@ -275,7 +331,7 @@ export function applyNameMarks(
 }
 
 /** Take back a name mark — one direction, or both. The undo path for the phase's autosave (74 §3.4). */
-export function clearNameMarks(
+export function clearDirectionalMarks(
   lexicon: EroticLexicon,
   cleared: Readonly<Record<string, readonly ('hear' | 'say')[]>>,
   now: Date,
@@ -339,9 +395,10 @@ export function pruneUnshownMarks(
   who: Orientation,
   now: Date,
 ): { lexicon: EroticLexicon; changed: boolean } {
-  let changed = false;
+  const retired = retireCutMarks(lexicon.entries, bank);
+  let changed = retired.changed;
   const entries: LexiconEntry[] = [];
-  for (const entry of lexicon.entries) {
+  for (const entry of retired.entries) {
     const spec = bankEntry(bank, entry.key);
     if (!spec) {
       entries.push(entry);
@@ -374,28 +431,176 @@ export function pruneUnshownMarks(
     }
     entries.push(next);
   }
+  // No boundary pass here any more (74 §3.6.29). A retired entry used to strand its `kind:'word'` record,
+  // which then suppressed a word with no row left to lift it; those records are now dropped wholesale in
+  // `readLexicon`, so there is nothing left for a retirement to strand. A `theme` was never entry-backed.
   if (!changed) return { lexicon, changed: false };
   return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
 }
 
-/** Pass 2 — the hear/say split, applied only to entries pass 1 marked. */
-export function applyDirections(
+/**
+ * 74 §3.6.25 — marks on a name this bank has RETIRED. A separate pass, run before orientation.
+ *
+ * Cutting a name from the bank does not cut it from anyone's lexicon: every consumer reads the person's own
+ * store, so nobody loses an answer to a purge (#534). That is right for the ANSWER and wrong for the
+ * CONTROL — the row that could change it goes with the entry, while `suppressedTexts` keeps reading the
+ * mark. A `never` on a retired name therefore keeps that word out of every generated line with nothing left
+ * on any screen to lift it: the un-gettable-rid-of preference §3.2 abolished, reached through the bank
+ * instead of through orientation.
+ *
+ * Two kinds of cut, two answers:
+ *
+ * - **Retired INTO another name** (`bank.retiredInto`) — "my love" went because "love" says the same thing,
+ *   so the mark MOVES. The survivor's own answer always wins; this only fills a side they left blank, so a
+ *   migration can never overwrite something they actually said.
+ * - **Retired outright** — "my paperweight" names nothing anyone is called, so there is nowhere to move it
+ *   and the mark goes with the word. Derived rather than listed: an entry whose FAMILY belongs to this bank
+ *   but whose KEY no longer does was cut from it, whenever that happened.
+ *
+ * Scoping by family is what makes the derived half safe. The lexicon is ONE store shared by every adaptive
+ * intimacy instrument, so another instrument's entries carry families this bank has never heard of and are
+ * left alone — as is a custom write-in, which is the person's own word and was never the bank's to retire.
+ */
+export function retireCutMarks(
+  all: readonly LexiconEntry[],
+  bank: Bank,
+): { entries: LexiconEntry[]; changed: boolean } {
+  const ourFamily = new Set(bank.families.map((family) => family.id));
+  // 74 §3.6.27 — a family the bank RETIRED. Derivation cannot see one (it stops being `ourFamily` the moment
+  // it goes), so a removed register is named on the bank and every mark in it is retired outright.
+  const retiredFamily = new Set(bank.retiredFamilies ?? []);
+  const isRetired = (entry: LexiconEntry): boolean =>
+    !entry.custom &&
+    (retiredFamily.has(entry.family) ||
+      (ourFamily.has(entry.family) && bankEntry(bank, entry.key) === undefined));
+  if (!all.some(isRetired)) return { entries: [...all], changed: false };
+
+  const kept = new Map(all.filter((entry) => !isRetired(entry)).map((entry) => [entry.key, entry]));
+  for (const entry of all) {
+    if (!isRetired(entry)) continue;
+    const into = bank.retiredInto?.[entry.key];
+    const spec = into === undefined ? undefined : bankEntry(bank, into);
+    if (into === undefined || spec === undefined) continue; // retired outright — the mark goes with it
+    const survivor = kept.get(into);
+    if (!survivor) {
+      // Nothing marked on the survivor, so the answer moves across whole — under the survivor's own key
+      // and text, or the report would show them a name the bank no longer has.
+      kept.set(into, { ...entry, key: into, text: spec.text, family: spec.family });
+      continue;
+    }
+    kept.set(into, {
+      ...survivor,
+      ...(survivor.hearState === undefined && entry.hearState
+        ? { hearState: entry.hearState }
+        : {}),
+      ...(survivor.sayState === undefined && entry.sayState ? { sayState: entry.sayState } : {}),
+      // A rating only fills a side the survivor left genuinely unanswered.
+      hear: survivor.hearState === undefined && survivor.hear === 0 ? entry.hear : survivor.hear,
+      say: survivor.sayState === undefined && survivor.say === 0 ? entry.say : survivor.say,
+    });
+  }
+  return { entries: [...kept.values()], changed: true };
+}
+
+/**
+ * 74 §3.6.26 — the deck's old 0–4 answers, cleared (owner decision, 2026-08-19).
+ *
+ * The deck used to take ONE mark per entry and then a 0–4 split to pull the two directions apart. Option B
+ * replaces both with the pet names' model: a `love | okay | never` per direction, marked on the row. The old
+ * answers cannot be carried across honestly. Measured on the real vault before deciding: the owner's 132 deck
+ * entries carry no `love`/`okay`/`never` at all — they are pure ratings, 119 of them with `hear ≠ say` — so
+ * seeding the new columns from `state` (which is what the two written-up options assumed) would have shown
+ * every one of those marks as blank. Deriving them from the ratings instead runs into a worse problem: a `0`
+ * on a side they WERE offered is genuinely ambiguous between "I dialled it down" and "I never touched it",
+ * and reading it as a hard no would invent ~20 app-wide suppressions nobody declared. Asked, and the answer
+ * was to clear the deck and start it fresh.
+ *
+ * So an entry with no per-direction state carries no answer, and it goes. Two things make that safe:
+ *
+ * - **It is scoped by SHAPE, not by family** (74 §3.6.29 — an earlier version of this comment claimed a
+ *   family scope the code has never had, which is exactly the two-comments-disagree trap §3.6.24 found).
+ *   Scoping by family is impossible here: this runs inside `readLexicon`, which has no bank, and that is
+ *   precisely what lets it run low enough that no consumer ever sees the old shape. It is safe anyway,
+ *   because every marking phase writes a per-direction mark — the names since §3.6.8, the deck since
+ *   §3.6.26 — so an entry with neither is either pre-Option-B deck data or an entry whose only answer was
+ *   already cleared by `pruneUnshownMarks`, which is empty either way. A future instrument sharing this
+ *   lexicon inherits the same contract: write a per-direction mark, or your entry carries no answer.
+ * - **A custom write-in keeps its word.** The owner asked to remove the deck's DATA; a word the person typed
+ *   themselves was never the bank's to delete, so its ratings clear and the entry stays. (Without this the
+ *   migration would eat a word the moment `addCustomEntry` created it — a fresh custom entry is 0/0 with no
+ *   state, which is exactly the shape being purged.)
+ *
+ * Idempotent: the second run finds nothing to do and reports `changed: false`, so it never writes on a read.
+ */
+export function resetPreDirectionalDeckMarks(
   lexicon: EroticLexicon,
-  splits: Record<string, { hear?: number; say?: number }>,
   now: Date,
-): EroticLexicon {
-  const clamp = (n: number): number => (n < 0 ? 0 : n > 4 ? 4 : Math.round(n));
-  const entries = lexicon.entries.map((entry) => {
-    const split = splits[entry.key];
-    // A boundary is never re-rated by the split pass.
-    if (!split || entry.state === 'never') return entry;
-    return {
-      ...entry,
-      ...(split.hear !== undefined ? { hear: clamp(split.hear) } : {}),
-      ...(split.say !== undefined ? { say: clamp(split.say) } : {}),
-    };
-  });
-  return { ...lexicon, entries, updatedAt: now.toISOString() };
+): { lexicon: EroticLexicon; changed: boolean } {
+  /*
+   * An entry with NO per-direction mark carries no answer. Every marking phase writes one — the names since
+   * §3.6.8, the deck since §3.6.26 — so this is exactly the pre-Option-B deck shape, whether it was stored as
+   * a rating (a `love`, split or not) or as the retired whole-entry `state` (an `okay`/`never`, which stored
+   * 0/0 and put the answer in a field that no longer exists). No bank is needed to recognise it, which is
+   * what lets this run inside `readLexicon` so no consumer anywhere sees the old shape.
+   */
+  const isPreDirectional = (entry: LexiconEntry): boolean =>
+    entry.hearState === undefined && entry.sayState === undefined;
+
+  const entries: LexiconEntry[] = [];
+  let changed = false;
+  for (const entry of lexicon.entries) {
+    if (!isPreDirectional(entry)) {
+      entries.push(entry);
+      continue;
+    }
+    if (!entry.custom) {
+      // A bank word: the row comes back from the bank, so the entry itself can just go.
+      changed = true;
+      continue;
+    }
+    // Their own word stays; only the answer goes. Already-clear is a no-op, or this would write on every read.
+    if (entry.hear === 0 && entry.say === 0) entries.push(entry);
+    else {
+      entries.push({ ...entry, hear: 0, say: 0 });
+      changed = true;
+    }
+  }
+  // No boundary pass here any more (74 §3.6.29): `dropLegacyWordBoundaries` removes every `kind:'word'`
+  // record on the same read, so a cleared entry can no longer strand one.
+  if (!changed) return { lexicon, changed: false };
+  return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
+}
+
+/**
+ * 74 §3.6.29 — the legacy `kind:'word'` boundary records, removed (owner decision, 2026-08-19).
+ *
+ * A word record was how a hard no was stored before §3.6.11 made suppression DERIVE from the live mark.
+ * Nothing has written one since: the only live writer is the probe's "don't ask me that again", which
+ * writes a `theme`. So every word record in every vault is legacy, and every one of them is one of two
+ * things:
+ *
+ * - **backed by an entry** — the entry's own `hearState`/`sayState` already says the same thing, and
+ *   `suppressedTexts` was already ignoring the record. Removing it changes nothing.
+ * - **orphaned** — its entry was purged from the bank in one of the four name purges, so the record became
+ *   a suppression with no row on any screen to lift it. That is the un-gettable-rid-of preference §3.2
+ *   abolished, and it is not theoretical: measured on the real vault, 382 of 999 records were orphaned, and
+ *   they rejected **27% of ordinary intimate lines** app-wide — `I love the way you look at me`, `kiss me`,
+ *   `stay right there`. An orphan also loses the everyday-word relaxation `violatesBoundary` applies (that
+ *   is derived from the person's live entries), so it degrades to a plain substring match on a word like
+ *   `love`. After this it is 7%, and every remaining refusal is a live mark they can change.
+ *
+ * So the record is not the source of truth for anything, and keeping it can only ever be wrong. Dropped on
+ * read, and `addBoundary` no longer accepts the kind, so a vault heals once and cannot re-acquire one.
+ *
+ * Idempotent: the second run finds nothing to do, so this never writes on a read.
+ */
+export function dropLegacyWordBoundaries(
+  lexicon: EroticLexicon,
+  now: Date,
+): { lexicon: EroticLexicon; changed: boolean } {
+  const boundaries = lexicon.boundaries.filter((boundary) => boundary.kind !== 'word');
+  if (boundaries.length === lexicon.boundaries.length) return { lexicon, changed: false };
+  return { lexicon: { ...lexicon, boundaries, updatedAt: now.toISOString() }, changed: true };
 }
 
 /** Add one of their own words. Custom entries carry `custom: true` and a `custom:` key namespace. */
@@ -424,69 +629,16 @@ export function addCustomEntry(
 }
 
 /**
- * The ONLY way a boundary lifts: an explicit act by the person themselves (74 §3.2/§8.2). Clearing a `never`
- * drops its global boundary too, so the suppression stops with it.
+ * Record a boundary that isn't a bank entry — a THEME named in a probe ("anything about being used").
+ *
+ * Themes only, since 74 §3.6.29. A `kind:'word'` record was the pre-§3.6.11 storage for a hard no and is
+ * now pure legacy: suppression derives from the entry's live mark, `readLexicon` drops any record it finds,
+ * and a new one could only ever be a suppression with no row to lift it. Narrowed here rather than left to
+ * a convention, so the one thing that can create a boundary cannot create that.
  */
-export function clearState(lexicon: EroticLexicon, key: string, now: Date): EroticLexicon {
-  const target = lexicon.entries.find((entry) => entry.key === key);
-  if (!target) return lexicon;
-  return {
-    ...lexicon,
-    entries: lexicon.entries.map((entry) =>
-      entry.key === key ? { ...entry, state: undefined } : entry,
-    ),
-    boundaries:
-      target.state === 'never'
-        ? lexicon.boundaries.filter((b) => !sameBoundary(b.text, target.text))
-        : lexicon.boundaries,
-    updatedAt: now.toISOString(),
-  };
-}
-
-/**
- * Undo bank marks — the other half of autosaving a pass (74 §3.4).
- *
- * Once every tap persists the moment it lands, a mis-tap is written to the lexicon before the person can look
- * at it. Without this an accidental ✗ would be a permanent boundary they never meant, and an accidental 🔥
- * would keep seeding their own coach. So un-marking has to reach the store too: it clears the state, zeroes
- * the ratings the mark seeded, and drops the boundary a `never` created.
- *
- * This is NOT the §3.2 "a boundary lifts only by an explicit act" escape hatch being widened — un-marking IS
- * that explicit act, by the same person, in the same sitting, on a mark they just made.
- *
- * **`source` is what makes that true, not the UI.** Every mark records the take that made it
- * (`test:<resultId>`), and un-marking is scoped to the CURRENT take's marks. So a boundary set in an earlier
- * take cannot be cleared through this path even if the renderer asks for it — which matters, because the
- * renderer is not the trust boundary: without this, one crafted `cleared` key would lift a hard no that §3.2
- * promises only the report can lift. A wrong or missing `source` clears nothing.
- */
-export function clearMarks(
-  lexicon: EroticLexicon,
-  keys: readonly string[],
-  now: Date,
-): EroticLexicon {
-  if (keys.length === 0) return lexicon;
-  const wanted = new Set(keys);
-  // Not scoped to the take that wrote it — see `clearNameMarks`.
-  const clearable = (entry: LexiconEntry): boolean => wanted.has(entry.key);
-  const dropped = lexicon.entries.filter((entry) => clearable(entry) && entry.state === 'never');
-  if (!lexicon.entries.some(clearable)) return lexicon;
-  return {
-    ...lexicon,
-    entries: lexicon.entries.map((entry) =>
-      clearable(entry) ? { ...entry, state: undefined, hear: 0, say: 0 } : entry,
-    ),
-    boundaries: lexicon.boundaries.filter(
-      (b) => !dropped.some((entry) => sameBoundary(b.text, entry.text)),
-    ),
-    updatedAt: now.toISOString(),
-  };
-}
-
-/** Record a boundary that isn't a bank entry (a theme named in a probe: "anything about being used"). */
 export function addBoundary(
   lexicon: EroticLexicon,
-  boundary: Omit<LexiconBoundary, 'at'>,
+  boundary: Omit<LexiconBoundary, 'at' | 'kind'> & { kind: 'theme' },
   now: Date,
 ): EroticLexicon {
   return {
@@ -496,8 +648,33 @@ export function addBoundary(
   };
 }
 
-function sameBoundary(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+/**
+ * 74 §3.6.35 — take a themed boundary back.
+ *
+ * There was no way to do this from anywhere in the app. `addBoundary` had no counterpart, and the lexicon edit
+ * seam offered `setAddress` / `clearSide` / `addWord` / `addBoundary` and nothing that removes one — so the
+ * "never anything like this again" tap on the lines step minted a permanent, unliftable suppression. That is
+ * exactly the un-gettable-rid-of preference §3.2 was amended to abolish (a `never` is a preference, not a
+ * locked door), reached from a direction the amendment did not cover: it fixed the MARKS, whose suppression is
+ * derived from a live mark and so lifts when the mark changes, and left the standalone theme record with no
+ * control at all.
+ *
+ * Matched the way `dedupeBoundaries` keys them — trimmed and case-insensitive — so the text on screen lifts the
+ * record it came from. Removing something that isn't there is a no-op that leaves `updatedAt` alone, so an
+ * accidental double-tap cannot make a lexicon look newer than it is.
+ *
+ * KNOWN LIMIT, unchanged and documented at `mergeLexicons`: boundaries UNION on merge, so a lift cannot be
+ * expressed to an older copy. There is no two-copy merge caller today (a conflicted vault is surfaced to the
+ * person, never merged automatically), so nothing can resurrect a lifted boundary; wiring one up needs a
+ * tombstone rather than a change here.
+ */
+export function removeBoundary(lexicon: EroticLexicon, text: string, now: Date): EroticLexicon {
+  const match = text.trim().toLowerCase();
+  const kept = lexicon.boundaries.filter(
+    (boundary) => boundary.text.trim().toLowerCase() !== match,
+  );
+  if (kept.length === lexicon.boundaries.length) return lexicon;
+  return { ...lexicon, boundaries: kept, updatedAt: now.toISOString() };
 }
 
 function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBoundary[] {
@@ -533,14 +710,11 @@ export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon
   const byKey = new Map(older.entries.map((entry) => [entry.key, entry]));
   for (const entry of newer.entries) {
     const prior = byKey.get(entry.key);
-    // Last-write-wins, including for `never`. It used to survive from EITHER side so a sync conflict could
+    // Last-write-wins, including for a `never`. It used to survive from EITHER side so a sync conflict could
     // not lose a hard no -- correct while it was permanent, wrong now that it is a preference: lifting one
     // on this device would be undone by an older copy that still had it.
-    const state: LexiconState | undefined = entry.state;
     byKey.set(entry.key, {
       ...entry,
-      ...(state ? { state } : {}),
-      ...(state === 'never' ? { hear: 0, say: 0 } : {}),
       // `sides` records what was ASKED (74 §3.6.6), and a device on an older build writes entries without
       // it. Spreading the newer entry alone would DROP that record, and an entry with no `sides` is read as
       // both-sides-asked — which turns every loved hear-only entry back into a goal the person never
@@ -569,24 +743,17 @@ export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon
 export function suppressedTexts(lexicon: EroticLexicon, direction?: 'hear' | 'say'): string[] {
   const fromEntries = lexicon.entries
     .filter((entry) => {
-      // A per-direction mark is authoritative for its own side; `state` still covers the whole entry.
-      if (entry.state === 'never') return true;
       if (direction === 'hear') return entry.hearState === 'never';
       if (direction === 'say') return entry.sayState === 'never';
       return entry.hearState === 'never' || entry.sayState === 'never';
     })
     .map((entry) => entry.text);
-  // A bank entry's suppression comes from its live state ABOVE, never from a record. Lexicons written
-  // before 2026-08-19 still carry a `kind:'word'` record per hard no; honouring those would make a lifted
-  // preference keep suppressing forever, so an entry-backed word record is ignored here. Nothing has to be
-  // migrated: the record is simply no longer the source of truth. A `theme` (named in a probe, not a bank
-  // entry) is unaffected, and so is a word boundary with no entry behind it.
-  const entryTexts = new Set(lexicon.entries.map((entry) => entry.text.trim().toLowerCase()));
+  // A bank entry's suppression comes from its live state ABOVE, never from a record. Since §3.6.29 there
+  // is no other kind: `kind:'word'` records were the pre-§3.6.11 storage for a hard no, nothing writes one,
+  // and `readLexicon` drops any it finds — so every boundary reaching here is a THEME named in a probe
+  // ("anything about being used"), which no entry can express and no mark can lift.
   const fromBoundaries = lexicon.boundaries
     .filter((boundary) => !direction || !boundary.direction || boundary.direction === direction)
-    .filter(
-      (boundary) => boundary.kind !== 'word' || !entryTexts.has(boundary.text.trim().toLowerCase()),
-    )
     .map((boundary) => boundary.text);
   return [...new Set([...fromEntries, ...fromBoundaries])];
 }
@@ -660,7 +827,7 @@ function contentStems(text: string): string[] {
  *
  * So: these families relax to address-only matching, and everything else — `rough-heavy`, `object`,
  * `worthless`, `feminising`, `service`, `sharing`, `breeding`, and any family added tomorrow — keeps the plain
- * substring match, so `whore` in "you filthy whore" is off wherever it sits. Multi-word names ("good girl")
+ * substring match, so `manwhore` in "you filthy manwhore" is off wherever it sits. Multi-word names ("good girl")
  * keep it too: no innocent use, nothing to disambiguate.
  */
 const EVERYDAY_NAME_FAMILIES: ReadonlySet<string> = new Set([
@@ -674,9 +841,28 @@ const EVERYDAY_NAME_FAMILIES: ReadonlySet<string> = new Set([
   'names-aftercare',
   'names-other-tongues',
   'names-petplay',
-  'names-kinship',
   'names-roleplay',
 ]);
+
+/**
+ * 74 §3.6.39 — is this family a NAME register, i.e. are its entries vocatives?
+ *
+ * A name is something you are CALLED; a line is something you HEAR. The bank draws that line cleanly — 9
+ * `names-*` families against 33 line families, with no label crossover — and three separate places need it:
+ * `nameLines` (a model can drop a vocative into any line it writes, where a phrase can only be quoted,
+ * §3.6.8) and both premise builders in `engine.ts`, which state back what someone marked and were saying
+ * "they love being called 'suck me'".
+ *
+ * Deliberately the PREFIX and not a list. {@link EVERYDAY_NAME_FAMILIES} above is opt-in by family because
+ * getting it wrong there fails OPEN on a hard no — a family added tomorrow must not silently relax a
+ * suppression. This one is the opposite: a `names-` family added tomorrow is a name by construction, and the
+ * cost of a miss is a sentence reading slightly oddly, not a boundary going quiet. Same reason it lives here
+ * rather than being re-derived per caller: three copies of one rule is how the two premise builders came to
+ * disagree with `frozen` six lines below them.
+ */
+export function isNameFamily(family: string): boolean {
+  return family.startsWith('names-');
+}
 
 /**
  * Whether a candidate line touches a boundary. Two different checks, because the two kinds of boundary are
@@ -696,7 +882,7 @@ export function violatesBoundary(
   /** Which way this line runs, when the caller knows. Omitted ⇒ refuse anything ruled out either way. */
   direction?: 'hear' | 'say',
 ): boolean {
-  const text = candidate.toLowerCase();
+  const whole = candidate.toLowerCase();
   const stems = new Set(contentStems(candidate));
   // Which banned terms are pet names that are ALSO everyday words. Derived from the bank at match time
   // rather than stored on the boundary, so it applies to every record already written — a name ruled out
@@ -708,10 +894,41 @@ export function violatesBoundary(
       // A multi-word name has no innocent use, so it keeps the plain match.
       .filter((text) => !text.includes(' ')),
   );
+  /*
+   * 74 §3.6.31 — the person's own explicit YES outranks a substring NO.
+   *
+   * Measured on the owner's real lexicon: ruling out the NAME `my ass` suppressed `fuck my ass`,
+   * `finger my ass`, `pound my ass` and `cum in my ass` — every one of which he had marked LOVED — because a
+   * multi-word name keeps a plain substring match. 36% of the lines he loved and 37% of the whole bank were
+   * rejected by his own list, which is what cut a 7-paragraph analysis down to two.
+   *
+   * So an occurrence of a banned term that sits INSIDE a phrase this person has explicitly loved does not
+   * count. The term still binds everywhere else — on its own, and in any line they have not said yes to — so
+   * nothing they actually ruled out is loosened. A text both loved AND ruled out keeps the NO: that is a
+   * contradiction, and suppression is the half that can only ever prevent.
+   */
+  // `lovedEntries` IS the app's definition of loved — the same one the steer, the spine and the report read.
+  // Using a second one here (the `hearState` field) silently disagreed with it: the numeric rating is what
+  // survives a merge from an older device, so a genuinely loved line read as unloved and stayed suppressed.
+  const lovedPhrases = lovedEntries(lexicon, direction ?? 'either')
+    .map((entry) => entry.text.trim().toLowerCase())
+    .filter((phrase) => phrase !== '');
+  /** The candidate with every loved phrase CONTAINING `needle` blanked out, so it cannot match from there. */
+  const maskLoved = (hay: string, needle: string): string => {
+    let out = hay;
+    for (const phrase of lovedPhrases) {
+      if (phrase === needle || !phrase.includes(needle)) continue;
+      // A control char cannot appear in a candidate and matches no word-boundary pattern.
+      out = out.split(phrase).join('\u0001'.repeat(phrase.length));
+    }
+    return out;
+  };
+
   const literal = suppressedTexts(lexicon, direction).some((banned) => {
     const needle = banned.trim().toLowerCase();
     if (needle === '') return false;
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const text = maskLoved(whole, needle);
     /*
      * A single-word PET NAME is only a boundary when it is used to ADDRESS them.
      *
@@ -736,8 +953,16 @@ export function violatesBoundary(
       // Carries a vocative comma: "that's it baby, just like that". A full stop is NOT enough — "you look
       // beautiful." is a compliment, not a name, and that is exactly the false positive being removed.
       new RegExp(`(^|[^a-z0-9])${escaped}\\s*,`, 'i'),
-      // Named as theirs, or as what they are: "my love" · "you're my baby" · "such a doll".
-      new RegExp(`\\b(my|oh|hey|you're|youre|such an?|a|an)\\s+${escaped}([^a-z0-9]|$)`, 'i'),
+      /*
+       * Named as theirs, or as what they are: "my love" · "you're my baby" · "such a doll".
+       *
+       * 74 §3.6.31 — only where the word ENDS the phrase. `([^a-z0-9]|$)` accepted a following space, so
+       * "my beautiful cock" read as being CALLED beautiful and was suppressed for someone who had ruled that
+       * name out — while plainly being an adjective in front of a noun. Requiring terminal punctuation or the
+       * end of the line keeps "my love", "my love, come here" and "you're my baby", and drops the adjective
+       * case. "oh baby yes" is given up deliberately; the comma form above is the common one and still binds.
+       */
+      new RegExp(`\\b(my|oh|hey|you're|youre|such an?|a|an)\\s+${escaped}\\s*([.,!?;:]|$)`, 'i'),
     ].some((re) => re.test(text));
   });
   if (literal) return true;
@@ -761,12 +986,12 @@ export function lovedEntries(
         ? entry.say
         : Math.max(entry.hear, entry.say);
   // A direction-specific read must ignore entries that direction was never put to (74 §3.6.6). Correctness
-  // here currently also depends on `applyBankMarks` not seeding an unshown side — make it explicit rather
+  // here currently also depends on the writer not seeding an unshown side — make it explicit rather
   // than rely on the writer, because a merge from an older device copies ratings verbatim.
   const asked = (entry: LexiconEntry): boolean =>
     direction === 'either' || entry.sides === undefined || entry.sides.includes(direction);
   return lexicon.entries
-    .filter((entry) => entry.state === undefined && asked(entry) && value(entry) >= 3)
+    .filter((entry) => asked(entry) && value(entry) >= 3)
     .sort((x, y) => value(y) - value(x));
 }
 
@@ -778,10 +1003,12 @@ export function lovedEntries(
  * deck, and then invisible on the report and absent from every prompt, so the hundreds of taps a person spends
  * on it bought them nothing (and their own profile silently omitted their own answers).
  *
- * Boundaries are excluded by the `state` check, and a `never` can never hold this state anyway.
+ * Per direction since §3.6.26: "fine to hear" and "fine to say" are separate answers, and an entry counts
+ * here when either of them is the middle mark. A `never` on the other side does not disqualify it — that
+ * side is simply ruled out, and suppression is what carries that, not this list.
  */
 export function okayEntries(lexicon: EroticLexicon): LexiconEntry[] {
-  return lexicon.entries.filter((entry) => entry.state === 'okay');
+  return lexicon.entries.filter((entry) => entry.hearState === 'okay' || entry.sayState === 'okay');
 }
 
 /**
@@ -796,10 +1023,21 @@ export function okayEntries(lexicon: EroticLexicon): LexiconEntry[] {
  * The middle mark no longer contributes: `okay` is a mild yes, not a thing they wish they could say (§3.6.2).
  */
 export function derivedWantsToSay(lexicon: EroticLexicon): string[] {
-  const gap = lexicon.entries
-    .filter((entry) => entry.state !== 'never')
-    .filter((entry) => bothSidesAnswered(entry) && entry.hear >= 3 && entry.say <= 1)
-    .map((entry) => entry.text);
+  /*
+   * 74 §3.6.26 — the gap, in the vocabulary each entry was actually answered in.
+   *
+   * The numeric test (`hear >= 3 && say <= 1`) only works on a 0–4 scale. Marked per direction the ratings
+   * are 4 / 2 / 0, so `say <= 1` can ONLY mean a `never` — which `violatesBoundary` then strips below,
+   * because a hard no must never read as something to practise. Net effect: nothing can qualify. That was
+   * already true of the pet names, which have been answered this way all along (measured on the real vault:
+   * every entry this fired for came from the deck, none from the names), and §3.6.26 would have extended it
+   * to the deck too and left the goal list, the practice sheet and the coach's "wants to say" material
+   * permanently empty.
+   *
+   * So the gap is the only asymmetry three marks can express: they LOVE hearing it, and saying it is merely
+   * okay. A softer signal than a 1-out-of-4 was, and a real one.
+   */
+  const gap = lexicon.entries.filter(hasSayGap).map((entry) => entry.text);
   // Belt and braces on top of the mark guard: a goal is something to PRACTISE, so a suppressed text can
   // never appear here — it would read as encouragement to say the one thing they ruled out.
   return [...new Set([...gap, ...lexicon.wantsToSay])].filter(

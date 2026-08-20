@@ -8,13 +8,7 @@ import { memFileSystem } from '../../host/memFileSystem';
 import type { FileSystem } from '../../host';
 import { upsertPerson } from '../../people/peopleService';
 import { upsertRelationship } from '../../people/relationshipService';
-import {
-  applyBankMarks,
-  applyDirections,
-  emptyLexicon,
-  writeLexicon,
-  applyNameMarks,
-} from './lexicon';
+import { applyDirectionalMarks, emptyLexicon, writeLexicon } from './lexicon';
 import {
   buildOwnLexiconBlock,
   buildOwnSuppressionBlock,
@@ -40,18 +34,19 @@ async function seedPair(): Promise<{ fs: FileSystem; ben: string; angel: string;
     type: 'partner',
   });
   // Angel's lexicon: loves being claimed, one hard no, one theme.
-  let lex = applyBankMarks(
+  let lex = applyDirectionalMarks(
     emptyLexicon(angel, NOW),
     DIRTY_TALK.bank,
     {
-      'names-praise:good-girl': 'love',
-      'claiming:you-re-mine': 'love',
-      'names-rough-heavy:whore': 'never',
+      // Loves hearing it, saying it is merely okay — the hear/say gap, in the vocabulary a marked entry
+      // has to express it in now (§3.6.26: a `say` of 0 can only be a `never`, which is a hard no).
+      'names-praise:good-girl': { hear: 'love', say: 'okay' },
+      'claiming:you-re-mine': { hear: 'love', say: 'love' },
+      'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
     },
     'take:1',
     NOW,
   );
-  lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
   lex = { ...lex, themes: ['being claimed, not degraded'], voice: 'low, close, certain.' };
   await writeLexicon(fs, KEY, lex);
   return { fs, ben, angel, relId: rel.id };
@@ -64,7 +59,7 @@ describe('the lexicon steer (74 §5.7/§8.4)', () => {
     const block = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
     expect(block).toContain('good girl');
     expect(block).toContain('NEVER use');
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     // The gap is framed as something to practise, never a failing.
     expect(block).toContain('PRACTISE');
   });
@@ -100,7 +95,7 @@ describe('the lexicon steer (74 §5.7/§8.4)', () => {
   it('SUPPRESSES her hard nos in his prompt with or without any steer, and never says why', async () => {
     const { fs, ben, angel } = await seedPair();
     const block = await buildSuppressionBlock(fs, KEY, ben, angel);
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     expect(block).toContain('NEVER suggest');
     expect(block).toContain('never say why');
     // It carries the boundary and NOTHING else about her — not what she likes, not that a test exists.
@@ -123,7 +118,7 @@ describe('the couples block (74 §5.8)', () => {
     expect(block).not.toMatch(/Angel|Ben/);
     expect(block).toContain('NEVER say which of them likes what');
     // The union of both hard-no lists rides along — a limit either drew is never suggested to either.
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     // …and the goal list (the shame material) never appears in the shared room at all.
     expect(block).not.toMatch(/freezes|PRACTISE/);
   });
@@ -139,23 +134,27 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
       entries: [
         ...lex.entries,
         {
-          key: 'taboo:filthy',
-          text: 'filthy',
+          // 74 §3.6.34 — a REAL bank key. This is the one of the three that round-trips through
+          // `readLexicon`, which now retires a key the bank does not have — and an invented key in a family
+          // the bank DOES own is indistinguishable from a retired entry, so the block went empty.
+          key: 'sensation:breathless',
+          text: 'breathless',
           kind: 'word' as const,
-          family: 'taboo',
+          family: 'sensation',
           tier: 3 as const,
           hear: 0,
           say: 0,
-          state: 'okay' as const,
+          hearState: 'okay' as const,
+          sayState: 'okay' as const,
         },
       ],
     });
     const block = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
-    expect(block).toContain('filthy');
+    expect(block).toContain('breathless');
     // Second-tier by construction — a mild yes must never read as a want.
     expect(block).toMatch(/not favourites/i);
     const loved = block.slice(block.indexOf('Loves to hear'), block.indexOf('Fine with'));
-    expect(loved).not.toContain('filthy');
+    expect(loved).not.toContain('breathless');
   });
 
   it('builds a block for someone whose ONLY answers were "It\'s okay"', async () => {
@@ -172,7 +171,8 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
           tier: 3 as const,
           hear: 0,
           say: 0,
-          state: 'okay' as const,
+          hearState: 'okay' as const,
+          sayState: 'okay' as const,
         },
       ],
     };
@@ -196,7 +196,8 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
           tier: 3 as const,
           hear: 0,
           say: 0,
-          state: 'okay' as const,
+          hearState: 'okay' as const,
+          sayState: 'okay' as const,
         },
       ],
     });
@@ -262,12 +263,12 @@ describe('§3.6.2 — REGISTER steers generation, which the word list cannot', (
 describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
   const now = new Date('2026-08-17T10:00:00.000Z');
   const marked = (): EroticLexicon =>
-    applyNameMarks(
+    applyDirectionalMarks(
       emptyLexicon('p1', now),
       DIRTY_TALK.bank,
       {
         'names-praise:good-girl': { hear: 'love', say: 'okay' },
-        'names-rough-heavy:slut': { hear: 'never', say: 'love' },
+        'names-rough-heavy:anal-slut': { hear: 'never', say: 'love' },
         'names-warm:baby': { hear: 'okay' },
       },
       'take:1',
@@ -277,10 +278,10 @@ describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
   it('tells their own coach what to CALL them, and what they like calling their partner', () => {
     const block = buildOwnLexiconBlock(marked());
     expect(block).toContain('CALL THEM: good girl');
-    expect(block).toContain('What they like CALLING their partner: slut');
+    expect(block).toContain('What they like CALLING their partner: anal slut');
     // Per direction, so a one-way limit is never read as a two-way one — which would delete something they
     // actively want.
-    expect(block).toContain('NEVER call them: slut');
+    expect(block).toContain('NEVER call them: anal slut');
     expect(block).not.toContain('Never put these in THEIR mouth: slut');
   });
 
@@ -300,7 +301,7 @@ describe('the shared blocks every generation path can call (74 §5.8)', () => {
   it("gives a person's OWN hard nos to any path, with no partner and no ack needed", async () => {
     const { fs, angel } = await seedPair();
     const block = await buildOwnSuppressionBlock(fs, KEY, angel);
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     expect(block).toMatch(/NEVER use or suggest/);
     // The whole point: it does not depend on a relationship, a topic, or a tier. It can only prevent.
     expect(block).not.toBe('');

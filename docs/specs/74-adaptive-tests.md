@@ -829,6 +829,1141 @@ itself; conflicted vault copies are surfaced for a person to resolve, never auto
 would be re-pruned on the next adaptive read. A test records what a real two-copy merge would have to solve
 first — a tombstone — so a lifted `never` cannot quietly return from an older device.
 
+### 3.6.25 The second purge, and what happens to marks on a name that goes — APPROVED + **BUILT** (2026-08-19)
+
+The owner, on the register grid: _"several in the object category are not sexual at all"_, then _"purge repetitive
+ones that are duplicative like 'my twin', 'twin' — we don't need the 'my'"_. Two cuts, and a data question the
+first purge (§3.6.11) never answered.
+
+1. **Off-register names — 108 cut.** `names-object` had 50 of 103 that were household inventory rather than
+   objectification: `my paperweight`, `my bookend`, `my doorstop`, `my cog`, `my widget`. It was not only that
+   register — `names-worship` carried a religious-object thesaurus (`my scripture`, `my creed`, `my penance`),
+   `names-playful` was affectionate exasperation rather than a bedroom register (`my scallywag`, `my miscreant`),
+   and `names-masculine` had size-synonym padding. The line is §3.6.11's, applied more strictly: **a thing nobody
+   would ever address a person as.** Reviewing the first draft cut it back from 155 to 108 — furniture play,
+   ashtray play and the watersports vocabulary are real practices with real terms, and `my footstool` is not
+   `my doorstop`.
+2. **A name and its own possessive — 184 cut.** `love` / `my love`, `sir` / `my sir`, `kitten` / `my kitten`:
+   the same name asked twice, because the "my" decides nothing. 189 pairs existed; 184 went (the rest had
+   already gone with the off-register cut). Plus `papi`, the one name in two registers meaning the same thing
+   in both — so it was marked twice and could hold a love in one and a hard no in the other.
+
+**1,912 → 1,619**, every text and key distinct, no register left empty.
+
+**The data question.** A cut name does not leave anyone's lexicon — every consumer reads the person's own store,
+so nobody loses an answer to a purge (§3.6.11). That is right for the ANSWER and wrong for the CONTROL: the row
+that could change it goes with the entry, while `suppressedTexts` keeps reading the mark. A `never` on a retired
+name therefore kept that word out of every generated line with nothing left on any screen to lift it — the
+un-gettable-rid-of preference §3.2 abolished, reached through the bank instead of through orientation.
+**Measured on the owner's own vault: 173 of one account's 1,110 entries were retired names, 169 of them still
+suppressing; the other account had none.**
+
+So `pruneUnshownMarks` gained a retirement pass, which runs wherever it already runs:
+
+- **Retired INTO another name** (`Bank.retiredInto`, frozen in `dirtyTalkRetirements.ts`) — the 184 possessives
+  and `papi`. The survivor says what the retired one said, so the mark **moves**. The survivor's own answer
+  always wins; a migration only fills a side they left genuinely blank, so it can never overwrite something
+  they actually said.
+- **Retired outright** — no survivor, so the mark goes with the word. **Derived, not listed:** an entry whose
+  FAMILY belongs to this bank but whose KEY no longer does was cut from this bank, whenever that happened. That
+  covers §3.6.11's 266 and §3.6.24's 37 without a list that can go stale.
+
+Scoping by family is what makes the derived half safe: the lexicon is ONE store shared by every adaptive intimacy
+instrument, so another instrument's entries carry families this bank has never heard of and are untouched — as is
+a custom write-in, which is the person's own word and was never the bank's to retire.
+
+Verified against the real decrypted vault, not a fixture: **1,110 → 937 entries, 169 words released, and zero
+survivors whose own answer changed.**
+
+### 3.6.26 The words get two columns, like the names — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+The owner: _"theres no way to mark i like to hear vs. i like to say."_ Option B of a three-way mockup, chosen
+with the tap cost stated and accepted (~2 taps per word, ~1,700 for the deck).
+
+**What was actually wrong.** §3.6.13 folded the hear/say split out of its own step and into the deck row, and
+four things then made it effectively unreachable: the direction band still promised _"you split the two apart in
+the next step"_ of a step that no longer existed; the control rendered only after a `love` and only on a
+both-sided entry, so an unmarked screen gave no sign it was there; nothing read as selected over a value that
+was already set (a `love` writes 3/3 immediately, but `mark()` never seeded `store.splits`); and when it did
+appear it was `How much…` over two rows of `0 1 2 3 4` under three icon buttons — a second, unrelated rating.
+
+**What the vault said, which changed the shape of the fix.** Measured before building, on the real accounts:
+
+- The owner's 132 deck entries carry **no `love`/`okay`/`never` at all** — they are pure ratings, **119 of them
+  with `hear ≠ say`**, using **all five** values on the say side. He had reached the split; it was
+  undiscoverable, not absent.
+- `derivedWantsToSay` fired for **7 entries, every one from the deck, none from the pet names** — the reverse of
+  the assumption the work was scoped on. The names have been three-mark all along, and three marks cannot
+  express the old gap, so the deck's 0–4 scale was the ONLY thing feeding the goal list.
+- Seeding the new columns from the whole-entry `state` (the obvious migration) would have shown **119 real marks
+  as blank**.
+
+**Owner decisions, asked with those numbers in hand.** Three marks per direction, as mocked — the 1-vs-2 and
+3-vs-4 nuance goes. And the deck's existing answers are **removed**, not guessed at: a `0` on a side they were
+offered is genuinely ambiguous between "I dialled it down" and "I never touched it", and reading it as a hard no
+would have invented ~20 app-wide suppressions nobody declared.
+
+**What was built.**
+
+1. **One writer.** `applyBankMarks` (whole-entry) and `applyDirections` (the 0–4 split) are deleted;
+   `applyNameMarks`/`clearNameMarks` are renamed `applyDirectionalMarks`/`clearDirectionalMarks` and serve both
+   phases, as do one `recordMarkingPass` and one `AdaptiveMarkPass` payload. `hear`/`say` stay derived
+   (love → 4, okay → 2, never → 0), so the spine, the steer, the report and every other consumer read the two
+   numbers they always read.
+2. **The row is the names' row.** Both columns always visible, neither behind the other, reusing `colMe`/
+   `colThem` so the direction colours teach the same thing they do on the names; a one-sided entry's survivor
+   stretches across the row (`flex: 1 1 auto`), so there is no gap and nothing to explain.
+3. **The old data goes, and the boundary record with it.** `resetPreDirectionalDeckMarks` runs inside
+   `readLexicon` — the one read every consumer goes through — so there is exactly one shape in the app and
+   nothing downstream needs a branch for the old one. It needs no bank: a rating with no mark behind it can only
+   be pre-§3.6.26 deck data. A custom write-in keeps its word and loses only its rating. **And a `kind:'word'`
+   boundary record left behind is removed with the entry**, because `suppressedTexts` ignores such a record only
+   while an entry with that text exists — dropping the entry and keeping the record would START suppressing a
+   word they never ruled out, app-wide, with no row anywhere to lift it. Measured: 0 such records for the owner,
+   4 for the other member. Because it runs on a READ it does not itself write: every consumer sees the cleaned
+   lexicon immediately, and the file is rewritten by the next thing that saves — which, on the deck, is the next
+   tap. Verified on the real vault: **1,110 → 978 for the owner (all 132 deck entries, all 978 pet names kept),
+   16 → 0 for the other member, whose lexicon was deck-only.**
+4. **The whole-entry `state` is gone from the schema**, along with `LexiconState`, the `rate`/`setState` lexicon
+   edits (neither had a caller), the `split` phase, and `clearState`. `clearNameSide` becomes `clearSide` and
+   now lifts a per-direction `never` on a WORD as well as a name — the only route back once a term leaves the
+   bank.
+
+**Three consequences of the narrowing, found by measuring rather than by reasoning about it.**
+
+- **`derivedWantsToSay` would have been structurally dead.** `say <= 1` can only mean a `never` under three
+  marks, and `violatesBoundary` then strips it — so nothing could ever qualify, and the goal list, the practice
+  sheet and the coach's "wants to say" material would have gone permanently empty. The gap is now the one
+  asymmetry three marks CAN express — loved to hear, only okay to say — hoisted into a single exported
+  `hasSayGap` that the engine reads too, because `engine.ts` carried three more copies of the dead numeric test.
+- **"I love hearing it, I could never say it" is a boundary, not a goal.** It suppresses, and §3.6.15 forbids
+  the probe from asking anyone to justify one; treating it as the most coachable signal would put the single
+  thing they ruled out in front of them as homework.
+- **`say-confidence` floors at 0.5** for anything not ruled out, where the 0–4 scale could reach 0.25. Pinned at
+  the real number rather than left to be discovered.
+
+**Two defects fixed on the way**, both pre-existing and both extended by this change if left alone. The spine's
+`meanOf` **filtered a hard no out** before `value()` could score it 0 — its own comment says "a boundary
+contributes 0, it is a no, not a missing answer", and the filter was dropping those entries before the scorer
+saw them; already true of the names, and this change would have extended it to the deck. And the report's words
+section listed pet names too: a name loved-to-hear carries `hear: 4`, so 18 rows appeared under both "Love to
+hear" and "Call me". The spine also gained the **mirror** of §3.6.6's was-this-side-asked guard on the hear
+direction — checked rather than assumed: **no dimension on the spine is hear-directional today**, so it fixes
+nothing live and exists so the next one that is cannot reintroduce the bug by being written the obvious way.
+Pinned by a test against a one-off dimension.
+
+### 3.6.27 Two registers retired, and a fourth purge — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+_"completely remove the kinship words and saved data for it"_, then _"more purging on pet names that arent
+sexual, like 'mother of my children'"_. Scope confirmed before anything was deleted, because the neighbours sit
+close: **kinship + age gap**, and `daddy`/`mommy` **stay** — they live in `names-hard-power` as D/s authority
+terms beside `my daddy dom`, a different register that happens to share a word.
+
+- **`names-kinship` (44)** — family terms as pre-agreed roleplay: sis, bro, step-sis, step-mom, daddy's girl.
+- **`names-agegap` (37)** — sugar daddy, milf, dilf, cougar, toy boy.
+- **34 more names across five surviving registers**, on §3.6.11's line (could it plausibly be said in bed?):
+  relationship status and parenting (`wife`, `husband`, `mother of my children`, `my mother-to-be`), achievement
+  praise (`my best`, `my trophy`, `my crown` — the class §3.6.25 cut `my MVP` for), affectionate exasperation
+  (`my hurricane`, `menace`, `troublemaker` — the `my scallywag` class), and non-erotic devotion (`my world`,
+  `my sun`, `my blessing`). `my religion`/`my addiction`/`my drug`/`my sin` were offered and **kept**: they read
+  as erotic obsession, not worship. The cuckold and swinging "wife" names (`my slut wife`, `my cuck husband`)
+  were never candidates — cut is by **(family, text)**, so a word that also lives in a sexual register keeps
+  that copy.
+
+**The mechanism a removed FAMILY needed.** §3.6.25's retirement is DERIVED — "family still in the bank, key
+gone" — and that derivation stops matching the moment the family itself leaves: `ourFamily` simply stops
+containing it, so every mark in a deleted register would survive with no row on any screen to change it. That is
+the un-gettable-rid-of preference §3.2 abolished, reached by deleting the family instead of the entry. So a
+retired family is **listed** on the bank (`retiredFamilies`) and every mark in it is retired outright.
+
+**And the word records go with the marks.** `suppressedTexts` ignores a legacy `kind:'word'` record only while
+an entry with that text still exists, so removing entries and keeping records makes the removal START a
+suppression rather than end one. `pruneUnshownMarks` now reaps the records of everything it retires — which also
+covers the ordinary entry-level purges §3.6.25 introduced, where the same hole was open.
+
+Verified against the real vault: the owner had **28 kinship marks, every one a `never`**, and 41 in age gap —
+69 marks removed, his 978 pet names otherwise untouched. The bank goes to 1,477 names in 22 registers.
+`names-playful` is left with 2 entries (`freak`, `my little freak`); flagged rather than restructured, because
+folding them elsewhere would change their keys and orphan marks.
+
+### 3.6.28 The words are oriented by body too — APPROVED + **BUILT** (2026-08-19, owner-reported)
+
+_"the words need to be smart enough for the gender roles, for instance 'cum in me' shouldnt be avaible for a
+guy to say to a girl"_.
+
+Orientation already existed for the deck (§3.6.3) — it was the CONTENT that was missing, and reading the lines
+showed the report is two different faults wearing one sentence:
+
+1. **`cum in me` was simply untagged.** It names no organ of the SPEAKER's; it requires the LISTENER to have a
+   penis. So it is an ordinary listener-bodied line and today's mapping already handles it — it just carried no
+   `body`, so it was offered both ways to everyone.
+2. **`stretch my pussy` could not be expressed at all.** `shownSides` assumes a line is about the person it is
+   said TO — hearing it is about MY body, saying it about THEIRS. A line about the SPEAKER inverts that, and
+   without the flip a man is offered a line about his own pussy as something to say. Hence
+   `BankEntry.bodyOf: 'speaker'`, which swaps which body each direction is checked against. Absent ⇒ the
+   listener's, so ~1,000 existing declarations are untouched.
+
+**Tagged: 33 speaker-bodied lines and 109 body tags in total.** Only where the anatomy is genuinely decisive —
+the resolver fails open by design (§3.6.5), and withholding on a guess gives someone a quietly thinner test with
+no way to know why. So `make me come`, `come with me` and `please let me come` stay open to everyone, as do the
+external ones (`come on my face`) where a vulva-owner can plausibly be the subject; only ejaculation INSIDE
+(`cum in me`, `cum in my ass`, `breed me`) is treated as needing a penis. **Three lines name BOTH bodies**
+(`your cunt was built for my cock`) and one `body` field cannot say so — left open rather than tagged wrong.
+
+### 3.6.29 The production audit — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+A full audit of the bank and the code around it before release. Measured against the shipped bank and the
+owner's decrypted vault throughout; every number below is printed, not estimated.
+
+**The one that mattered most was not content.** The vault held **999 legacy `kind:'word'` boundary records,
+382 of them orphaned** by the four name purges. A word record was how a hard no was stored before §3.6.11 made
+suppression DERIVE from the live mark, and nothing has written one since — the only live writer is the probe's
+"don't ask me that again", which writes a `theme`. `suppressedTexts` ignores a word record only while an entry
+with that text exists, so a purge that removed the entry turned its record into a suppression with no row on
+any screen to lift it; and `violatesBoundary`'s everyday-word relaxation is derived from the person's live
+ENTRIES, so an orphan also lost the relaxation and degraded to a plain substring match on a word like `love`.
+Measured: **27% of ordinary intimate lines rejected app-wide** — `I love the way you look at me`, `kiss me`,
+`stay right there`. Every word record is now dropped in `readLexicon`, `addBoundary` and the bridge take themes
+only, and the two reap passes and the ignore-filter that existed to manage the legacy shape are gone with it.
+**7% after, and every remaining refusal is a live mark they can change.**
+
+**Suppression is unconditional, as its own docstrings always said.** `chatService` had both hard-no lists inside
+`if (adultAcked)`, and the person's OWN inside the topic gate as well (they ride along in
+`buildOwnLexiconBlock`). So a grief or money session carried no hard-no list at all, and REVOKING the 18+ ack
+silently re-opened every word either partner had ruled out. The positive halves stay gated on both; suppression
+can only ever PREVENT, so no state makes withholding it correct (§5.8a).
+
+**The content, decided by the owner from measured lists rather than proposed and applied.**
+
+1. **92 duplicate rows cut.** 82 lines appeared in two or three families (`taste me` in demands-receiving, oral
+   AND taste) — 9.7% of the deck, 184 wasted taps, and a latent contradiction: `suppressedTexts` keys on TEXT,
+   so a `never` on one copy suppressed the word everywhere including where another copy was loved. The keeper
+   is **spine-aware**: the family that feeds a dimension wins, because dropping the other copy would starve
+   the profile. Receiving-voice, claiming, taboo and degradation lose nothing; command goes 102 → 84.
+2. **"cum" for both senses** (owner's call, overriding the proposed split). 32 lines renamed; the ARRIVAL sense
+   stays English (`come here`, `come home`, `come back to me`, `don't stop, someone's coming`). Renaming
+   changes the stored key, so it orphans marks — done now because the §3.6.26 reset means nobody has deck marks,
+   making the cost exactly zero.
+3. **80 lines added: the doer's voice.** The owner's list (`gush on my dick`, `i want you to squirt`) pointed at
+   a structural hole, not a few gaps: the act families are almost entirely the RECEIVING voice — anal 21 self /
+   0 other, cum 27/1, squirt 11/0, impact 22/0. The person being done to had plenty to say and the person doing
+   it had almost nothing. **My own collision check caught 14 duplicates in my own proposal** before they landed,
+   which is the same defect this audit exists to remove.
+4. **24 orientation tags.** 22 deck lines named anatomy decisively and carried no `body`, so a straight man was
+   asked whether he wanted to HEAR "your cunt is soaking"; `miss` and `little miss` were untagged beside a
+   tagged `madam`/`ma'am`/`mistress`. Three lines name BOTH bodies and stay open, per §3.6.28.
+5. **11 sensation tags RELAXED.** `wet`, `tight`, `clenching`, `slick` and the rest describe a mouth or an ass
+   too, so tagging them to one body withheld rows for no reason — a man was never asked about `tight`. Only the
+   decisive six keep a tag.
+6. **`names-playful` retired** (2 entries after the purges — an almost-empty register card). Its survivors moved
+   into `names-rough-mild` via `retiredInto`, so a mark migrates rather than dying. This is the first use of
+   `retiredFamilies` and `retiredInto` TOGETHER and it is now pinned by a test.
+7. **5 within-family near-dupes cut** (`that ass`, `that cock`, `you're big`, `I'm all yours`, `I'm your slut`).
+   Intensity variants (`fuck my ass` / `fuck my ass raw`) stay — those are real distinctions.
+
+**The bank now holds every line exactly once**, guarded by a test: 2,429 entries, unique keys, no duplicated
+text anywhere.
+
+**Five spine dimensions added** — Acts / Body & sensation / Impact & restraint / Anticipation / Care &
+check-ins — with `delivery` folded into Narration. **14 of the 33 deck families fed no dimension at all**, so
+395 entries (~790 taps) were marked and reached no score, no trend and no `Insight.metrics`: the §3.6.8 defect
+("44 of 78 names were marked and then reached nothing") an order of magnitude larger. Adding to a fixed spine is
+the safe direction — an older take simply has no score there.
+
+**The synthesis digest keeps the two directions apart.** `lexiconDigest` was one line built from
+`Math.max(hear, say) >= 3`, so "call me this" and "I want to call them this" — opposite answers on a pet name —
+arrived as the same fact, while the prompt asks for "the role they take, what they want to BE to the other
+person" and for the hear/say gap. Neither was answerable from what it was given. It now splits by direction and
+carries the middle mark, which had been write-only for the synthesis exactly as §3.6.2 found it was for the coach.
+
+**The bank is bottomless, and the register cards now say so** (owner's call). A complete take is 2,446 rows ×
+2 marks = **4,892 taps**; nobody finishes it and nothing said so. Worse, the cards carried a percentage, a
+filling bar, "N of M names marked", "all marked ✓" and "N left" — five ways of saying a register is finishable,
+against the durable no-completion rule. It is not academic: **`names-rough-mild` went 130 → 132 in this very
+change**, so anyone who had marked all 130 would open the app to "98% · 2 left" having done nothing. Counts up,
+no denominators, and one line saying there is no finishing it.
+
+**Verified on the real vault, with the new bank:** 865 → 758 entries, 1,071 boundaries → 0, suppression
+1,140 → 709 (all live and liftable), and **zero leftovers** — no entry in a retired family, no key missing from
+the bank, no word record.
+
+### 3.6.30 The release pass — a stricter line on the names, one landing rule, one rail — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+**The criterion tightened.** _"Im still seeing pet names that are getting asked that arent sexual at all like
+handsome, handsome boy, big guy, bear, hero, big boy, tiger, wolf, warrior, soldier, boss man, lion, knight, my
+strong man, giant, rogue, etc. THERE'S A TON THAT SHOULD BE REMOVED. Please keep in mind all pet names should be
+specific to dirty talk and sexual."_
+
+This is a NEW line, not a missed application of the old one, and it was put to the owner as such. The four
+previous purges (§3.6.11, §3.6.24, §3.6.25, §3.6.27) all asked _could it plausibly be said in bed?_ — which keeps
+`handsome` and `bear`. The line now is **sexual and explicit, specific to dirty talk**, and it cuts deeper.
+
+**Method: 18 reviewers proposed, 17 skeptics tried to save.** 478 candidates, **267 saved** by the adversarial
+pass — more than half, which is the number that says the first pass alone would have over-cut. Every list was
+shown to the owner before anything was removed.
+
+**The two warm registers were ONE decision.** `names-warm` (54) and `names-other-tongues` (113) track each other
+exactly — `amor`=`love`, `bella`=`beautiful`, `chérie`=`darling`, `muñeca`=`doll` — because §3.6.11's rule judges
+a foreign endearment by how it FUNCTIONS in its own language. The reviewers' own split was incoherent (`babe`
+cut while `baby` was kept, `beautiful` cut while `beautiful thing` was kept) and was rejected rather than
+applied. The owner took a re-derived line that can be stated in one clause: **appearance and sexual claim stay,
+sentiment goes.** 115 cut, 52 kept, and `baby`/`babe` now share an answer.
+
+**`names-masculine` retired whole (52).** Its own note recorded why it read so badly: it was ADDED to fill a
+measured "the bank has essentially none of this" gap and was then filled with admiration — heroic, occupational,
+animal-strength — which is precisely the class the owner named. Retired rather than pruned to its 12 rough
+survivors, **with the measurement in hand**: all 12 (`stud`, `beast`, `brute`, `caveman`…) exist in no other
+family, so this does remove that vocabulary. Nobody holds a mark in the register, so no answer is lost.
+_An earlier version of this decision was taken on my claim that the survivors "mostly duplicate names-rough-mild"
+— which was unverified and false. It was corrected and re-put before anything was cut._
+
+**The deck was already on-criterion**: 5 lines of 929 (`I miss you`, `can't wait to see you`, `I love this`,
+`I love you`, `your arms`). The act families are sex acts by construction; the words step needed no purge.
+
+**203 cut in total, 2,429 → 2,226**, every text still appearing exactly once.
+
+**Orientation, third pass.** 24 deck edits, almost all the bank contradicting ITSELF: `leaking` tagged
+`penis` while its own example string exists untagged one family over; eight `anatomy-her` "hole" entries tagged
+`vulva` when `names-object` has agreed all along that an ass is a hole; `I'm gonna cum in your pussy` untagged on
+the line above its tagged twin. Plus the one missing flip in the bank — `so hard it hurts` was `body: 'penis'`
+with no `bodyOf`, so it was inverted on both sides for exactly the mixed-anatomy couple it matters for. Four
+examples fixed that contradicted their own tag (`my dream boy`, addressed `that's my girl`).
+
+**"Keep marking" went to the intro (§3.6.9).** Measured end to end rather than guessed: the owner's only
+`dirty-talk` result is `status: 'draft'`, and `coreBridge` defines `latest` as the first result whose status is
+NOT draft — so `latest` was null, the resume effect returned early, `start()` never ran, and the phase sat on its
+`intro` initial value. **The card and the take screen disagreed about what "started" means**: `cardStateOf` is
+satisfied by any result and `listAdaptiveResults` includes the draft. The rule is now the one the card already
+implies — **anything with prior work opens on the map; the intro is for a take nobody has touched** — keyed on
+prior work rather than on the retake FLAG, so a deep link, a resumed session and the card all land in the same
+place. `done` stays tied to retake intent: `hasPriorWork` is true for the whole of every take, so mapping it
+would land someone on the map at the end of the take they just finished.
+
+That change also surfaced a latent defect it made reachable: `start()` assigned `set({ state, … })` where a
+refused or failed `testsAdaptiveStart` resolves to `null` — blanking the state `load` had already fetched and
+leaving the screen on "Loading…" with no error and no route out.
+
+**The rail (§3.6.9), redesigned from an approved mockup.** One card of sections rather than four stacked cards —
+four borders, four paddings and four uppercase headings sat above the list the rail exists for. It gains the
+thing it never had: **"All steps", a way back to the map from every screen**, which keeps its place at phone
+width because the way back must not be what goes. Tally to a 3-up strip, spend to a footer line; the steps rise
+about 120px. Actions stay first — the column is sticky and an area runs to 47 rows.
+
+**Suppression, swept (§5.8a).** A map of all 34 lexicon consumers found the §3.6.29 `chatService` defect
+repeated in six more places, each one suppression made CONDITIONAL on something it can never depend on:
+
+- **`emailSuggestionService`** read the lexicon only for the intimacy family, which disabled the prompt
+  constraint AND both `violatesBoundary` output guards for every other suggestion email — on the one surface
+  whose output reaches a person with nobody reviewing it.
+- **`togetherPromptBuilder`** carried the couples hard-no list inside `if (allAdultAcked)`, so a pair where
+  either partner had not acked — or had revoked — generated prose both of them read with no list at all.
+- **`challengeSuggestService`** computed the list, passed it in, and interpolated it only into the `adultAllowed`
+  branch.
+- **`testNarrative`** spliced it only when `def.sensitive`, so every other instrument's narrative wrote back
+  with no idea what was ruled out.
+- **`storyPromptBuilder`** re-tested `gates.adult` over a value `subjectLexiconBlocks` had already split, which
+  threw away the suppression-only block for exactly the books with no other source of it. Fixed by carrying the
+  split in the TYPE (`LexiconBlocks`) rather than inferring it from a string — the leak guard that stops a full
+  vocabulary reaching a biography is preserved, because a bare string still means "steer".
+- **`goalSuggestService`** had the mirror fault: `buildPracticeGroundBlock` emitted the person's explicit
+  vocabulary with no 18+ re-check. Gated at the call site rather than in the helper, because `steer.ts` is
+  imported BY `generationService`, which `guidanceService` imports — reading the prefs in the helper would close
+  a cycle.
+
+### 3.6.31 The live-model pass — and the paragraph the filter was eating — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+Every AI phase run against **real Claude**, at the owner's real shape (758 entries, 34 loved-to-hear, 708
+suppressed), on an in-memory COPY of his lexicon — the §3.6.18 lesson, which cost him 132 marks when a harness
+ended with a destructive op against the live vault.
+
+**The model was never the problem.** All four phases returned `stop_reason: end_turn` with valid JSON: 11
+explicit lines carrying BOTH voices (the §3.6.29 doer's-voice addition visibly landing), five distinct
+scenario moments each with a non-verbal option, and a synthesis whose readings were specific rather than
+generic — it noticed that his cock vocabulary _escalates_ (hard → thick → fat → heavy → massive) and read it
+as a crescendo to be paced, then proposed fragments ("There." "More.") as the way into his say-gap.
+
+**What the run did find was on our side.** The synthesis model wrote **2,978 characters across 7 paragraphs
+and the boundary filter kept 2.** `runSynthesis` filters per paragraph — correct since §3.6.29 — but with 708
+suppressed terms the paragraph that gets eaten is the most useful one in the report: the hear/say-gap
+paragraph necessarily QUOTES the line the gap is about (`finger my ass`), and the bare name `my ass` was
+ruled out, which a multi-word term matches as a plain substring.
+
+Two fixes, both owner-chosen:
+
+1. **An explicit love outranks a substring no.** An occurrence of a banned term sitting INSIDE a phrase the
+   person has explicitly loved does not count. The term still binds on its own and in any line they have not
+   said yes to, so nothing they ruled out is loosened — verified: `my ass` alone is still refused, and so is
+   `I want to slap my ass hard`, while `fuck my ass` is allowed to HEAR and refused to SAY, exactly matching
+   his marks. `lovedEntries` is the definition used, because a second one (reading `hearState` rather than the
+   numeric rating) silently disagreed with the rest of the app and left genuinely loved lines suppressed.
+2. **The vocative rule only fires where the word ENDS the phrase.** `([^a-z0-9]|$)` accepted a following
+   space, so `my beautiful cock` read as being CALLED beautiful. Requiring terminal punctuation or end-of-line
+   keeps `my beautiful`, `come here, beautiful` and `you're my baby`, drops the adjective case, and leaves
+   §3.6.13's relaxation (`you look beautiful today`) untouched. `oh baby yes` is given up deliberately — the
+   comma form is the common one and still binds.
+
+**A correction, recorded because the method matters more than the number.** My first measurement reported
+"36% of the lines he loves are blocked by his own hard-no list" and "37% of the bank". Both were artifacts of
+my own harness calling `violatesBoundary` with **no direction**, which by documented design refuses anything
+ruled out either way. Measured per direction the real figure is **0 of 34 loved-to-hear and 0 of 8
+loved-to-say** — suppression was correct wherever the caller knows the direction. The defect was real but far
+narrower than I first reported: it is specific to the DIRECTIONLESS callers, of which the synthesis narrative
+is the one that matters. The fix is proven by reverting it and watching the hear/say-gap paragraph drop.
+
+### 3.6.32 The last two animal-sex leftovers — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+`names-petplay:my tomcat` and `names-breeding:broodmare`, cut at the owner's direction. Both are leftovers of
+the §3.6.24 purge, which removed the animal-sex names (`stallion`/`bull`/`stag`/`vixen` and their
+counterparts) rather than tagging them: `tom` is the male-cat morpheme and a mare is a female horse, and in
+both the animal's sex is the whole force of the word. Nobody holds a mark in either register. **1,300 names,
+2,224 entries.**
+
+**What made this worth a test rather than a one-line cut.** `broodmare` was a `retiredInto` TARGET
+(`my-broodmare → broodmare`), and that map is FROZEN by design — a later purge adds rows, it never rewrites
+them, or a mark migrated once would move again to somewhere its owner never chose. So the map now holds rows
+pointing at keys that no longer exist: these, and the ~20 `names-masculine:my-X → names-masculine:X` rows
+orphaned when §3.6.30 retired that register whole. `retireCutMarks` resolves a target through
+`bankEntry`, which returns `undefined`, and the mark is **retired outright** rather than migrating to a key
+with no row on any screen — the un-gettable-rid-of preference §3.2 abolished. Correct, and now pinned:
+the guard fails (the mark migrates instead) the moment `broodmare` is put back in the bank.
+
+### 3.6.33 The production audit — the bank says each thing once, and the examples are English — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+A full pre-release pass: duplicates, gender/body targeting, saved data, and whether the analysis reaches
+the whole app. Measured against the shipped bank and the owner's decrypted vault throughout.
+
+**The duplicate question has an answer, and it is "almost none."** A mechanical scan found 46
+normalized-collision groups; two semantic reviewers proposed **75 cuts**; a skeptic **saved 73**. That 97%
+save rate is not softness — it is what the list was made of. The dominant pattern, 27 of the 46 groups, is
+`names-body` against `anatomy-her`/`anatomy-him`, and it is **a real register split, not a duplicate**:
+`names-body:my cock` is a VOCATIVE (`look at you, my cock` — being addressed AS the part) while
+`anatomy-him:cock` is DESCRIPTIVE (`I want your cock right now`). Both family notes claim the same job in
+words ("what to call her body" vs "the bank had no anatomy names at all"), which is what made it look like
+the §3.6.29 defect at scale; the examples settle it. The cross-register suppression contradiction that
+WOULD make it one is already prevented by §3.6.31's loved-mask: ruling out the deck's `cock` while loving
+the name `my cock` leaves the name usable, because a loved phrase containing the needle is blanked before
+the match. Checked, not assumed.
+
+**Four genuine collisions, all owner-decided.** `names-hard-power:my majesty` (beside `your majesty`, same
+tier), `names-sharing:my third` (beside `our third`, same tier), `anatomy-him:thick cock` (the same word at
+two tiers), and `names-rough-mild:my terrible tease`. Verified before cutting that the surviving sibling
+carries the same suppression the owner had expressed — `my awful tease` is `never`/`never` for him too, so
+the cut costs him nothing. **2,224 to 2,221.**
+
+**The skeptic's saves are the substance of this section**, because they are what a keyword pass would have
+destroyed: `handmaid` post-_Handmaid's Tale_ means coerced reproductive slavery where `handmaiden` means
+biblical attendance; `femboy` and `my femme boy` are not homophones but a bare internet identity term
+against a queer term of art under a possessive; `names-sharing` is a nine-verb transaction ladder (loaned /
+offered / traded / shared / borrowed / swapped / passed-around / gifted / given) where cutting one member
+breaks the axis; `names-rough-heavy` runs a systematic slut/whore mirror where `stupid slut` is half a
+matched pair. And the seven `+ for me` deck pairs are ONE decision, not seven — kept, because the bank
+already tiers them coherently in **both** directions (`touch yourself` t2 to `+for me` t3, but
+`spread that ass for me` t3 to bare t4) and about a dozen `for me` lines have no bare twin at all.
+
+**What the audit actually found was not duplicates — it was broken English.** **61 names carried an
+ungrammatical example**: a bare-noun template applied to a name that already owns a possessive —
+`"you're such a my cock queen"`, `"someone's been a my sassy girl"`, `"you filthy my greedy slut"`,
+`"you pathetic my imbecile"`. 4.7% of the names, on the one screen a person reads several hundred rows of.
+Two independent detections agreed on the count; the owner chose `you're {name}` for all 61. Plus **four
+lines of double-encoded mojibake stored ESCAPED** (as `â` rather than an em dash), so it
+read as plain ASCII in the source and only became U+00E2 plus a C1 control at runtime — invisible to a
+decoded-text scan of the file, which is why it survived every prior pass. And three examples that
+contradicted their own entry: `your fuckhole` illustrated with **"you're just MY fuckhole tonight"** (a
+direction flip on the screen whose whole job is hear-vs-say), and `your little cunt` / `creaming` both
+presupposing the SPEAKER has a cock, which the term never requires — so a same-anatomy couple was shown a
+term with an example they cannot use. All three classes guarded, each **verified to fail when reverted**.
+
+**Targeting verified rather than re-derived.** Zero self-contradicting `body` pairs — the §3.6.30 sweep
+held. Zero `addresses` misses against §3.6.23's ACTUAL rule (grammatical gender only), and all 88
+reverse-check hits correct, including the foreign terms that carry gender in their own language
+(`bella`/`bello`, `mi reina`/`mi rey`). The one live inconsistency was six female-coded names sitting
+untagged beside a tagged `temptress`/`seductress`; the owner tagged `minx` · `my little minx` ·
+`naughty little minx` · `saucy minx` · `siren` · `jezebel` as `girl`. **Consequence, stated because it is
+user-visible:** the owner holds a hear-side `never` on all six, and a man is not asked to be called a minx,
+so the prune clears those six hear-side nos — they remain suppressed on `say`. The two both-genital deck
+lines stay untagged and fail open (the handoff said three; there are exactly **two**).
+
+**`peach` restored on the owner's own line** — not as a names-body vocative but as anatomy vocabulary used
+OF them: `anatomy-her:your peach`, tier 1, `your peach is so juicy`. Body-untagged, because he named it as
+"their ass or pussy" and one field cannot say both — the §3.6.5 fail-open posture.
+
+**Saved data, verified on the real vault through the app's own resolver.** Ben 717 to 715 (one empty row
+with no answer on either side, plus the `my terrible tease` mark that goes with its entry), 0 boundaries.
+Angel 16 to 0 — every one of her marks is a legacy DECK mark with no per-direction state, cleared by
+§3.6.26's owner decision, and her four `kind:'word'` boundaries correctly dropped. Zero retired-family
+entries, zero unknown keys, zero marks migrating to a dead `retiredInto` target.
+
+**The live-model pass, re-run because the content changed.** All four phases green against real Claude at
+the owner's real shape (717 entries, 666 suppressed): explicit lines carrying both voices, six tappable
+probe questions, five distinct scenario moments each with a non-verbal option, and a synthesis whose
+readings were specific — it found the hear/say gap on `I'm close` and read it positionally ("saying it puts
+you in the narrated seat rather than the narrating one"). **The §3.6.31 regression check passes: 4
+paragraphs written, 4 kept, zero eaten by the boundary filter.**
+
+**Six MORE conditional-suppression gaps, in the class §5.8a exists to close.** A consumer map re-verified
+all six prior fixes still hold, then found six paths that write prose a person reads and carried no hard-no
+list at all:
+
+- **`alignmentService.distillContextOnly`** — the strongest. It writes an `approved: true` Insight straight
+  into that participant's own context, and its own comment says it "mirrors `analyzeAssignment`" — which
+  DOES carry the list, for exactly that stated reason. The comment claimed the mirror; the code did half of
+  it. The §3.6.24 two-comments-disagree tell, again.
+- **`storyTitleService`** (the title and essence printed on the book), **`storyManuscript`** (findings
+  quoted back to the author) and **`storyStructureService`** — all three omitted the 6th argument to
+  `buildBiographerSystem`, whose own docstring says an absent block leaves the prompt byte-unchanged.
+- **`guidanceService`** (`guided.suggest`) — writes a `reason` per suggestion that the person reads, with
+  `adultAllowed` admitting the intimacy group into the catalog.
+- **`intakeService.synthesizePortrait`** — reads the whole `adult`/`restricted` intimacy section and writes
+  the portrait back to them.
+
+**And a fix that had shipped unguarded:** nothing anywhere asserted that `togetherPromptBuilder` emits the
+hard-no list for an un-acked pair — the §3.6.30 couples fix, the one whose whole point is that it is not
+inside the ack. Now pinned, together with the de-dup invariant it rides on (the standalone block is emitted
+only when the merged block is absent, which is safe only because the merged builder returns `''` when there
+is nothing to suppress either).
+
+**`names-breeding` retired whole** at the owner's request (2026-08-20) — 36 entries, tiers 4-5, 19 name
+registers left. Listed on the bank rather than derived, per §3.6.27: a family that has left cannot be
+derived FROM the bank, and its marks would otherwise outlive every screen that could change them. Verified
+on the real vault: the owner's 3 marks in it retire cleanly (717 to 712 across this whole section), with
+zero retired-family entries, zero unknown keys and zero marks migrating to a dead target.
+
+**Then nine more registers, at the owner's direction after reading the full table.** `names-innocence`,
+`names-feminising`, `names-petplay`, `names-roleplay`, `names-worthless`, `names-object`, `names-service`,
+`names-sharing` and `names-other-tongues` — 535 entries — plus 17 individually-named entries in registers
+he is keeping (9 in `names-hard-power`, 4 in `names-rough-mild`, 3 in `names-soft-power`, 1 in
+`names-worship`). **The names bank goes 1,261 to 709 and 19 registers to 10.** Three names on his list did
+not match anything (`my unfauthful wife`, `my loaded girl`, `my dress-up foll`); rather than guess at a
+typo, each was resolved by closest-match and reported — all three land inside registers being retired
+anyway, so the outcome is the same either way.
+
+**The measurement that made it coherent rather than merely large:** of his 162 marks across those nine
+registers, **295 sides are `never`, 5 are `okay`, and not one is a `love`.** He had already ruled out
+essentially everything in them, so retiring the registers matches what his marks already said — and no
+loved vocabulary is lost anywhere. Verified end to end on the real vault: **717 to 547**, reconciled mark
+by mark (112 roleplay, 50 object, 5 rough-mild, 3 breeding, and the one legacy empty row that the migration
+step drops before the prune ever sees it).
+
+**A third pass, and `names-aftercare` with it.** 54 more names, of which 50 matched. Four did not, and the
+three that were typos mattered more than usual because all three were among that register's survivors:
+`my help girl` / `my storng one` / `my sweet wreak` were confirmed by the owner as `my held girl` /
+`my strong one` / `my sweet wreck` rather than guessed. (The fourth, `my divine one`, matched nothing
+because the previous pass had already removed it.) With those confirmed the list named **29 of the
+register's 34**, which is the §3.6.29 `names-playful` situation exactly — a register worn to a handful is a
+worse answer than one that has gone, because the survivors no longer represent what it was for — so it was
+retired whole. Plus 23 in `names-body` and `my deity` in `names-worship`. **The names bank ends at 651
+across 9 registers, from 1,297 across 20 at the start of this section.** On the vault: 547 to 524, all 23
+from `names-body`, all `never`, and **zero marks in `names-aftercare`** — retiring it whole cost nothing.
+
+**A fourth pass, and a better instrument for the next one.** 41 more names: 33 in `names-hard-power` plus
+two confirmed typos (`my loard`, `my load and master`), and 6 in `names-soft-power` — the pet-play leftovers
+(`pup`, `puppy`, `good pup`, `good puppy`, `cub`) and `my bottom`, whose counterpart `my top` was in
+hard-power. **The names bank ends at 610 across 9 registers**, and **zero of the owner's marks were
+affected**. `names-hard-power` was NOT retired whole despite losing 35 of 54: unlike aftercare its 19
+survivors are its core — sir, ma'am, mistress, daddy, master, owner, alpha, dominatrix — so the register
+still represents what it is for, which is the test §3.6.29 actually sets.
+
+**A fifth pass, the largest: 236 names, all matched, no typos.** 158 from `names-rough-heavy`, 36 from
+`names-rough-mild`, 17 from `names-soft-power`, 15 from `names-body`, 8 from `names-praise`, and one each
+from `names-warm` and `names-yours`. **The names bank ends at 374 across 9 registers**; the owner's marks
+go 524 to 305, and once again **385 `never` sides, 2 `okay`, not one `love`.** `names-rough-heavy` was NOT
+retired despite losing 158 of 182: its 24 survivors are the specifically sexual crude names (`my cock
+queen`, `anal slut`, `my three-hole slut`, `sex slave`, `my personal fucktoy`) where what went was the
+generic slut/whore/skank/tramp mass — so, as with `names-hard-power`, the register still represents what it
+is for.
+
+**The cost of this one was almost entirely in the TESTS, and it is worth recording why.** `whore` and
+`slut` were the canonical single-word crude fixtures across **19 files** — the stand-in for "a term this
+person ruled out" in the lexicon, steer, engine, spine, chat, email, goals, challenges and coreBridge
+suites. Removing them broke 30 tests at once. Two lessons came out of the repair:
+
+- **A bare-word fixture is a dependency on the bank's CONTENT, not just its shape.** The replacement had to
+  be single-word (`manwhore`), in a family outside `EVERYDAY_NAME_FAMILIES` (so plain substring matching
+  still applies rather than the vocative relaxation), and untagged where the test asserted no tag — three
+  constraints that only became visible once the original was gone.
+- **A blanket find-and-replace across test files is itself a defect generator.** It silently rewrote the
+  _source_ key of the retirement-migration tests to their own target, making two of them assert that a name
+  migrates to itself; and it dropped a `man`-tagged name into a list whose whole assertion is that the tag
+  is undefined. Both passed the replace and failed the run — which is the only reason they were caught.
+  Every swapped fixture was re-checked against what its test actually claims, not just against compiling.
+
+Where a rule genuinely lost its subject it was removed with the reason recorded rather than re-pointed at
+something that does not exercise it: the possessor half of the head-noun rule ("my daddy's slut" is a slut
+of any gender) has no subject left, because no possessive-owner name survives.
+
+The owner then asked for a better way to do this than pasting lists, so the bank is now also published as
+an **interactive checklist** — every name grouped by register with its tier, example and tags, ticked by
+default; unticking marks it for removal (strike + a cut stripe, so the state reads in FORM and not colour
+alone) and the removal list builds itself, ready to paste back. It is regenerated from the bank after each
+pass, so it never drifts from what is actually shipped.
+
+Two references to the retired register were left deliberately, both matching precedent: the FIXED spine
+(which already carries `names-playful` and others, where a stale id is inert and removing one would change
+a dimension's identity across retakes), and `EVERYDAY_NAME_FAMILIES` — a RELAXATION scope that already
+lists five retired families, where a stale id contributes no entries and so can loosen nothing.
+
+**Five tripwires fired, and each got a different answer — none of them "delete the assertion."** The
+register FLOOR failed twice and was lowered twice, deliberately. The roleplay-framing rule named two dead
+ids, so it is now DERIVED — any surviving register that presents itself as a roleplay must say so in its
+own note — which re-arms automatically if such a register is added again. The anatomy-head rule and the
+gendered-role rule both still had live subjects, so they were re-pointed (`names-rough-heavy:my cock queen`
+and the `master`/`mistress`/`my domme`/`my dom` set) rather than dropped. Only the feminising rule was
+removed, because its whole premise — a feminine name aimed at a man — has no subject left in the bank, and
+a guard with a borrowed subject stops guarding what it claims.
+
+**Two tripwires fired on it, and both were right to.** The name-register FLOOR (`>= 20`) failed, which is
+exactly what a floor is for — it is lowered to 19 deliberately rather than drifting quietly. And the
+§3.6.32 dead-target guard went partly VACUOUS: it used `names-breeding:my-broodmare`, so retiring the
+register whole made it pass through the FAMILY branch of `isRetired` instead of the dead-target branch it
+documents. Re-pointed to `names-warm:my-angel` (one of 21 rows with a live source family and a dead
+target), and re-verified to fail for the reason it claims.
+
+**Two phone-width fixes, both owner-approved.** Inside an open register the exit — "Done with this one" —
+sat in `.railWrap`, which §3.6.30 never gave the fixed-bar treatment it gave `.rail`. It was
+`position: sticky` in a column that stacks at 900px, which that section's own comment already explains
+cannot work: a sticky element pins only while its own area is on screen, and a strip after 132 rows never
+is. So in `names-rough-mild` the only way out sat below every row. It now leaves the flow and joins the
+bar. **The trap in fixing it:** a LATER `@media` block set `.railWrap { position: static }`, and at equal
+specificity the later rule wins — the same cascade-ordering trap this stylesheet has hit before — so the
+fix is inert unless that rule goes. And the bar's four-row wrap is fixed at its cause rather than by
+wrapping (§12): the long half of each verb ("Finish **— show me my profile**", "Done **with this one**",
+"Skip **this step**") is hidden by CLIP, not `display: none`, so it stays in the accessible name — a label
+that changes with the viewport is the §3.6.11 broken-locator trap one level down. Each label is kept to
+ONE child, because `Button` is a flex row with a gap and a two-node label doubles it (§3.6.13).
+
+**Deliberately NOT wired, recorded so the next audit does not re-tread it:** classifiers, the semantic
+dedup, image-prompt distillations, `gapFinderService` (the drafting pass that consumes it carries the list),
+and `improveQuestion` (its `deps.personId` is the AUTHOR, not the recipient, and the rewrite is
+author-reviewed in the editor before it is sent).
+
+> **Corrected 2026-08-20 (§3.6.34).** Three of the entries above were wrong, and the reason each was wrong is
+> the same: they were excluded as "planners" or "backfill" by the NAME of the pass rather than by what the
+> pass emits. `coverageService.refreshNextCandidates` writes full questions, the ask-ledger backfill writes
+> topic blurbs, and `planService` writes each thread's `angle` — and all three are rendered to the person on
+> the Explored tab. All three now carry the list. `refreshCoverage` (which returns only
+> `{lifeArea, depth, subTopics}`) and the semantic dedup (which returns indices) stay excluded, correctly:
+> the test is what the pass RETURNS, never what it is called.
+
+### 3.6.34 The pre-release audit — the bank is what he wants it to be, and the hard-no list finally reaches everything — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+A second full pass over the whole bank before release, and a second sweep of the §5.8a class. The bank work
+is small; the correctness work under it is not.
+
+**The duplicate question, answered again and cheaply.** A mechanical scan over all 1,298 entries found **2
+exact normalized collisions** (`harder`/`harder?`, `more`/`more?` — a demand and a check-in, a real register
+split) and **52 content-stem near-collisions**, of which 47 are in the deck. Those 47 are overwhelmingly the
+same `sensation` vs `demands-receiving` split §3.6.33 already adjudicated — `pounded` is a state you report,
+`pound me` is a thing you ask for — so the answer is the same answer, and it is not re-litigated. Inside the
+374 names there were **five** near-collisions, and every one is the deliberate bare-vs-claimed axis
+(`warm:babe` against `yours:my babe`).
+
+**Five names cut, and the interesting one is not a duplicate.** `names-warm` carried **both** `babydoll` and
+`baby doll` at the same tier — one name, two spellings, and since suppression keys on TEXT a `never` on one
+left the other live. `names-rough-heavy` carried `my all-holes slut` beside `my three-hole slut` and
+`my personal fucktoy` beside `my private fucktoy`, each pair naming the identical thing at the identical tier
+with no rung between them. All three keep their marks: the survivor is the same name, so the row is listed in
+the retirement map rather than retired outright. The fifth and sixth are the ones a keyword pass would never
+have found — **`names-soft-power:my ward` and `my charge`**, which are the retired kinship/custody axis
+wearing a coat with no family word in it. That is how they survived §3.6.27's scan. The register's real axis
+is smallness and softness (`my small one`, `pet`, `kitten`), and it is intact without them.
+
+**Seven names added, closing the one real hole in the bank: the mouth.** 123 body names covered cock, dick,
+balls, pussy, cunt, clit, ass, tits, nipples, holes and the whole body — and there were **zero** entries
+containing mouth, throat, lips or tongue anywhere in all 374 (the only near-hits, `mouthy thing` and
+`my mouthy girl`, are back-talk). `my mouth` (t3) · `my greedy mouth` (t4) · `my tight throat` (t5), tiered
+against their own siblings (`my pussy` 3, `my greedy cock` 4, `my tight cunt` 5). The mouth also needs no
+`body` tag, so unlike every cock/pussy name it is never withheld by orientation. Two parts were missing the
+bare rung every other part has — **`my clit`** and **`my balls`**, which existed only as hard/needy/swollen
+and full/heavy/swollen. And the bodily-response axis was populated 12 girl-addressed against 4 man-addressed,
+so **`my moaning boy`** and **`my panting boy`** complete a twin grid that already existed
+(`desperate boy`/`girl`, `dripping boy`/`girl`). These are not the §3.6.30 `names-masculine` mistake: that
+register was a gender-gap filler filled with admiration, and these are bodily-response names inside a live
+register, with their examples lifted from the exact girl twins. **376 names across 9 registers** — and
+then 364: on seeing them the owner cut twelve more, including both of those response twins, which he
+had flagged the risk of himself when they were offered. The other ten are the pet-play leftovers
+`names-hard-power` and the fourth pass had already been thinning (`puppy girl` · `puppy boy` ·
+`my little puppy` · `my sweet puppy` · `my sweet cub` · `my rag doll`) plus `my little princess`,
+`my darling pet`, `pretty pet` and `my quiet one`. `names-soft-power` 46 → 36, still well clear of the
+floor, with `pet`, `my little pet`, `my sweet pet`, `princess`, `kitten` and `bunny` all surviving, so
+the register still runs its own axis. **Not one of the twelve carried a mark from either person**, and
+none has a same-name survivor, so all twelve retire outright with no migration row.
+
+**The deck stays.** Put to the owner as its own decision rather than transposed, because "a sexual pet name
+said to turn on a partner" is a rule about NAMES and the deck is lines, acts and 128 anatomy/sensation words.
+Three things make a deck cut categorically unlike the five name purges, and all three were measured first:
+
+- **A deck cut can take a LOVE.** He holds 22 marks in live deck families and **16 of them carry a love**
+  (`anal` 21, `cum` 1). Across the ~600 marks the name purges retired, not one was a love — which is exactly
+  why those were obviously correct. That safety property does not hold here, and the live-model synthesis
+  built its best reading on this precise ground.
+- **The 128 word entries ARE the suppression keys** (§3.6.2). `violatesBoundary` matches word-boundaried
+  short strings, so banning a WORD catches every future generated line containing it while banning a SENTENCE
+  lets a paraphrase through. Removing a word entry removes the person's ability to suppress that word
+  app-wide.
+- **All 33 deck families now feed a spine dimension** (§3.6.29 closed the 14 that did not), and the spine is
+  FIXED so retakes stay comparable. Retiring a family starves a live dimension, which is a spec decision
+  about the spine, not a bank edit.
+
+§3.6.30 had already checked the deck against the older, looser line and found **5 of 929** — the act families
+are sex acts by construction. So the deck keeps every entry, and only its defects were fixed.
+
+**Seven authoring defects, all in the deck, none of them content calls.** Five word entries were illustrated
+with a verbatim copy of another entry's line — `sensation:hard` with the `praise-him` line, `dripping` and
+`leaking` with the `narration` lines, `split open` with the `size-fit` line — so the same string appeared
+twice on screen as two separately-markable rows. `anatomy-her:your holes` (t3) quoted the t5 entry
+`all your holes`, making the two rows indistinguishable in practice. **The example is what changes, never the
+entry**: the word/line split is the suppression model. Two more the scan surfaced on its own: `sensation:wrecked`
+was illustrated with `wreck me` — a DEMAND, where every one of its siblings reports the state ("you've
+destroyed me", "I'm completely spent") — and **`anal:breathe and let me` was a truncated TEXT**, completed by
+its own example as "breathe — and let me in" and mirrored exactly by its sibling `relax and let me in`.
+Correcting the text changes the key, so it takes a migration row — which meant the map could no longer be
+called `DIRTY_TALK_NAME_RETIREMENTS`. It is `DIRTY_TALK_RETIREMENTS` now, because a constant whose name
+contradicts its contents is the §3.6.24 tell in advance.
+
+**The defect under all of it: 242 orphaned suppressions, live on the real vault.**
+
+`pruneUnshownMarks` retires a mark whose bank entry has been cut — but it needs an orientation as well as a
+bank, so it can only run on the Tests screens, and it is the only thing that writes the result back. Every
+other consumer — `chatService`, `storyGenerationService`, `emailSuggestionService`, `generationService`,
+`challengeSuggestService`, the steer — calls `readLexicon` directly and got the raw file. And `suppressedTexts`
+emits `entry.text` for any `never` without asking whether the bank still has that entry.
+
+So a purge does not merely fail to clean up: **it starts suppressions**. §3.6.27 closed exactly this hole for
+the case where the entry survives; this is the case where the entry is gone, and it was open the whole time.
+Measured on the owner's decrypted vault before the fix: **563 entries on disk, 320 live, 242 orphaned** —
+suppressing 514 words where the correct number is 272, with **no row anywhere in the app able to lift any of
+the 242**.
+
+**Measured honestly, because the temptation was to overstate it.** Those orphans refuse **~5% of the live
+bank's explicit lines** (31 of a 300-line sample against 28) and — checked against a dozen ordinary intimate
+sentences — **zero ordinary lines**. This is not §3.6.13 again; ordinary coaching was never affected. It also
+self-heals the moment he opens the take. What makes it worth fixing anyway is that it recurs on every purge
+release, it persists for however long someone goes without opening Tests, and the six fixes below have just
+increased the number of surfaces reading that list.
+
+**The fix is where the rule belongs, not where it was convenient.** Retirement needs only the BANK — "this key
+is not in the code any more" is a fact about the data, not about the person — so it moves into `readLexicon`,
+beside the two migrations already there, and every consumer gets it for free. The orientation half stays on the
+Tests screens, where it belongs. `lexicon.ts` cannot import the instrument (`dirtyTalk.ts` → `spine.ts` →
+`lexicon.ts` closes a cycle), so the assembled bank moved into a LEAF module, `instruments/lexiconBanks.ts`,
+which `dirtyTalk.ts` imports too — one definition, no drift, no cycle. `LEXICON_BANKS` is a list because the
+lexicon is shared across adaptive instruments; `retireCutMarks` is family-scoped, so an instrument only ever
+retires its own entries and a custom write-in is never touched. Verified on the real vault: **242 → 0**.
+
+**Six MORE conditional-suppression gaps, and the two worst are the onboarding interview.**
+
+- **`intakeService.buildIntakeSystem`** took no suppression argument at all — and it feeds BOTH the live
+  interview turn and the per-section reflection. The `intimacy` section is `adult: true, restricted: true` and
+  carries a go-deeper composer, so a person chats live about their sex life, in a stream, with the one list of
+  words they have ruled out absent from the prompt; the reflection is then rendered verbatim on the closing
+  portrait with nobody reviewing it. `synthesizePortrait`, one function over, has carried the list since
+  §5.8a — and its comment gives the reason in so many words, "their hard nos apply to what is written about
+  them as much as to what is asked of them". The comment was right about all three and the code did one. The
+  §3.6.24 two-comments-disagree tell, for the third time.
+- **`coverageService.refreshNextCandidates`** — the strongest instance of a different failure: its own
+  `CANDIDATE_SYSTEM` instructs the model to "NEVER propose anything they've indicated … touches a boundary
+  they'd rather leave", and it was never given the boundaries. An instruction with no data behind it, writing
+  questions rendered verbatim on the Explored tab.
+- **`planService`** writes each thread's `angle`, also rendered on the Explored tab; the recipient's hard-no
+  list is now resolved BEFORE the plan rather than after it, so the pass that chooses the ground has it too.
+- **`askLedgerBackfill.writeBlurbs`**, **`storyMemoryService.maybeGenerateWorkingTitle`** (its three siblings
+  in the same file all route through `buildMemorySystem`; this one built its own system string).
+- **`improveQuestion`** stays excluded, and for a structural reason rather than an oversight: its input carries
+  no recipient id, and the author reads the rewrite in the builder before it is sent.
+
+**Guards.** Four for the dead-key retirement (drops a dead key; MOVES a mark when the bank names a survivor;
+leaves another instrument's family and a custom write-in alone; idempotent on a live mark), four for the
+suppression gaps, and one new bank invariant — **no entry is illustrated with another entry's whole line**,
+which is the class the audit actually found. Its sibling already caught an example restating its OWN entry;
+nothing caught the other shape. Every one **verified to fail when reverted**, with the revert asserted to have
+applied (`count == 1`) before believing the result either way.
+
+**The names step now navigates like the words step, because they are two screens of one test.** The words
+step has had an in-place area picker and Previous/Next-area in the rail since §3.6.22; the names step still
+made you leave the register, land back on a 9-card grid and choose again — a round trip per register, nine
+times. It gains the same shape: `Register N of 9 · X marked · Y names`, a full-width `Select` that jumps
+straight to any register, and **Next register / Previous register / All registers in the SHARED rail**, which
+is where the words step has always kept its area verbs. The separate "Done with this one" card above the rail
+is gone — it was the last thing making the two screens different shapes. Two details are decisions rather
+than conveniences: the index comes from the **bank's own order, never the card sort** (an index that moves
+when you re-sort is worse than no index), and a register change **resets the scroll and moves focus** to the
+new register's name, exactly as `goToArea` does — otherwise a keyboard or screen-reader user gets nine silent
+screen changes.
+
+**The filter shipped with a bug in it, reported within the hour, and it is the §3.6.11 conflation in a
+fourth place.** `isStillUnmarked` was written as `hear === undefined && say === undefined` — "does this row
+have any answer at all" — so answering ONE side of a two-sided row made it vanish from "still unmarked" while
+the other side was blank. That is precisely the row the filter exists to surface. The right question is "does
+every side this person was actually OFFERED have an answer", which needs `entry.sides`, and core has had
+exactly this distinction since §3.6.11 (`hasAnswer` vs `directionAnswered`) — for the same underlying reason:
+reading a blank side as an answer puts a false statement in front of the person. The fix is one exported
+predicate both marking steps import, so they cannot drift into two definitions of it again, and a row shown
+on NO side falls out correctly (`some` over an empty list is false). Guarded on both steps with the reported
+sequence — mark one side, assert the row is STILL listed, mark the other, assert it goes — and both verified
+to fail against the original predicate. **Lesson: four definitions of "answered" is three too many; when
+core already separates two concepts by name, the view layer's job is to mirror one of them, not invent a
+third.**
+
+**And a fan-out audit of the class, which found a bigger one underneath.** Rather than fix the reported
+filter and stop, four independent lenses were run over the marks model — the renderer's counts, the core
+derivations, the readiness gates, and the bridge's view assembly — each finding adversarially verified by a
+skeptic whose default was "not a bug". 17 candidates, **7 confirmed**, and they reduce to three causes.
+
+**Cause 1: `store.marks` was seeded from the WHOLE lexicon.** There is one lexicon per person —
+`applyDirectionalMarks` writes the deck's marks and the pet names' marks into the same `entries`, which is why
+`steer.ts` and the report both filter names back out — and the store's `load` seeded from all of them with no
+family filter, while the denominator (`testsBank` → `deckFamilies`) is deck-only. So `marks` was a SUPERSET of
+`nameMarks` rather than its sibling, and four numbers read it as "the words step's marks":
+
+- the rail's tally, whose numerator and denominator were then drawn from different populations — **measured on
+  the owner's vault: "320 of 924 shown here" on a step where he had marked 22 words**, and capable of
+  exceeding 100%
+- the rail's trailing "N words" on the words step, same 320
+- `bankTally`'s love/okay/never, counting every pet name as a word
+- and the one that is not cosmetic: `stepStatuses` does `nameMarks + bankMarks`, so **every marked name was
+  counted twice** against a bridge that counts each entry once. The renderer greys an AI step on
+  `generationReadiness(marked, loved)` and the bridge REFUSES on the same helper — whose own comment says the
+  two "can never disagree". With 8 marked names and no words the renderer sees 16, offers the step, and the
+  bridge answers "mark a few more names or words first."
+
+One fix — seed from the step's own rows — corrects all four, and makes the two populations partition the
+lexicon so the renderer's total equals the bridge's again.
+
+**Cause 2: the probe asked about one word three times, and twice wrongly.** `openAmbiguities` had a third
+ambiguity, `cringe`, which was `lexicon.entries.filter(hasSayGap)` — **byte-identical to `frozen` above,
+taking the same `[0]`**. Not a second signal: both fired together on the same entry, the probe consumes one
+ambiguity per pass and keys `asked` on the id, so the take spent a **second billed round re-asking about the
+identical word**, and `ambiguitiesLeft` reported one open gap as two. Its question was also false — "rate
+themselves near zero on saying it", when `hasSayGap` requires `sayState === 'okay'`, the MIDDLE mark and an
+explicit mild yes. `frozen`'s own comment six lines above records that it was rewritten away from exactly that
+phrasing for exactly that reason; the sibling was fixed and this one was left, which is the §3.6.24
+two-comments-disagree tell for the fourth time in this spec. And the family `split` ambiguity drew its
+contrast from two direction-blind lists over the same rows, so a single row marked love-to-hear + okay-to-say
+landed in both and the question came out **`They loved "good girl" but were only lukewarm on "good girl"`**,
+with that word listed twice in `terms` — which is the say-gap `frozen` already asks about properly, not a
+split in the register. Reproduced against the shipped bank before either was touched: **one marked row
+produced three ambiguities about that one word.** Now one.
+
+**Cause 3: the map's total added five different things.** `TakeMap` summed every counted step and rendered it
+as "N marks so far" and, on the retake screen, "You have N marks on record from last time" — the number
+someone weighs when deciding whether to keep them or start from an empty sheet. Three of the five addends are
+not marks, and this same file's `doneLabel` docstring already said why they cannot be added ("132 marks beside
+6 answered questions beside 8 moment picks is three different things wearing one bare number"), which is what
+`StepStatus.unit` was added for. The rule now lives beside the units as `markCount`, and the map was **entirely
+untested**, which is how it drifted.
+
+**Two more consistency calls, both the owner's.** The words step carried a **filling progress bar** —
+`(areaIndex + 1) / 36 * 100%` — that reached full on the last area whether you had marked everything or
+nothing. That is a meter filling toward a full width, which is the thing §3.6.29's durable rule names, and
+§3.6.29 had removed exactly it from the name register cards while leaving it here. **The bar goes; "Area N of
+M" stays** — the rule's line is a denominator paired with a meter, not a count. And **"still unmarked" ships
+on BOTH steps**, in one shared `MarkFilter`, because adding it to the names step alone would have created a
+new inconsistency in the same change that removed one. Its own label is a COUNT ("12 still unmarked"), never
+"12 of 47"; it is per-screen state rather than a store field (a way of looking at the current screen, not
+something that should follow you to the next area or survive a reload as a half-hidden list); and it **resets
+on every area and register change**, because arriving on a filtered empty list reads as a broken area.
+
+**One live-model finding, fixed.** All four phases were re-run against real Claude at the owner's real shape.
+Lines, probe and synthesis were green — the synthesis wrote four paragraphs and **all four survived the
+boundary filter**, which is the §3.6.31 regression check — and its readings were specific and positional
+("almost everything on your hear list points outward"). The SCENARIO phase came back `MALFORMED` once in four.
+Re-running it three times was 3/3 green, so it is model variance rather than a defect — but it exposed one:
+`runScenarioPhase` was the last phase parsing **strictly**. `SceneSchema` is per-element tolerant, which only
+helps once the OBJECT parses; a reply cut off mid-set fails `extractJsonObject` wholesale and every complete
+scene before the cut is thrown away with the truncated one. It now falls back to
+`salvageJsonObjectArrayField(text, 'scenes')` — the §37 salvage the portrait and the synthesis already use —
+so a truncated set keeps the scenes that did arrive. Guarded with a reply cut off mid-third-scene, **verified
+to fail when reverted**. The failure already degraded honestly (a named reason and a retry, §3.6.17); this
+makes it rarer.
+
+**Two fixtures broke, and both were asserting the opposite of their own claim** — the §3.6.33 lesson, from the
+other direction. `adaptiveService.test`'s "leaves ANOTHER instrument's entries alone" built its foreign row by
+spreading a Dirty Talk entry, so it carried `names-rough-heavy` with a key the bank does not have — which is
+precisely the shape of a RETIRED entry, not a foreign one. And `steer.test` invented `taboo:filthy`: a family
+this bank owns with a key it does not. Neither was a behaviour regression; both were fixtures that only looked
+correct while nothing checked liveness. A bare invented key is a dependency on the bank's content just as much
+as a bare word is.
+
+### 3.6.35 The three AI steps become one shape — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+Owner, testing: _"none of them lets me see and change everything it generated."_ The names and words steps were
+made consistent with each other in §3.6.34; these three are the other half of the take, and each was a
+different shape.
+
+**The root cause is one defect, wearing three faces: the generated SET was never persisted — only the reaction
+to it was.** The lines lived in `store.lines`, the probe's pass in `probeQuestion` + a renderer queue, the
+moments in `store.scenarios`. None of that survives a reload, so a line nobody reacted to, a question nobody
+answered and a moment nobody picked were unreachable by construction. Measured against the shipped code:
+
+| step    | the set lived in | survived a reload          | survived "write me more"                                  |
+| ------- | ---------------- | -------------------------- | --------------------------------------------------------- |
+| lines   | renderer only    | no — reacted lines only    | no — hard replace, **and on failure** (`out.lines ?? []`) |
+| probe   | renderer only    | no — answered/skipped only | a queued question you navigated away from was lost        |
+| moments | renderer only    | no — picked moments only   | yes — already appended (§3.6.19)                          |
+
+So the moments step had already been given half this fix and the lines step never was. Three more of the same
+class, none of them reported: an unreacted line was **absent from the model's avoid-list** (the bridge builds it
+from these same turns), so "write me more" could hand back the lines it had just wiped; the rail counted every
+probe turn as "N asked" while the screen filtered to answered, so the two disagreed; and `answersDigest` was
+handing the model `→  skipped` as though a passed-over question were an answer.
+
+**The fix is that the take's own turns ARE the set.** `AdaptiveTurn.answer` is optional, and an absent one means
+"offered, not yet responded to". Every generating phase records its pass through a new `stampOffers` **in the
+bridge** — one write, before the renderer sees anything, so it survives a crash and joins the avoid-list for
+free. `stampTurn` replaces **in place** rather than filter-and-append, because the steps render from this list
+now and answering the second of six lines used to move it to the bottom.
+
+**Four owner decisions, taken before any code:**
+
+1. **Gender.** Measured first: identity and address reached `orientation.ts` and **no prompt at all**. Owner:
+   feed it in. `whoBlock` now states who each of them is in every generating prompt — identity is the BODY,
+   address is what they like being CALLED, stated as two separate facts because a man can want "good girl"
+   (§3.6.3). Applied to the synthesis as well as the three, and that fourth one was flagged as beyond the ask.
+2. **"Editable" means the response, not the AI's text.** A line, question or scene stays as written; what you
+   said about it is changeable any time.
+3. **Accumulation** is handled by the marking steps' own `MarkFilter`, with "Not answered yet" in place of
+   "Still unmarked" — a line is reacted to, a question is answered, and "unmarked" already means something
+   specific in this test.
+4. **The moment cards lose their denominator.** "2 of 5" paired a count with a total that GROWS every time you
+   ask for more, which is exactly why the register cards lost theirs (§3.6.29).
+
+**A `never` could not be taken back.** `addBoundary` had no counterpart in core or at the seam — `setAddress` /
+`clearSide` / `addWord` / `addBoundary` and nothing that removes one — so the lines step's "never anything like
+this again" minted a suppression **nothing in the app could lift**. That is the un-gettable-rid-of preference
+§3.2 abolished, reached from the one direction the amendment did not cover: it fixed the MARKS, whose
+suppression is derived from a live mark and lifts when the mark changes, and left the standalone theme record
+with no control at all. New `removeBoundary` in core + at the seam, and the row now shows a **Ruled out** state
+with an **Undo** instead of re-offering the same tap in silence. (`mergeLexicons` still unions boundaries; its
+own docstring records that there is no two-copy caller, so nothing can resurrect a lift today.)
+
+**Also fixed, found while doing it:** the offline fake had **no branch for any of the three phases**, so every
+offline run came back MALFORMED and the §3.6.9 audit walk had been photographing a warning banner where the
+step should be — the fake-hides-the-delivered-path trap (67 §3.3a), and the reason these screens had never been
+QA'd. Four E2E call sites still clicked a button §3.6.34 deleted, and one still asserted the register card's
+removed progress bar and its "1 of" fraction. The audit's 390px pass covered the profile, map, names and report
+and stopped, so the three rebuilt screens had **no narrow-width check at all**; adding one found the state chip
+squeezing a question into four lines of two words (§12's title-versus-tag rule) and the shared filter's
+`SegmentedControl` at a 28px tap target on all six screens it appears on — now an opt-in `comfortable` size, so
+the titlebar's height-bounded controls are untouched.
+
+**Lessons.** (1) A generated set held in renderer state is a set you have promised to show and cannot: persist
+it where the avoid-list already reads from, and "reviewable" and "never re-offered" fall out together. (2) When
+one step has already been fixed for a defect (the moments' append, §3.6.19) and its siblings have not, that is
+the shape of the whole bug — look for the other two before fixing the reported one. (3) An offline fake with no
+branch for a phase does not merely under-test it; it makes every screenshot of that phase a picture of a
+failure, which is how three screens reached a redesign having never been looked at.
+
+### 3.6.36 The probe's premise — a question about one direction — APPROVED + **BUILT** (2026-08-20, owner-reported)
+
+Owner, on a question the take produced: _`"my big cock" hit, "my beautiful pussy" only half-did. What's the
+split?`_ — with the hypothesis that it was _"not taking into account who says what to who"_. He was right, and
+**the model was faithful.** Reproduced before anything was changed: `openAmbiguities` handed it
+
+> They loved "my big cock" but were only lukewarm on "my beautiful pussy" — is it that word specifically, or
+> the register behind it?
+
+and the model simply shortened it. **The premise was the defect.** The `split` ambiguity drew both of its lists
+direction-blind — `Math.max(hear, say) >= 3` for the loved side against `hearState === 'okay' || sayState ===
+'okay'` for the contrast — so it could pair a mark made about being **CALLED** something with a mark made about
+**SAYING** something else. Those are answers to two different questions, and no split exists between them.
+
+For a mixed-anatomy couple it is worse than incoherent, and that is exactly the reported pair: `names-body`
+holds `body: 'penis'` and `body: 'vulva'` entries in one family, and orientation (§3.6.23) shows a penis name
+only on the side its owner can hear and a vulva name only on the side he can say. So the question contrasted
+**two different people's bodies** and asked which word he preferred.
+
+**Comparing within one direction fixes both at once**, because orientation has already separated the bodies
+onto opposite sides — no body lookup is needed, and none is available: the persisted `LexiconEntry` carries
+`family` and the marks, never `body`. A direction the person was never shown is still not an answer (§3.6.6).
+
+**The same conflation was in `openEndedAmbiguity`**, which is the fallback that runs for most later passes once
+the derived ambiguities are used up: it flattened both directions into one list, told the model "they marked
+these as landing", and then asked it to go deeper on _"the direction"_ — the one fact the list had just thrown
+away. Each term now says which way it landed.
+
+**And the context the model was given was thinner than it looked.** The quote list — the only words the probe
+may name — was bare text in the SYSTEM prompt while the direction lived in the user message, so the two could
+be flattened back together at the point they matter most. Each term now carries how it was marked
+(`termNote`). The split also asked about _"the register behind it"_ without ever naming the register; the
+bank's own family label is passed in (optional, keyed by family id, so the function stays pure over the
+lexicon — its whole point is that the loop terminates on data rather than on a model's opinion).
+
+The premise the same marks now produce:
+
+> They love being called "my big cock" but were only lukewarm about being called "my good cock" — is it that
+> word specifically, or the register behind it (the body itself)?
+
+**Guarded, each verified to fail when reverted:** the reported pair produces no cross-direction contrast; a
+**same**-direction pair still produces one (the anti-vacuity check — comparing within a direction must not
+quietly disable the ambiguity that makes this phase worth running); the open-ended fallback names each
+direction; and the prompt renders each term with its mark.
+
+**Lessons.** (1) When a model writes a bad question, read the premise it was handed before touching the prompt
+— here the wording was the model's and the nonsense was entirely ours. (2) A comparison is only meaningful
+between things measured the same way: `Math.max(hear, say)` is the same "one number standing for two answers"
+the deck was rebuilt to remove in §3.6.26, surviving in the one place that then asks the person to explain the
+difference. (3) Orientation already encodes which body a term belongs to, in `sides` — a rule expressed in
+terms of direction inherits that for free, where a rule reaching for `body` would need a bank the lexicon
+does not have.
+
+### 3.6.37 Deleting, not just skipping — APPROVED + **BUILT** (2026-08-20, owner-reported)
+
+Owner: _"there should be a way to delete questions, not just skip them"_, then _"in the moment options should
+be skippable and deletable."_ Neither existed. A question could only be skipped; a line and a moment had no
+way off the screen at all.
+
+**Skipping and deleting are different acts, and the difference is the design.** A skip keeps the item visible
+and answerable (§3.6.17) — passing over it is not being done with it. A delete says the thing itself was no
+good: it goes, and it does not come back.
+
+**The row is a TOMBSTONE, not a removal.** Since §3.6.35 the same `turns` list is both the record and what
+stops a phase re-offering something — the bridge builds each phase's avoid-list from these texts and reads
+back which ambiguities have been put to them. Erase the row and the model is free to write the identical
+question again, and "Ask me more" spends a call re-asking the ambiguity behind it, which is the exact
+opposite of deleting a bad question. So the row survives carrying its text, and the **answer goes with the
+deletion** — which is what makes every consumer drop it with no new filter, because they all already test for
+an answer: `answersDigest` skips it, the report's "what you told it" reads through `isAnsweredTurn`, and
+`takeCarriesDistress` is a `typeof` check. Deleting an answered item stops it feeding the profile at the
+moment it goes, which is what the row says it will do.
+
+**Four owner decisions, taken before any code:** gone-from-view-and-never-asked-again over a hard erase; all
+three sets, not just the questions; an answered item can be deleted, with the row stating what that costs; and
+a two-step inline confirm rather than an Undo — the app's existing guard for deleting a book, a person or a
+send, and an Undo that only survives until you navigate away is a promise the screen cannot keep.
+
+**One deliberate asymmetry, flagged rather than left silent:** the lines step gets delete and **no** skip. Its
+three marks already include "not this one" as a real answer, so what it lacked was a way to _remove_ a line,
+not a second way to pass over one. Questions and moments get both.
+
+`PROBE_SKIPPED` became `SKIPPED_ANSWER` in the same change: moments are skippable now, and a constant named
+for the probe stamped onto a scenario turn is the kind of name that goes quietly wrong later. **The value is
+on disk and did not change** — a rename, not a migration.
+
+Deleted items leave the screen _and_ the counts, in both places: the rail saying "6 asked" over five rendered
+cards is the §3.6.35 disagreement reached from the other side.
+
+**Guarded, each verified to fail when reverted:** the row survives a delete while its answer does not, and a
+re-offer of a deleted id adds nothing; a deleted item is absent from the screen and from the rail's count; and
+a moment can be both skipped and deleted. A fourth measurement went into the audit walk — that arming a
+delete does not disable the answers behind it — because a screenshot cannot tell a disabled control from a
+light one, and reading that off a picture is what nearly filed a non-existent bug.
+
+**Lessons.** (1) When a list is also an avoid-list, "delete" cannot mean "remove the row" — the two jobs pull
+in opposite directions, and the resolution is to keep the row and drop the part that feeds anything. (2) A
+sentinel named for the one phase that could use it will be stamped by the second phase eventually; rename it
+when the second arrives, and keep the persisted value byte-identical so it stays a rename. (3) Verify a visual
+suspicion by measuring it — "all the buttons went grey" was an artifact of reading a screenshot, and the
+assertion that disproved it is worth keeping.
+
+### 3.6.38 The skip marker carried a NUL — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+Found while renaming the marker in §3.6.37, pre-existing on `main`, and fixed on the owner's instruction.
+
+`SKIPPED_ANSWER` was `'\0skipped'` where its own docstring said `' skipped'` — a literal NUL had replaced the
+space. Self-consistent, because every reader compares against the constant rather than the text, and a
+landmine three ways: it was **the single NUL byte in a 330KB file**, which is why `grep` treated `schemas.ts`
+as binary and silently printed nothing (a trap this project had already written down rather than fixed); any
+comparison written literally instead of against the constant would fail with no visible cause; and the value
+is persisted, so it sits in every skipped turn on disk.
+
+**Fixing the constant alone would have been worse than leaving it.** `String.trim` does not strip NUL (it is
+not whitespace), so an unhealed row satisfies `isAnsweredTurn` — every question anyone had ever SKIPPED would
+read back as ANSWERED, render under an "Answered" chip, and reach the model as `\u0000skipped`. That is the
+§3.6.17 defect, reintroduced by a one-character change. Measured before writing anything.
+
+So: the value is a real space, the old one is kept as `LEGACY_NUL_SKIPPED_ANSWER` **written as an escape** (the
+byte is gone from the source), and `healSkippedAnswers` rewrites any row still carrying it — at **both** points
+a result is read. `getAdaptiveResult` is the obvious one; `listAdaptiveResults` is the door a COMPLETED take
+comes through, and nothing fetches a finished result by id again, so healing only the first would leave the
+report's "what you told it" and the trends reading a historical skip as an answer for good. Both write back,
+because a heal that only fixes memory hides the write that should persist it (§3.6.34).
+
+**Two vacuous guards caught by the revert-check, both worth recording.** Removing the write-back did not fail
+the first version of the on-disk assertion, because the test built its fixture with `stampTurn` — which reads
+through `getAdaptiveResult` and then saves, persisting the heal as a side effect. The fixture is seeded
+straight onto disk now, which is also the honest shape: a take sitting since before this change has had
+nothing written to it. And removing the heal from `listAdaptiveResults` failed nothing at all until a
+completed-take guard was added.
+
+**Lesson.** A sentinel whose value is persisted cannot be corrected in place — the correction is a migration,
+and its risk is inverted from the usual: the safest-looking change (fix the constant, it is only a
+whitespace character) is the one that silently rewrites the meaning of every historical row. Check what the
+old value does against the NEW predicate before touching either.
+
+### 3.6.39 What a mark MEANS, and one bad element — APPROVED + **BUILT** (2026-08-20, live-model pass)
+
+Found by running every phase against **real Claude at the owner's real shape** (563 entries resolved, 146
+loved, 395 suppressed, identity man/woman, address man/girl) — the check §3.6.35–§3.6.38 were all verified
+against the offline fake, which by construction cannot show either of these. Lines, the derived probe, the
+scenario and the synthesis all came back good, and §3.6.36 was confirmed working: every premise drawn within
+one direction, each term carrying its mark, the register named.
+
+**1) A premise called a LINE a name.** The split read
+
+> They love **being called** "suck me" … "trembling" … "touch me there" … "cock"
+
+`side === 'hear' ? 'being called' : 'saying'`, unconditional across all 42 families. You are not _called_
+"suck me" — you hear it. The bank separates this cleanly (9 `names-*` families against 33 line families, no
+label crossover), 202 of the owner's 563 entries sit in line families, and **4 of his 11 derived premises said
+it — every one of his hear-splits.** The same rule was in `openEndedAmbiguity`, where his own list happened to
+draw four names and so read correctly by luck.
+
+Both the right predicate and the right wording already existed: `steer.ts` filtered `family.startsWith('names-')`
+with a docstring saying why ("a name is a **vocative**"), and `frozen`, six lines below the split, already said
+"They love **hearing**". Three copies of one rule, and the two that mattered disagreed. It is now one exported
+`isNameFamily` in `lexicon.ts` that all three read — deliberately the PREFIX, not a list, and deliberately NOT
+folded into `EVERYDAY_NAME_FAMILIES` above it, which is opt-in by family precisely because getting _that_ one
+wrong fails OPEN on a hard no. This one fails to a sentence reading oddly.
+
+This is **§3.6.36 one level down**: that fixed WHICH DIRECTION a mark was made in, and left what that direction
+MEANS for the family it came from.
+
+**2) One bad element sank a whole pass.** **2 of 4 live open-ended probe passes returned MALFORMED — every one
+`end_turn`**, complete replies, not truncated and not refused. The model wrote one question with raw inner
+quotes (`"question": "When she says "my big cock" — …"`) while the other five escaped theirs correctly, and
+`extractJsonObject` returned null for the lot. This is the phase most exposed to it in the whole take, because
+its entire job is to quote the person's own marked terms back at them.
+
+`tolerantArray` is already per-element tolerant, but that only helps once the OBJECT parses — the §3.6.34
+lesson, in the sibling phase that never got the fix. The scenario phase was given `salvageJsonObjectArrayField`
+for exactly this; the probe had only the one-string salvage from §3.6.15, which predates the six-questions-per-
+pass shape (§3.6.17). Measured on the real captured reply: `extractJsonObject` → null, the salvage → **5 of 6
+recovered**, the malformed element dropped and nothing repaired into words the model did not write.
+
+**The lines phase had no salvage at all, and its parser was dead code.** `parseLines` was exported with a
+docstring reading "Exported for tests" and **had no callers anywhere in the repo, tests included** — so
+production parsed more strictly than the helper written for it, and the tolerant route it offers (a bare
+top-level array) was unreachable. Production now goes through it, and it gained the string twin
+`salvageJsonStringArrayField`, since `scanCompleteObjects` only sees `{…}` elements and an array of bare
+strings had nothing.
+
+**The synthesis is deliberately left alone, and this is the record of why** (owner-decided, after the
+alternative was measured rather than assumed). Truncation is already handled upstream — `runClaude` routes
+every phase through `streamWithContinuation` (66 §5.1), which continues a `max_tokens` reply. That leaves the
+stray-quote case, and neither existing string salvager is safe on a long prose field inside a multi-field
+object: `salvageJsonObjectField` stops at the first unescaped quote (returning a fragment), and
+`salvageLooseStringField` is anchored to the end of the object (`\}?\s*$`), so it would swallow every field
+after `narrative`. Saving a silently-truncated narrative as someone's finished profile is the §3.6.38 class
+exactly — the safest-looking change rewrites the meaning of the thing it "fixed". Its honest failure is
+correct, so it keeps it.
+
+**Guarded, each verified to fail when reverted with the revert asserted to have applied:** a hear-split on a
+line family says "hearing" and a name family still says "being called" (the anti-vacuity half — the fix must
+not just delete the vocative wording, which §3.6.33 established deliberately); the say direction is unchanged
+for both; the open-ended fallback splits the same way; the probe recovers the well-formed questions from the
+REAL captured reply and drops only the malformed one; a genuinely unusable reply still fails honestly; and the
+lines phase both accepts a bare top-level array and keeps the complete lines from a cut-off one.
+
+**Lessons.** (1) The offline fake cannot show either of these: it returns clean JSON forever, so the malformed
+element does not exist, and it cannot notice that a premise says something untrue about the person. A live pass
+at the REAL shape is not a nice-to-have for this feature — it is the only place two whole classes of defect are
+visible. (2) When the same rule is written in three places and one of them is right, the two that are wrong
+will disagree with it silently for as long as nobody reads them side by side; export the predicate the first
+time, not the third. (3) A helper exported "for tests" with zero callers is not dead weight but a live
+divergence — the production path had been quietly stricter than the code written to describe it. (4) Two
+salvagers built for opposite failures are not interchangeable, and picking the wrong one is worse than picking
+neither: check which failure a helper was written for before reaching for it.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

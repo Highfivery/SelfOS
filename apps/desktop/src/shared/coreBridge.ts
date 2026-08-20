@@ -874,14 +874,11 @@ import {
   // 74 — the adaptive engine.
   ADAPTIVE_CONTEXTS,
   DIRTY_TALK,
-  DIRTY_TALK_BANK,
   abandonAdaptiveTake,
   addBoundary,
+  removeBoundary,
   addCustomEntry,
-  applyBankMarks,
-  applyDirections,
-  clearNameMarks,
-  clearState,
+  clearDirectionalMarks,
   completeAdaptiveTake,
   deleteAllAdaptiveResults,
   getAdaptiveResult,
@@ -889,27 +886,30 @@ import {
   openAmbiguities,
   readsAsDistress,
   readLexicon,
-  recordBankPass,
-  recordSplitPass,
+  recordMarkingPass,
   runLinesPhase,
   answersDigest,
   openEndedAmbiguity,
   runProbePhase,
   ambiguityOfProbeTurn,
+  probeTurnId,
+  scenarioTurnId,
   runScenarioPhase,
   runSynthesis,
   accruePhaseCost,
   stampTurn,
+  stampOffers,
+  deleteTurn,
   startAdaptiveTake,
   writeLexicon,
   addressFromAnswer,
   bodyFromAnatomyAnswer,
   orientArea,
   pruneUnshownMarks,
+  readLexiconResolved,
   shownSides,
   deckFamilies,
   nameFamilies,
-  recordNamePass,
   type AdaptiveTestDefinition,
   type Orientation,
 } from '@selfos/core/tests';
@@ -1170,7 +1170,10 @@ const TestTakeSchema = z.object({
   answers: z.record(z.string(), z.unknown()),
 });
 // 74 — the adaptive-test inputs. Validated HERE, at the trust boundary; the renderer is never it.
-const AdaptiveNamesInputSchema = z.object({
+// 74 §3.6.26 — ONE shape for both marking phases. The deck used to send a single mark per entry plus a
+// separate 0–4 "split" call; it now answers per direction exactly as the names always have, so the two
+// handlers validate the same thing and differ only in the turn they stamp.
+const AdaptiveMarkPassSchema = z.object({
   testId: z.string().min(1),
   resultId: z.string().min(1),
   marks: z
@@ -1197,23 +1200,6 @@ const AdaptiveAreaSchema = z.object({
   testId: z.string().min(1),
   area: z.number().int().min(0).max(500),
 });
-const AdaptiveBankPassSchema = AdaptiveRefSchema.extend({
-  marks: z.record(z.string(), z.enum(['love', 'never', 'okay'])),
-  // Bounded: an autosave sends a small delta, and the closing call sends the whole pass. Neither is unbounded,
-  // and a renderer that sends a million keys is a bug, not a use case.
-  cleared: z.array(z.string().min(1)).max(2000).optional(),
-  autosave: z.boolean().optional(),
-});
-const AdaptiveSplitSchema = AdaptiveRefSchema.extend({
-  splits: z.record(
-    z.string(),
-    z.object({
-      hear: z.number().min(0).max(4).optional(),
-      say: z.number().min(0).max(4).optional(),
-    }),
-  ),
-  autosave: z.boolean().optional(),
-});
 const AdaptiveScenarioInputSchema = AdaptiveRefSchema.extend({
   context: z.enum(ADAPTIVE_CONTEXTS),
 });
@@ -1221,6 +1207,12 @@ const AdaptiveSynthesizeInputSchema = AdaptiveRefSchema.extend({
   /** Finish the take on the deterministic profile alone, after being told the written analysis failed. */
   acceptDegraded: z.boolean().optional(),
 });
+/** 74 §3.6.37 — which generated item to delete. Person-scoped by `adaptiveGate`, like every adaptive op. */
+const AdaptiveDeleteTurnSchema = AdaptiveRefSchema.extend({
+  phase: z.string().min(1),
+  itemId: z.string().min(1),
+});
+
 const AdaptiveTurnInputSchema = AdaptiveRefSchema.extend({
   phase: z.string().min(1),
   itemId: z.string().min(1),
@@ -1238,29 +1230,20 @@ const AdaptiveTurnInputSchema = AdaptiveRefSchema.extend({
 });
 const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('rate'),
-    key: z.string().min(1),
-    hear: z.number().min(0).max(4).optional(),
-    say: z.number().min(0).max(4).optional(),
-  }),
-  z.object({
-    kind: z.literal('setState'),
-    key: z.string().min(1),
-    state: z.enum(['never', 'okay']).nullable(),
-  }),
-  z.object({
     /*
-     * 74 §3.6.8/§3.2 — take back ONE direction of a pet-name mark, from the report.
+     * 74 §3.6.8/§3.2/§3.6.26 — take back ONE direction of a mark, from the report.
      *
-     * `setState` above is whole-entry, which is what the deck writes. A name is answered per direction, so a
-     * `never` from the names phase lives in `hearState`/`sayState` and that op cannot touch it — leaving the
-     * report's "change any of them whenever you like" as a sentence with no control behind it, and the only
-     * route back a row in the names phase. Which is fine until the row is gone: a name retired from the bank
-     * (266 in #534, 37 more when the animal-sex names went) still suppresses through `suppressedTexts` with
-     * nothing left on any screen to lift it. That is the un-gettable-rid-of preference §3.2 abolished,
-     * arrived at from the other direction.
+     * The report's per-direction hard-no lists are the only control anywhere that can lift one, and since
+     * §3.6.26 that covers the DECK as well as the names: both answer per direction, so both need a way back
+     * that does not depend on the row still existing. Which matters because rows do go — a term retired from
+     * the bank (266 in #534, 37 more when the animal-sex names went) still suppresses through
+     * `suppressedTexts` with nothing left on any screen to lift it. That is the un-gettable-rid-of preference
+     * §3.2 abolished, arrived at from the other direction.
+     *
+     * The whole-entry `setState`/`rate` ops this used to sit beside are gone with the 0–4 split (§3.6.26):
+     * nothing called either, and neither has a writer any more.
      */
-    kind: z.literal('clearNameSide'),
+    kind: z.literal('clearSide'),
     key: z.string().min(1),
     side: z.enum(['hear', 'say']),
   }),
@@ -1286,7 +1269,18 @@ const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('addBoundary'),
     text: z.string().min(1).max(200),
-    boundaryKind: z.enum(['word', 'theme']),
+    // Themes only (74 §3.6.29). A `kind:'word'` record is the pre-§3.6.11 storage for a hard no — suppression
+    // derives from the entry's live mark now, and a word record with no entry behind it is a suppression with
+    // no row anywhere to lift it. The renderer only ever sends `theme`; this makes that the contract.
+    boundaryKind: z.literal('theme'),
+  }),
+  z.object({
+    // 74 §3.6.35 — take a themed boundary back. `addBoundary` had no counterpart anywhere in the app, so the
+    // lines step's "never anything like this again" minted a suppression nothing could lift — the
+    // un-gettable-rid-of preference §3.2 was amended to abolish, reached from the one direction that
+    // amendment did not cover (it fixed the marks, whose suppression is derived and lifts with the mark).
+    kind: z.literal('removeBoundary'),
+    text: z.string().min(1).max(200),
   }),
 ]);
 
@@ -1809,9 +1803,8 @@ async function loadDeployableRelayBundle(relay: BridgeHost['relay']): Promise<Re
  * of nothing but hard nos gives a step whose job is "write something they would want" no material at all.
  */
 function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
-  const loved = lexicon.entries.filter(
-    (entry) => entry.state !== 'never' && Math.max(entry.hear, entry.say) >= 3,
-  ).length;
+  // A `never` already scores 0 on both sides, so the rating alone is the whole test (74 §3.6.26).
+  const loved = lexicon.entries.filter((entry) => Math.max(entry.hear, entry.say) >= 3).length;
   return generationReadiness(lexicon.entries.length, loved);
 }
 
@@ -2381,13 +2374,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     def: AdaptiveTestDefinition;
   }): Promise<{ who: Orientation; lexicon: EroticLexicon }> => {
     const who = await personOrientation(gate);
-    const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
-    const pruned = pruneUnshownMarks(lexicon, gate.def.bank, who, new Date());
-    if (pruned.changed) await writeLexicon(gate.ctx.fs, gate.ctx.key, pruned.lexicon);
+    // 74 §3.6.34 — `readLexiconResolved`, not `readLexicon`: the read-time migrations heal in memory, so
+    // without their `changed` flag an already-healed lexicon looks unchanged to the prune and the stale rows
+    // sit on disk being re-healed on every read forever.
+    const read = await readLexiconResolved(gate.ctx.fs, gate.ctx.key, gate.personId);
+    const pruned = pruneUnshownMarks(read.lexicon, gate.def.bank, who, new Date());
+    if (read.changed || pruned.changed)
+      await writeLexicon(gate.ctx.fs, gate.ctx.key, pruned.lexicon);
     return { who, lexicon: pruned.lexicon };
   };
 
-  /** The sides each marked key was offered on, for the record `applyBankMarks` writes (74 §3.6.6). */
+  /** The sides each marked key was offered on, for the record the writer keeps (74 §3.6.6). */
   const markedSides = async (
     gate: {
       ctx: { fs: FileSystem; key: Uint8Array };
@@ -4492,14 +4489,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
     },
     testsAdaptiveNames: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveNamesInputSchema.parse(input);
+      const parsed = AdaptiveMarkPassSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return null;
-      await recordNamePass(
+      await recordMarkingPass(
         gate.ctx.fs,
         gate.ctx.key,
         gate.def,
         {
+          phase: 'names',
           sides: await markedSides(gate, Object.keys(parsed.marks)),
           personId: gate.personId,
           resultId: parsed.resultId,
@@ -4538,47 +4536,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     // a cheaper ack would make "refused" and "saved" indistinguishable, and the renderer would show
     // "Saved" over a write that never happened.
     testsAdaptiveBank: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveBankPassSchema.parse(input);
+      const parsed = AdaptiveMarkPassSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return null;
-      await recordBankPass(
+      await recordMarkingPass(
         gate.ctx.fs,
         gate.ctx.key,
         gate.def,
         {
+          phase: 'bank',
           personId: gate.personId,
           resultId: parsed.resultId,
-          marks: parsed.marks,
+          // `exactOptionalPropertyTypes`: an explicitly-undefined side is a different type from an absent
+          // one, and "absent" is what "they didn't answer this way" means.
+          marks: Object.fromEntries(
+            Object.entries(parsed.marks).map(([key, mark]) => [
+              key,
+              {
+                ...(mark.hear ? { hear: mark.hear } : {}),
+                ...(mark.say ? { say: mark.say } : {}),
+              },
+            ]),
+          ),
           // 74 §3.6.6 — resolve the sides HERE, from the same orientation the deck was built with, so the
           // record of what was asked can't drift from what was shown.
           sides: await markedSides(gate, Object.keys(parsed.marks)),
           ...(parsed.cleared ? { cleared: parsed.cleared } : {}),
-          ...(parsed.autosave ? { autosave: true } : {}),
-        },
-        new Date(),
-      );
-      return adaptiveState(gate);
-    },
-    testsAdaptiveSplit: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveSplitSchema.parse(input);
-      const gate = await adaptiveGate(parsed.testId);
-      if (!gate) return null;
-      // `exactOptionalPropertyTypes`: Zod's `.optional()` yields `| undefined`, which is not the same type as
-      // an absent key — rebuild the map with only the keys that were actually sent.
-      const splits: Record<string, { hear?: number; say?: number }> = {};
-      for (const [key, value] of Object.entries(parsed.splits)) {
-        splits[key] = {
-          ...(value.hear !== undefined ? { hear: value.hear } : {}),
-          ...(value.say !== undefined ? { say: value.say } : {}),
-        };
-      }
-      await recordSplitPass(
-        gate.ctx.fs,
-        gate.ctx.key,
-        {
-          personId: gate.personId,
-          resultId: parsed.resultId,
-          splits,
           ...(parsed.autosave ? { autosave: true } : {}),
         },
         new Date(),
@@ -4612,6 +4595,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       );
       // Every phase's spend accrues onto the draft, or the take's own cost figure is only its last call.
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
+      /*
+       * 74 §3.6.35 — the set is RECORDED the moment it exists, before anyone reacts to it.
+       *
+       * The lines lived in renderer state until a reaction stamped one, so an unreacted line was gone on the
+       * next load and could never be reviewed — and it was absent from the avoid-list two lines above, so the
+       * next round could hand back the very lines it had just replaced. Stamped here rather than by the
+       * renderer: it is one write instead of twelve, it survives a crash between the call and the render, and
+       * a phase that spends is the thing that knows what it bought.
+       */
+      await stampOffers(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        'lines',
+        (out.value ?? []).map((line) => ({ id: line, pack: 'lines', text: line, options: [] })),
+        new Date(),
+      );
       return {
         ok: out.ok,
         ...(out.value ? { lines: out.value } : {}),
@@ -4642,7 +4643,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The confidence rule: probe while the DATA leaves something unresolved, and stop when it doesn't.
       // `asked` is keyed on the AMBIGUITY id (returned below and stamped by the renderer) rather than on the
       // model's prose, or the same ambiguity comes back forever and the take never finishes.
-      const next = openAmbiguities(lexicon).find((ambiguity) => !asked.has(ambiguity.id));
+      // 74 §3.6.36 — the bank's own labels, so the split can name the register it is asking about.
+      const familyLabels = Object.fromEntries(
+        gate.def.bank.families.map((family) => [family.id, family.label]),
+      );
+      const next = openAmbiguities(lexicon, familyLabels).find(
+        (ambiguity) => !asked.has(ambiguity.id),
+      );
       // A ceiling as well as the rule: a data-driven loop should converge, and if it ever doesn't, a person
       // must not be billed a call per tap to find out (74 §5.3 — a backstop, not a depth cap).
       /*
@@ -4674,6 +4681,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         await takeAnswers(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId),
       );
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
+      /*
+       * 74 §3.6.35 — every question of the pass, recorded as asked, with the id it will be answered under.
+       *
+       * A pass writes up to six and only the one on screen existed anywhere; the rest sat in a renderer queue,
+       * so navigating away lost them and the review list below could only ever show what had been answered.
+       * The id is built here for the same reason the phase stamps at all — `probeTurnId` pairs with
+       * `ambiguityOfProbeTurn`, which this handler reads back, and the two must not drift apart.
+       */
+      await stampOffers(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        'probe',
+        (out.value ?? []).map((q) => ({
+          id: probeTurnId(target.id, q.question),
+          pack: 'probe',
+          text: q.question,
+          options: q.options,
+        })),
+        new Date(),
+      );
       return {
         ok: out.ok,
         ...(out.value?.[0] ? { question: out.value[0].question, questions: out.value } : {}),
@@ -4717,6 +4746,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         priorScenes,
       );
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
+      // 74 §3.6.35 — the moments, recorded as written. A moment nobody picked lived only in renderer state, so
+      // it vanished on the next load; `scenarioTurnId` is the shared format so this offer and the pick that
+      // fills it in later land on the same turn.
+      await stampOffers(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        'scenario',
+        (out.value ?? []).map((s) => ({
+          id: scenarioTurnId(parsed.context, s.scene),
+          pack: 'scenario',
+          text: s.scene,
+          options: s.options,
+        })),
+        new Date(),
+      );
       return {
         ok: out.ok,
         context: parsed.context,
@@ -4730,6 +4776,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         degraded: out.degraded,
         ...(out.message ? { message: out.message } : {}),
       };
+    },
+    testsAdaptiveDeleteTurn: async (input): Promise<void> => {
+      const parsed = AdaptiveDeleteTurnSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return;
+      await deleteTurn(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        parsed.phase,
+        parsed.itemId,
+        new Date(),
+      );
     },
     testsAdaptiveTurn: async (input): Promise<void> => {
       const parsed = AdaptiveTurnInputSchema.parse(input);
@@ -4876,24 +4936,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const now = new Date();
       let lexicon = await readLexicon(ctx.fs, ctx.key, personId, now);
       switch (edit.kind) {
-        case 'rate':
-          lexicon = applyDirections(
-            lexicon,
-            {
-              [edit.key]: {
-                ...(edit.hear !== undefined ? { hear: edit.hear } : {}),
-                ...(edit.say !== undefined ? { say: edit.say } : {}),
-              },
-            },
-            now,
-          );
-          break;
-        case 'setState':
-          lexicon =
-            edit.state === null
-              ? clearState(lexicon, edit.key, now)
-              : applyBankMarks(lexicon, DIRTY_TALK_BANK, { [edit.key]: edit.state }, 'edit', now);
-          break;
         case 'setAddress': {
           lexicon = {
             ...lexicon,
@@ -4919,12 +4961,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ({ lexicon } = await orientationForMarking(gate));
           break;
         }
-        case 'clearNameSide':
-          // `clearNameMarks` is deliberately NOT scoped to the take that wrote the mark — taking one back in
-          // a later sitting is the same ordinary act as changing it (74 §3.2, amended 2026-08-19) — so the
-          // report can reuse it as-is. It drops that direction's rating, its state, and its directional
-          // boundary, and leaves the other direction standing.
-          lexicon = clearNameMarks(lexicon, { [edit.key]: [edit.side] }, now);
+        case 'clearSide':
+          // `clearDirectionalMarks` is deliberately NOT scoped to the take that wrote the mark — taking one
+          // back in a later sitting is the same ordinary act as changing it (74 §3.2, amended 2026-08-19) —
+          // so the report can reuse it as-is. It drops that direction's rating, its state, and its
+          // directional boundary, and leaves the other direction standing.
+          lexicon = clearDirectionalMarks(lexicon, { [edit.key]: [edit.side] }, now);
           break;
         case 'addWord':
           lexicon = addCustomEntry(
@@ -4936,6 +4978,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           break;
         case 'addBoundary':
           lexicon = addBoundary(lexicon, { text: edit.text, kind: edit.boundaryKind }, now);
+          break;
+        case 'removeBoundary':
+          lexicon = removeBoundary(lexicon, edit.text, now);
           break;
       }
       await writeLexicon(ctx.fs, ctx.key, lexicon);

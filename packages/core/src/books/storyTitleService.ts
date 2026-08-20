@@ -4,6 +4,7 @@ import type { AiDeps } from '../questionnaires';
 import { runClaude } from '../questionnaires';
 import type { AiFailureReason } from '../schemas';
 import { getBookType } from './bookTypes';
+import { subjectLexiconBlocks } from './storyGenerationService';
 import { resolvePersonOptionNames } from './castRegister';
 import { buildStoryCorpus, corpusText } from './storyCorpus';
 import { buildBiographerSystem } from './storyPromptBuilder';
@@ -69,6 +70,7 @@ async function bookContext(
       corpus.personName,
       undefined,
       await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+      await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
     ),
     corpus: corpusText(corpus),
     title: book.title,

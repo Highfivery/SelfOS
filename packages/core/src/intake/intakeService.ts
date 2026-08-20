@@ -49,6 +49,7 @@ import {
   type IntakeSectionDef,
 } from './intakeCatalog';
 import { intakeAnswerHashes } from './portraitFreshness';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * Personal-onboarding intake service (18-personal-onboarding §5/§14). A hybrid, resumable self-onboarding:
@@ -514,7 +515,22 @@ function buildUsage(
   };
 }
 
-/** Assemble the interviewer system prompt: persona + safety + the person's OWN context + the addendum. */
+/**
+ * Assemble the interviewer system prompt: persona + safety + the person's OWN context + the addendum.
+ *
+ * 74 §5.8a — and their hard-no list, UNCONDITIONALLY.
+ *
+ * This feeds BOTH the live interview turn and the per-section reflection, and both write prose this person
+ * reads — the turn streams straight into a chat they are having, the reflection is rendered verbatim on the
+ * closing portrait. Neither is reviewed by anyone. The `intimacy` section is `adult: true, restricted: true`
+ * and carries a go-deeper composer, so without this a person chats live about sex with the one list of words
+ * they have ruled out absent from the prompt.
+ *
+ * `synthesizePortrait` one function over already did this, and its comment gives the reason in so many words
+ * — "their hard nos apply to what is written about them as much as to what is asked of them". The comment
+ * was right and the two siblings above it were not; that is the §3.6.24 two-comments-disagree tell again.
+ * Unconditional because suppression can only ever PREVENT: a person with no lexicon gets ''.
+ */
 async function buildIntakeSystem(
   fs: FileSystem,
   key: Uint8Array,
@@ -524,7 +540,15 @@ async function buildIntakeSystem(
   const def = getIntakeSection(sectionId);
   if (!def) return null;
   const context = await buildContext(fs, key, person.id);
-  return [PERSONA, SAFETY, context, buildInterviewerAddendum(person.displayName, def), FORMATTING]
+  const suppression = await buildOwnSuppressionBlock(fs, key, person.id);
+  return [
+    PERSONA,
+    SAFETY,
+    context,
+    buildInterviewerAddendum(person.displayName, def),
+    suppression,
+    FORMATTING,
+  ]
     .filter(Boolean)
     .join('\n\n');
 }
@@ -1346,12 +1370,18 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   const at = now.toISOString();
   const session = await ensureIntakeSession(fs, key, personId, now);
   const context = await buildContext(fs, key, personId);
+  // 74 §5.8a — the portrait is written back to the person and its facts feed their own context, and the
+  // material it reads includes the whole `adult`/`restricted` intimacy section. Their hard nos apply to what
+  // is written about them as much as to what is asked of them. Unconditional: suppression only ever prevents,
+  // and a person with no lexicon yet simply gets ''.
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
   const system = [
     PERSONA,
     SAFETY,
     context,
     `You are completing a warm "getting to know you" onboarding for ${person.displayName}. This is ` +
       `reflective self-knowledge, NOT a clinical assessment, diagnosis, or treatment.`,
+    suppression,
   ]
     .filter(Boolean)
     .join('\n\n');

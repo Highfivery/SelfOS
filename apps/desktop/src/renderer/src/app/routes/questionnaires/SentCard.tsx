@@ -138,6 +138,7 @@ export function SentCard({
     sent &&
     analyzed &&
     !analyzable &&
+    !skipped && // "These answers are 3 weeks old" is nonsense when there were no answers (§34).
     Boolean(sendState && resendStatus(sendState.lastSentAt).ready) &&
     Boolean(overview?.answeredAt);
   // The privacy chip (08 §3.1): only once sent — privacy is chosen at send, so a draft/never-sent card
@@ -270,7 +271,7 @@ export function SentCard({
             )
           }
         />
-      ) : analyzable ? (
+      ) : analyzable && !skipped ? (
         <div className={styles.analyzePrompt} aria-busy={analyzing ?? false}>
           <span>Responses are in.</span>
           {analyzingOther && !analyzing ? (
@@ -304,6 +305,19 @@ export function SentCard({
               </span>
             ))}
           </span>
+          {/* On a Standard send the refusal itself can be read (§34.3); a Private one has nothing we may
+              say, so it shows the counts and stops there. */}
+          {analyzable ? (
+            <button
+              type="button"
+              className={styles.analyzeGo}
+              disabled={analyzing ?? false}
+              onClick={() => onAnalyze(analyzable)}
+            >
+              <Sparkles size={13} aria-hidden="true" />
+              {analyzing ? 'Reading…' : 'Read what this tells you →'}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -325,8 +339,12 @@ export function SentCard({
           {questionnaire.questions.length === 1 ? 'question' : 'questions'}
         </span>
         {sendState ? <span>· Sent {formatDateTime(sendState.lastSentAt)}</span> : null}
+        {/* "Answered" would contradict the pill directly on a send where nothing was: it came back, which
+            is a real event worth dating, but it is not an answer (§34). */}
         {overview?.answeredAt ? (
-          <span>· Answered {formatDateTime(overview.answeredAt)}</span>
+          <span>
+            · {skipped ? 'Came back' : 'Answered'} {formatDateTime(overview.answeredAt)}
+          </span>
         ) : null}
       </div>
 

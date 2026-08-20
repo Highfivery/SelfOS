@@ -13,9 +13,28 @@ import {
   producedFactShare,
   saveInsight,
 } from '../insights';
-import { isDeclined, visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
-import type { Insight, QuestionnaireAnalyzeResult, ResponseSet } from '../schemas';
-import { buildAnalysisSystem, buildAnalysisUserMessage } from './aiPrompts';
+import {
+  isAnswered,
+  isDeclined,
+  skipKindOf,
+  visibleQuestions,
+  type AnswerMap,
+  type AnswerValue,
+} from './answering';
+import type {
+  Assignment,
+  Insight,
+  Questionnaire,
+  QuestionnaireAnalyzeResult,
+  ResponseSet,
+} from '../schemas';
+import {
+  buildAnalysisSystem,
+  buildAnalysisUserMessage,
+  buildRefusalUserMessage,
+  REFUSAL_ANALYSIS_SYSTEM,
+  type SkipLine,
+} from './aiPrompts';
 import { aboutFromRecipient } from './aboutResolver';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { runClaude, type AiDeps } from './generationService';
@@ -130,24 +149,61 @@ export async function analyzeAssignment(
   // "unclear" is feedback about the question, a "prefer not to say" is a boundary. Exclude declines from
   // the analyzed Q→A (like a blank) so a skip never becomes an inferred fact or corrupts metrics; the skip
   // reasons feed the sender/generation loop, not the person's Insight.
-  const liveAnswers = response.answers.filter(
-    (a) => visibleIds.has(a.questionId) && !isDeclined(a.value as AnswerValue),
-  );
+  // Gate on isAnswered, not merely "not declined": a blank-but-not-declined value ('' , or [] after
+  // unchecking a multiChoice) is not an answer. Without this it reached the model as an empty `A:` AND was
+  // listed as refused below — the same question twice, one of them a lie.
+  const liveAnswers = response.answers.filter((a) => {
+    if (!visibleIds.has(a.questionId)) return false;
+    const q = byId.get(a.questionId);
+    return q ? isAnswered(q, a.value as AnswerValue) : false;
+  });
   const qa = liveAnswers.flatMap((a) => {
     const q = byId.get(a.questionId);
     return q ? [{ prompt: q.prompt, answer: formatAnswer(a.value) }] : [];
   });
 
+  // What came back refused, and whether we may tell the model about it at all (08 §34.3).
+  //
+  // A PRIVATE send tells it NOTHING — not the reasons, not even which questions were skipped. The reason
+  // text is obviously out: it is the recipient's own words, and they were shown "they won't see your written
+  // answers". But the per-question mapping is out too, and that took deciding rather than assuming. A
+  // private sender has no route to it anywhere else — raw answers are withheld at the bridge, the Results
+  // aggregate excludes private sends outright, and the card's `SkipSummary` is counts with no question
+  // attached — while the insight summary this call produces IS a thing that crosses back. Passing "she
+  // preferred not to say about her mother" would therefore hand the sender a fact the whole mode exists to
+  // keep from them, one paraphrase removed. Owner's call, 2026-08-20: counts by kind, and nothing per
+  // question. A Standard send gets the lot, which is where the reword signal was always meant to live.
+  const tellReasons = assignment.privacy === 'standard';
+  const skips: SkipLine[] = !tellReasons
+    ? []
+    : snapshot.questions
+        .filter((q) => visibleIds.has(q.id) && !isAnswered(q, answerMap[q.id]))
+        .map((q) => {
+          const value = answerMap[q.id];
+          const reason = isDeclined(value) ? value.reason?.trim() : undefined;
+          return {
+            prompt: q.prompt,
+            kind: isDeclined(value) ? skipKindOf(value.reason) : 'other',
+            ...(reason ? { reason } : {}),
+          };
+        });
+
   // Nothing to analyze: the response was submitted but every answer is blank/skipped/declined (or only for
-  // now-hidden branches). Fail honestly BEFORE spending — feeding the model an empty Q&A reliably produces a
-  // conversational, non-JSON reply that then reads as the scary "unexpected shape" MALFORMED error (08 §3.7).
+  // now-hidden branches). Feeding the model an empty Q&A reliably produces a conversational, non-JSON reply
+  // that reads as the scary "unexpected shape" MALFORMED error (08 §3.7) — so we never do that. On a STANDARD
+  // send we can still read the refusal itself, which is what the sender actually needs ("why didn't this
+  // land?"); on a Private one there is nothing we are allowed to say, so it stays an honest EMPTY with no
+  // spend (the card shows the counts, which never leave the bridge as text).
   if (qa.length === 0) {
-    return {
-      ok: false,
-      reason: 'EMPTY',
-      message:
-        'These answers are all blank or skipped — there’s nothing to analyze into an insight yet.',
-    };
+    if (!tellReasons || skips.length === 0) {
+      return {
+        ok: false,
+        reason: 'EMPTY',
+        message:
+          'These answers are all blank or skipped — there’s nothing to analyze into an insight yet.',
+      };
+    }
+    return analyzeRefusal(deps, { assignment, snapshot, response, skips });
   }
 
   // Register-aware system prompt (08 §22.7): an intimacy/scenario questionnaire at an explicit tier gets the
@@ -166,7 +222,7 @@ export async function analyzeAssignment(
     [buildAnalysisSystem(snapshot.type, snapshot.sensitivity), suppression]
       .filter(Boolean)
       .join('\n\n'),
-    buildAnalysisUserMessage({ title: snapshot.title, qa }),
+    buildAnalysisUserMessage({ title: snapshot.title, qa, skips }),
     'questionnaire.analyze',
     // A summary + up to 6 facts + the JSON scaffolding can exceed a tight ceiling; give it real headroom so
     // the model isn't forced to cut the object short (you only pay for tokens generated). §17.9 keeps adaptive
@@ -251,6 +307,125 @@ export async function analyzeAssignment(
     updatedAt: at,
     ...(Object.keys(metrics).length > 0 ? { metrics } : {}),
     ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),
+  };
+  await saveInsight(deps.fs, deps.key, insight);
+  return { ok: true, insight, usage: call.usage };
+}
+
+/**
+ * The read of a REFUSAL (08 §34.3) — a Standard send whose every question came back unanswered. The sender's
+ * real question here is "why didn't this land?", and that is answerable from the refusals alone.
+ *
+ * Three deliberate departures from the ordinary analysis, all for the same reason — the subject of this
+ * Insight is the QUESTIONNAIRE, not the person:
+ *   1. Its facts are `shareable: false`. An ordinary analysis fact defaults to partner-shared (the 2026-07-17
+ *      owner decision); notes about a person's refusals must not travel on that default.
+ *   2. Its prompt forbids inferring anything about the person, which is what §25.5 excludes declines from the
+ *      normal Q&A to prevent.
+ *   3. It never carries `metrics` or a `crisisFlag` — there are no answers to derive either from, and a
+ *      crisis signal read out of a silence would be a guess.
+ * Standard-only is enforced by the caller: on a Private send the summary would cross back to the sender, and
+ * a paraphrase of why she refused breaches the same promise the counts protect (§34.2).
+ */
+async function analyzeRefusal(
+  deps: AiDeps,
+  input: {
+    assignment: Assignment;
+    snapshot: Questionnaire;
+    response: ResponseSet;
+    skips: SkipLine[];
+  },
+): Promise<QuestionnaireAnalyzeResult> {
+  const { assignment, snapshot, response, skips } = input;
+  // BEFORE spending. `saveInsight` replaces the whole record, so reusing the id of a real analysis would
+  // destroy it — its metrics, its crisis flag, its partner-shared facts, its approved state — when someone
+  // withdraws their answers and resubmits empty. Only ever overwrite a previous REFUSAL read. This check has
+  // to come first because the caller may be `autoAnalyze`: leave it below the model call and that path bills
+  // a read on every re-open of the sender's Results and then throws the answer away, with no user action at
+  // all. The sibling path fails honestly before spending for the same reason.
+  const prior = (await listInsightsForPerson(deps.fs, deps.key, assignment.senderPersonId)).find(
+    (i) => i.provenance.assignmentId === assignment.id,
+  );
+  if (prior && prior.provenance.refusalRead !== true) {
+    return {
+      ok: false,
+      reason: 'EMPTY',
+      message:
+        'Nothing was answered this time — the insight from the earlier answers is still in your Memory.',
+    };
+  }
+
+  // §5.8a: suppression is UNCONDITIONAL on any path that writes prose a person reads, and this is one — it
+  // quotes the recipient's own words into the prompt and produces a summary the sender reads back.
+  const suppression =
+    assignment.recipient.kind === 'person'
+      ? await buildOwnSuppressionBlock(deps.fs, deps.key, assignment.recipient.personId)
+      : '';
+  const call = await runClaude(
+    deps,
+    [REFUSAL_ANALYSIS_SYSTEM, suppression].filter(Boolean).join('\n\n'),
+    buildRefusalUserMessage({ title: snapshot.title, skips }),
+    'questionnaire.analyze',
+    1200,
+  );
+  if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
+
+  const raw = extractJsonObject(call.text);
+  const parsed = raw ? AnalysisSchema.safeParse(raw) : undefined;
+  if (!parsed?.success) {
+    // A valid-but-empty reply is an EMPTY outcome, not a shape problem — say so plainly rather than raising
+    // the "unexpected shape" error, which reads as broken and invites a pointless (billed) retry.
+    if (isEmptyStructuredResult(raw)) {
+      return {
+        ok: false,
+        reason: 'EMPTY',
+        usage: call.usage,
+        message: 'There wasn’t enough in these skipped questions to draw anything from yet.',
+      };
+    }
+    const { reason: classified, message } = classifyParseOutcome(call.text, 'analysis');
+    const reason = call.truncated ? ('TRUNCATED' as const) : classified;
+    return {
+      ok: false,
+      reason,
+      usage: call.usage,
+      message,
+      diagnostic: analysisFailureDiagnostic(call.text, reason, call.truncated ?? false),
+    };
+  }
+
+  const at = deps.now.toISOString();
+  const insight: Insight = {
+    id: prior?.id ?? uuid(),
+    schemaVersion: 1,
+    source: 'questionnaire',
+    subjectPersonId: assignment.senderPersonId,
+    summary: parsed.data.summary,
+    // `shareableTypes: []` is EXPLICIT-private and is load-bearing. `shareable: false` alone is not enough:
+    // that is byte-for-byte the shape `isDefaultPrivate` matches, so the partner-share backfill
+    // (`ensurePartnerShareBackfill`, run on the first Memory read) would stamp `['partner']` on it — and on a
+    // Standard send these fact texts are derived from the recipient's own words. An explicit empty scope is
+    // preserved by the backfill; an absent one is treated as never-configured.
+    facts: parsed.data.facts.map((f) => ({
+      id: uuid(),
+      text: f.text,
+      shareable: false,
+      shareableTypes: [],
+    })),
+    confidence: parsed.data.confidence ?? 'low',
+    categories: normalizeCategories(parsed.data.categories ?? []),
+    approved: false,
+    provenance: {
+      assignmentId: assignment.id,
+      analyzedRevision: responseRevision(response),
+      // Marks this as a read of a REFUSAL, not of answers — so a later refusal read may replace it, and a
+      // later real analysis is never mistaken for one.
+      refusalRead: true,
+      ...aboutFromRecipient(assignment.recipient, assignment.senderPersonId),
+      at,
+    },
+    createdAt: prior?.createdAt ?? at,
+    updatedAt: at,
   };
   await saveInsight(deps.fs, deps.key, insight);
   return { ok: true, insight, usage: call.usage };

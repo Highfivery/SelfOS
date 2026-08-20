@@ -626,6 +626,25 @@ function makeHost(): {
   };
 }
 
+/** A Claude that answers any bounded structured call with a valid analysis object. */
+function analysisClaude(): ClaudeClient {
+  const json = JSON.stringify({
+    summary: 'What these questions asked for was hard to reach.',
+    facts: [{ text: 'Ask about one concrete moment.', shareable: true }],
+    confidence: 'low',
+  });
+  return {
+    send: () => Promise.resolve(json),
+    stream: (_options, onDelta) => {
+      onDelta(json);
+      return Promise.resolve({
+        text: json,
+        usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+      });
+    },
+  };
+}
+
 async function freshOwner(): Promise<{
   host: ReturnType<typeof makeHost>;
   bridge: ReturnType<typeof createCoreBridge>;
@@ -6327,8 +6346,10 @@ describe('createCoreBridge', () => {
     });
 
     const overview = (await bridge.questionnairesSentOverview())[q.id];
-    // The bug: this used to stay set forever, re-offering an Analyze that bails EMPTY before the model.
-    expect(overview?.analyzableAssignmentId).toBeUndefined();
+    // This send is STANDARD, so there IS something to read — the refusal itself (§34.3) — and the action
+    // stays, relabelled by the card. What used to be broken was offering the ORDINARY analyze, which bails
+    // EMPTY before the model; the `skipped` summary is what tells the card to say so.
+    expect(overview?.analyzableAssignmentId).toBe(assignment.id);
     expect(overview?.analyzed).toBe(false);
     expect(overview?.skipped).toEqual({
       total: 2,
@@ -6361,6 +6382,94 @@ describe('createCoreBridge', () => {
     const partial = (await bridge.questionnairesSentOverview())[q2.id];
     expect(partial?.analyzableAssignmentId).toBe(second.assignment.id);
     expect(partial?.skipped).toBeUndefined();
+
+    // A PRIVATE send that came back empty has nothing we are allowed to say back, so the action is
+    // withheld entirely — the reported dead button, in the mode it was actually dead in.
+    const q3 = await bridge.questionnairesSave({
+      title: 'Private and unanswered',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'One', required: false }],
+    });
+    const third = await bridge.assignmentsCreate({ questionnaireId: q3.id, privacy: 'private' });
+    await bridge.assignmentsSubmit({
+      assignmentId: third.assignment.id,
+      answers: [{ questionId: 'q1', value: { declined: true } }],
+    });
+    const priv = (await bridge.questionnairesSentOverview())[q3.id];
+    expect(priv?.analyzableAssignmentId).toBeUndefined();
+    expect(priv?.skipped?.total).toBe(1);
+  });
+
+  it('the skip state describes the send the action targets, not a different one (08 §34.3)', async () => {
+    // A re-asked questionnaire has more than one send, and one click of the card's own Analyze puts the
+    // NEWEST send in the analysed pile while an older one is still waiting. The display state and the action
+    // must describe the SAME send, or the card asserts one thing and does another.
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const questions = [
+      { id: 'q1', type: 'shortText' as const, prompt: 'What held you back?', required: false },
+    ];
+
+    // CASE 1 — the older, un-analysed send carries a REAL answer; the newer, analysed one was all-skipped.
+    // Probing "latest submitted" here made the card say "all skipped" over a response containing an answer,
+    // and point its read at that answer.
+    const q = await bridge.questionnairesSave({
+      title: 'Re-asked',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions,
+    });
+    const older = await bridge.assignmentsCreate({ questionnaireId: q.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: older.assignment.id,
+      answers: [{ questionId: 'q1', value: 'A real answer' }],
+    });
+    const newer = await bridge.assignmentsCreate({ questionnaireId: q.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: newer.assignment.id,
+      answers: [{ questionId: 'q1', value: { declined: true } }],
+    });
+    // The shared fake only returns JSON for prompts saying "JSON object"; swap in one that returns a valid
+    // analysis, like the other analyze tests in this file.
+    host.host.claude = analysisClaude();
+    expect((await bridge.insightsAnalyze({ assignmentId: newer.assignment.id })).ok).toBe(true);
+
+    const reasked = (await bridge.questionnairesSentOverview())[q.id];
+    // The action still targets the older send, so the state must be the older send's: it has an answer, so
+    // there is no skip state at all and the ordinary Analyze stands.
+    expect(reasked?.analyzableAssignmentId).toBe(older.assignment.id);
+    expect(reasked?.skipped).toBeUndefined();
+
+    // CASE 2 — the analysable send is PRIVATE and all-skipped while the newest (analysed) send is Standard.
+    // Card-level privacy is derived from the latest send per recipient, so judging by it offered the read on
+    // a Private send: the dead button, in exactly the mode part 1 existed to kill.
+    const q2 = await bridge.questionnairesSave({
+      title: 'Mixed modes',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions,
+    });
+    const priv = await bridge.assignmentsCreate({ questionnaireId: q2.id, privacy: 'private' });
+    await bridge.assignmentsSubmit({
+      assignmentId: priv.assignment.id,
+      answers: [{ questionId: 'q1', value: { declined: true } }],
+    });
+    const std = await bridge.assignmentsCreate({ questionnaireId: q2.id, privacy: 'standard' });
+    await bridge.assignmentsSubmit({
+      assignmentId: std.assignment.id,
+      answers: [{ questionId: 'q1', value: 'Answered this time' }],
+    });
+    host.host.claude = analysisClaude();
+    expect((await bridge.insightsAnalyze({ assignmentId: std.assignment.id })).ok).toBe(true);
+
+    const mixed = (await bridge.questionnairesSentOverview())[q2.id];
+    expect(mixed?.privacy).toBe('standard'); // the card-level value that must NOT decide this
+    expect(mixed?.skipped?.total).toBe(1); // the private send is what the state describes…
+    expect(mixed?.analyzableAssignmentId).toBeUndefined(); // …and it may not be read
   });
 
   it('card privacy badges (§3.1): sentOverview derives private/mixed; a compatibility Inbox item carries its visibility', async () => {

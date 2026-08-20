@@ -1257,7 +1257,6 @@ export const DIRTY_TALK_NAMES: Bank = buildBank([
         { text: 'lapdog', ex: 'such a good lapdog' },
         { text: 'my lap dog', ex: 'up, my lap dog' },
         { text: 'my foal', ex: 'up, my foal' },
-        { text: 'my tomcat', ex: 'sit, my tomcat' },
         { text: 'puss', ex: 'such a good puss' },
         { text: 'good dog', ex: 'sit, good dog' },
         { text: 'bad dog', ex: 'such a good bad dog' },
@@ -1300,7 +1299,6 @@ export const DIRTY_TALK_NAMES: Bank = buildBank([
         { text: "my baby's mother", ex: "say it — you're my baby's mother", addresses: 'girl' },
       ],
       5: [
-        { text: 'broodmare', ex: 'come here, broodmare' },
         { text: 'my breeder', ex: "that's it, my breeder" },
         { text: 'my breeding bitch', ex: 'take it, my breeding bitch' },
         { text: 'breeding stock', ex: 'good, breeding stock' },

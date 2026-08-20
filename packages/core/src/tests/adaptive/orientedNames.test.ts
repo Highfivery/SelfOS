@@ -444,6 +444,25 @@ describe('a mark on a name the bank retired', () => {
     expect(kept?.sayState).toBe('love'); // the side they had left blank
   });
 
+  it('retires the mark outright when the name it was retired INTO has since been cut', () => {
+    /*
+     * 74 §3.6.32 — the frozen `retiredInto` map now holds rows whose TARGET no longer exists: the
+     * `names-masculine:my-X → names-masculine:X` rows (the register was retired whole in §3.6.30), and
+     * `my-broodmare → broodmare` (cut here as an animal-sex leftover). The map is frozen by design, so those
+     * rows stay — and this pins what they do: `bankEntry` cannot resolve the target, so the mark is retired
+     * outright rather than migrating to a key with no row on any screen, which is the un-gettable-rid-of
+     * preference §3.2 abolished.
+     */
+    const after = pruneUnshownMarks(
+      lex([mark('names-breeding:my-broodmare', 'names-breeding', { hearState: 'love', hear: 3 })]),
+      DIRTY_TALK.bank,
+      OPEN_ORIENTATION,
+      new Date(),
+    );
+    expect(after.changed).toBe(true);
+    expect(after.lexicon.entries).toEqual([]);
+  });
+
   it('never touches a custom write-in or another instrument’s entry', () => {
     const before = lex([
       mark('custom:names-warm:my-own-word', 'names-warm', { custom: true, hearState: 'never' }),

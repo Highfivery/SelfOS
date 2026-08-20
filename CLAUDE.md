@@ -576,6 +576,19 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **The last two animal-sex leftovers cut (`my tomcat`, `broodmare`); SPEC 74 §3.6.32.** Owner's
+  call, on §3.6.24's line: that purge REMOVED the animal-sex names rather than tagging them, and these two
+  survived it — `tom` is the male-cat morpheme, a mare is a female horse, and in both the animal's sex is the
+  whole force of the word. 1,300 names, 2,224 entries; nobody held a mark in either register. **The reason it
+  earned a test:** `broodmare` was a `retiredInto` TARGET, and that map is frozen by design, so it now holds
+  rows pointing at keys that no longer exist — these, plus the ~20 `names-masculine:my-X` rows orphaned when
+  §3.6.30 retired that register whole. `retireCutMarks` resolves the target through `bankEntry`, gets
+  `undefined`, and retires the mark outright instead of migrating it to a key with no row on any screen. Right
+  answer, now pinned — the guard fails the moment `broodmare` goes back in the bank.
+  **Lesson: cutting an entry is not always a leaf operation — check whether it is the TARGET of a frozen
+  migration before deleting it, because the failure mode is silent (a mark migrating to a key nothing can
+  edit) rather than a crash.**
+
 - 2026-08-19 — **Owner-reported ("every time i run pnpm dev it crashes") — it was not a crash; CLAUDE.md §6
   step 7 amended.** Diagnosed rather than pattern-matched to the change I had just made: the build succeeded,
   printed `start electron app...`, and the process exited with **no error at all**. The cause was a SelfOS Dev

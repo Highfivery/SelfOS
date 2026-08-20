@@ -1210,6 +1210,23 @@ loved-to-say** — suppression was correct wherever the caller knows the directi
 narrower than I first reported: it is specific to the DIRECTIONLESS callers, of which the synthesis narrative
 is the one that matters. The fix is proven by reverting it and watching the hear/say-gap paragraph drop.
 
+### 3.6.32 The last two animal-sex leftovers — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+`names-petplay:my tomcat` and `names-breeding:broodmare`, cut at the owner's direction. Both are leftovers of
+the §3.6.24 purge, which removed the animal-sex names (`stallion`/`bull`/`stag`/`vixen` and their
+counterparts) rather than tagging them: `tom` is the male-cat morpheme and a mare is a female horse, and in
+both the animal's sex is the whole force of the word. Nobody holds a mark in either register. **1,300 names,
+2,224 entries.**
+
+**What made this worth a test rather than a one-line cut.** `broodmare` was a `retiredInto` TARGET
+(`my-broodmare → broodmare`), and that map is FROZEN by design — a later purge adds rows, it never rewrites
+them, or a mark migrated once would move again to somewhere its owner never chose. So the map now holds rows
+pointing at keys that no longer exist: these, and the ~20 `names-masculine:my-X → names-masculine:X` rows
+orphaned when §3.6.30 retired that register whole. `retireCutMarks` resolves a target through
+`bankEntry`, which returns `undefined`, and the mark is **retired outright** rather than migrating to a key
+with no row on any screen — the un-gettable-rid-of preference §3.2 abolished. Correct, and now pinned:
+the guard fails (the mark migrates instead) the moment `broodmare` is put back in the bank.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

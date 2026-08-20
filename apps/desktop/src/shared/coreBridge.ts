@@ -876,6 +876,7 @@ import {
   DIRTY_TALK,
   abandonAdaptiveTake,
   addBoundary,
+  removeBoundary,
   addCustomEntry,
   clearDirectionalMarks,
   completeAdaptiveTake,
@@ -891,10 +892,13 @@ import {
   openEndedAmbiguity,
   runProbePhase,
   ambiguityOfProbeTurn,
+  probeTurnId,
+  scenarioTurnId,
   runScenarioPhase,
   runSynthesis,
   accruePhaseCost,
   stampTurn,
+  stampOffers,
   startAdaptiveTake,
   writeLexicon,
   addressFromAnswer,
@@ -1262,6 +1266,14 @@ const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
     // derives from the entry's live mark now, and a word record with no entry behind it is a suppression with
     // no row anywhere to lift it. The renderer only ever sends `theme`; this makes that the contract.
     boundaryKind: z.literal('theme'),
+  }),
+  z.object({
+    // 74 §3.6.35 — take a themed boundary back. `addBoundary` had no counterpart anywhere in the app, so the
+    // lines step's "never anything like this again" minted a suppression nothing could lift — the
+    // un-gettable-rid-of preference §3.2 was amended to abolish, reached from the one direction that
+    // amendment did not cover (it fixed the marks, whose suppression is derived and lifts with the mark).
+    kind: z.literal('removeBoundary'),
+    text: z.string().min(1).max(200),
   }),
 ]);
 
@@ -4576,6 +4588,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       );
       // Every phase's spend accrues onto the draft, or the take's own cost figure is only its last call.
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
+      /*
+       * 74 §3.6.35 — the set is RECORDED the moment it exists, before anyone reacts to it.
+       *
+       * The lines lived in renderer state until a reaction stamped one, so an unreacted line was gone on the
+       * next load and could never be reviewed — and it was absent from the avoid-list two lines above, so the
+       * next round could hand back the very lines it had just replaced. Stamped here rather than by the
+       * renderer: it is one write instead of twelve, it survives a crash between the call and the render, and
+       * a phase that spends is the thing that knows what it bought.
+       */
+      await stampOffers(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        'lines',
+        (out.value ?? []).map((line) => ({ id: line, pack: 'lines', text: line, options: [] })),
+        new Date(),
+      );
       return {
         ok: out.ok,
         ...(out.value ? { lines: out.value } : {}),
@@ -4638,6 +4668,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         await takeAnswers(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId),
       );
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
+      /*
+       * 74 §3.6.35 — every question of the pass, recorded as asked, with the id it will be answered under.
+       *
+       * A pass writes up to six and only the one on screen existed anywhere; the rest sat in a renderer queue,
+       * so navigating away lost them and the review list below could only ever show what had been answered.
+       * The id is built here for the same reason the phase stamps at all — `probeTurnId` pairs with
+       * `ambiguityOfProbeTurn`, which this handler reads back, and the two must not drift apart.
+       */
+      await stampOffers(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        'probe',
+        (out.value ?? []).map((q) => ({
+          id: probeTurnId(target.id, q.question),
+          pack: 'probe',
+          text: q.question,
+          options: q.options,
+        })),
+        new Date(),
+      );
       return {
         ok: out.ok,
         ...(out.value?.[0] ? { question: out.value[0].question, questions: out.value } : {}),
@@ -4681,6 +4733,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         priorScenes,
       );
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
+      // 74 §3.6.35 — the moments, recorded as written. A moment nobody picked lived only in renderer state, so
+      // it vanished on the next load; `scenarioTurnId` is the shared format so this offer and the pick that
+      // fills it in later land on the same turn.
+      await stampOffers(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        'scenario',
+        (out.value ?? []).map((s) => ({
+          id: scenarioTurnId(parsed.context, s.scene),
+          pack: 'scenario',
+          text: s.scene,
+          options: s.options,
+        })),
+        new Date(),
+      );
       return {
         ok: out.ok,
         context: parsed.context,
@@ -4882,6 +4951,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           break;
         case 'addBoundary':
           lexicon = addBoundary(lexicon, { text: edit.text, kind: edit.boundaryKind }, now);
+          break;
+        case 'removeBoundary':
+          lexicon = removeBoundary(lexicon, edit.text, now);
           break;
       }
       await writeLexicon(ctx.fs, ctx.key, lexicon);

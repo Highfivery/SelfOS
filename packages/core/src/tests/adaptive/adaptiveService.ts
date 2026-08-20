@@ -329,10 +329,52 @@ export async function stampTurn(
   // REPLACE a turn for the same item rather than appending a second one. Answers are editable (74 §3.6.16 —
   // "a way to see what has been answered, edit those answers"), and appending made a changed answer a
   // duplicate: both reached the synthesis, and the ask ledger counted the item twice.
-  const rest = (draft.turns ?? []).filter(
-    (t) => !(t.phase === turn.phase && t.item.id === turn.item.id),
-  );
-  await saveResult(fs, key, { ...draft, turns: [...rest, turn], updatedAt: turn.at });
+  //
+  // 74 §3.6.35 — replaced IN PLACE. The three AI steps render their set FROM the turns now, so a
+  // filter-and-append moved whatever you just answered to the bottom of the list: answer the second of six
+  // lines and it jumps past the other five. Position is the order it was written in, and answering is not a
+  // re-write of that order.
+  const turns = draft.turns ?? [];
+  const at = turns.findIndex((t) => t.phase === turn.phase && t.item.id === turn.item.id);
+  const next = at >= 0 ? turns.map((t, i) => (i === at ? turn : t)) : [...turns, turn];
+  await saveResult(fs, key, { ...draft, turns: next, updatedAt: turn.at });
+}
+
+/**
+ * 74 §3.6.35 — record what a generating phase just PUT IN FRONT OF THEM, before they respond to any of it.
+ *
+ * The lines, probe and scenario steps used to keep their generated set in renderer state alone, and only a
+ * reaction reached the draft. So the set was gone on the next load — a line you had not reacted to, a question
+ * you had not answered and a moment you had not picked were all unreachable, which is what made "see and change
+ * everything it generated" impossible. Worse, the bridge builds each phase's avoid-list from these same turns,
+ * so an unreacted line was not on it and "write me more" could hand back the very lines it had just replaced.
+ *
+ * An offer carries NO answer, which is what distinguishes it from a response (`isAnsweredTurn`). Existing turns
+ * are never touched: re-generating a scene or re-reading a round must not blank an answer already given.
+ */
+export async function stampOffers(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  resultId: string,
+  phase: string,
+  items: readonly NonNullable<TestResult['turns']>[number]['item'][],
+  now: Date,
+): Promise<void> {
+  if (items.length === 0) return;
+  const draft = await getAdaptiveResult(fs, key, personId, resultId);
+  if (!draft || draft.status !== 'draft') return;
+  const turns = draft.turns ?? [];
+  const known = new Set(turns.filter((t) => t.phase === phase).map((t) => t.item.id));
+  const fresh = items
+    .filter((item) => !known.has(item.id))
+    .map((item) => ({ phase, item, at: now.toISOString() }));
+  if (fresh.length === 0) return;
+  await saveResult(fs, key, {
+    ...draft,
+    turns: [...turns, ...fresh],
+    updatedAt: now.toISOString(),
+  });
 }
 
 /**

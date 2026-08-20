@@ -16426,13 +16426,13 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
 
     // A CONVENTION-coded word is still asked both ways — #62 forbids inferring a preference from gender,
     // and deciding for himself is the entire point of the phase.
-    await w.getByRole('button', { name: /Done with this one/i }).click();
+    await w.getByRole('button', { name: 'All registers' }).click();
     await w.getByRole('button', { name: /^warm & sweet/i }).click();
     // `beautiful` since §3.6.30 cut `angel` — both are convention-coded and neither is grammatically
     // gendered, so the property under test is unchanged; only the exemplar had to still exist.
     await expect(w.getByRole('button', { name: /^beautiful — .*→ Tester/i }).first()).toBeVisible();
     await expect(w.getByRole('button', { name: /^beautiful — Tester →/i }).first()).toBeVisible();
-    await w.getByRole('button', { name: /Done with this one/i }).click();
+    await w.getByRole('button', { name: 'All registers' }).click();
     await w.getByRole('button', { name: /Done with names/i }).click();
     // The words are next, and they open on their owed two-tap practice.
     await clearPractice(w);
@@ -16625,23 +16625,19 @@ test('74: the Dirty Talk take — mark both ways, complete, and the boundary hol
       })
       .toBe('never/love/0');
 
-    await w.getByRole('button', { name: /Done with this one/i }).click();
+    await w.getByRole('button', { name: 'All registers' }).click();
 
     // 74 §3.6.12 — the redesigned grid. The card updates from the marks this screen already holds: it used
     // to keep the count fetched once at mount, so a register worked through in THIS sitting still read
     // "Not opened" (owner-reported 2026-08-19).
     const praiseCard = w.getByRole('button', { name: /^praise/i });
-    // The track must actually DRAW. The card is a <button>, whose flex box does not stretch its items, so
-    // the bar measured 0px wide and no progress ever showed -- invisible to every screenshot assertion.
-    expect(
-      await w.evaluate(() => {
-        const card = document.querySelector('button[aria-label^="praise"]');
-        const bar = card?.querySelector('[class*="regBar"]');
-        return bar ? Math.round(bar.getBoundingClientRect().width) : 0;
-      }),
-    ).toBeGreaterThan(100);
-    await expect(praiseCard).toContainText('1 of');
+    // 74 §3.6.29 — what HAPPENED, never a fraction of a whole. The filling bar and the "1 of 62" this used
+    // to assert are both gone: the bank grows, so a denominator turns someone's finished register into
+    // "98% · 2 left" on the next release without them touching anything. The count stays; the total beside
+    // it is inventory, not something to reach.
+    await expect(praiseCard).toContainText('1 marked');
     await expect(praiseCard).not.toContainText('none marked yet');
+    await expect(praiseCard.locator('[class*="regBar"]')).toHaveCount(0);
     // The range is words, not a five-pip meter that encoded a RANGE and read as an AMOUNT.
     await expect(praiseCard).toContainText(/gentle|warm|strong|intense/i);
     await w.screenshot({ path: 'e2e-artifacts/74-names-grid-marked.png' });
@@ -17101,6 +17097,26 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
  * bar inconsistent with the rail one screen over — so the walk exists to put every screen in front of a reviewer
  * in one run, and to fail loudly on the classes a screenshot cannot show (a raw key, an overflow, a dead end).
  */
+/**
+ * Wait for the off-canvas sidebar to finish sliding away after a resize down to phone width.
+ *
+ * A screenshot taken straight after `setViewportSize` photographs the nav mid-transition, sitting over the
+ * page — so the image shows the drawer rather than the screen under test. `expectNoInnerOverflow` reads the
+ * DOM and is unaffected; this is purely so the picture is judgeable.
+ */
+async function settleNarrow(w: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        w.evaluate(() => {
+          const bar = document.querySelector('[class*="sidebar"]');
+          return bar ? Math.round(bar.getBoundingClientRect().right) : 0;
+        }),
+      { timeout: 5_000 },
+    )
+    .toBeLessThanOrEqual(0);
+}
+
 test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async () => {
   test.setTimeout(180_000);
   // AI on with a stub key, or every AI step degrades before it ever reaches the model — and the whole point of
@@ -17188,7 +17204,7 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     for (let i = 0; i < 30 && (await loveButtons.count()) > i; i += 2) {
       await loveButtons.nth(i).click();
     }
-    await w.getByRole('button', { name: /Done with this one/i }).click();
+    await w.getByRole('button', { name: 'All registers' }).click();
 
     // Scoped to the step LIST, not the whole rail: the verbs card sits in the same aside, so "Next: the
     // questions it still has" matches a step row's name too.
@@ -17343,6 +17359,7 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     // …and at phone width, where the frame stacks. The nav is a hidden drawer below 768px, so navigate at
     // desktop width and resize to measure (the standing §12 lesson).
     await w.setViewportSize({ width: 390, height: 900 });
+    await settleNarrow(w);
     await shot('14-390-profile');
     await expectNoInnerOverflow(w);
 
@@ -17359,6 +17376,7 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .click()
       .catch(() => undefined);
     await w.setViewportSize({ width: 390, height: 900 });
+    await settleNarrow(w);
     await shot('15-390-map');
     await expectNoInnerOverflow(w);
     await w.setViewportSize({ width: 1280, height: 900 });
@@ -17367,8 +17385,30 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .getByRole('button', { name: /What you call each other/i })
       .click();
     await w.setViewportSize({ width: 390, height: 900 });
+    await settleNarrow(w);
     await shot('16-390-names');
     await expectNoInnerOverflow(w);
+
+    /*
+     * 74 §3.6.35 — the three AI steps at phone width.
+     *
+     * They had no narrow check at all: the 390px pass covered the profile, the map, the names and the report
+     * and stopped, so the three screens that were just rebuilt around a filter, state chips and a card list
+     * were the only ones in the take nobody had measured. Reached through the rail at desktop width and
+     * resized to measure, because the nav is a hidden drawer below 768px (the standing §12 lesson).
+     */
+    for (const [name, step] of [
+      ['17a-390-lines', /Lines written for you/i],
+      ['17b-390-questions', /The questions it still has/i],
+      ['17c-390-moment', /In the moment/i],
+    ] as const) {
+      await w.setViewportSize({ width: 1280, height: 900 });
+      await w.getByRole('list', { name: 'Steps' }).getByRole('button', { name: step }).click();
+      await w.setViewportSize({ width: 390, height: 900 });
+      await settleNarrow(w);
+      await shot(name);
+      await expectNoInnerOverflow(w);
+    }
 
     // The whole measured picture, in one place, rather than one assertion stopping at the first problem.
 

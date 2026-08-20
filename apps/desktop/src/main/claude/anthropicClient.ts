@@ -344,6 +344,65 @@ export function fakeClaudeClient(): ClaudeClient {
       // bespoke hook through it — the assert-the-prompt rule, made cheap.
       capturePrompt(options.system ?? '', userText);
 
+      /*
+       * 74 §3.6.35 — the three adaptive AI phases.
+       *
+       * The fake had NO branch for any of them, so every offline run of these steps came back MALFORMED and
+       * the §3.6.9 audit walk has been photographing a warning banner where the step should be. That is the
+       * fake-hides-the-delivered-path trap (67 §3.3a): a fake that cannot produce what the real thing
+       * produces leaves the richest screens in the feature unexercised and un-QA-able.
+       *
+       * Matched on the phase's own instruction rather than anything incidental, and the SYSTEM prompt is
+       * what carries it (the user message is the lexicon digest).
+       */
+      const systemText = options.system ?? '';
+      if (systemText.includes('complete lines someone could actually SAY in bed')) {
+        // Distinct per round, so "write me more" can be seen to APPEND rather than replace.
+        const round = (systemText.match(/^- /gm)?.length ?? 0) + 1;
+        return Promise.resolve({
+          text: JSON.stringify({
+            lines: [
+              `Line ${round}a — stay right there and let me look at you.`,
+              `Line ${round}b — good girl, just like that.`,
+              `Line ${round}c — you have no idea what you do to me.`,
+            ],
+          }),
+          usage: { inputTokens: 90, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      if (systemText.includes('short questions about the WORDS')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            questions: [
+              { question: 'Is it the word, or who says it?', options: ['The word', 'Who says it'] },
+              {
+                question: 'What phrasing kills it fastest?',
+                options: ['Anything rehearsed', 'Baby talk', 'I’d rather not say'],
+              },
+            ],
+          }),
+          usage: { inputTokens: 70, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      if (systemText.includes('concrete, explicit moments in the')) {
+        const context = /moments in the "([^"]+)" context/.exec(systemText)?.[1] ?? 'during';
+        return Promise.resolve({
+          text: JSON.stringify({
+            scenes: [
+              {
+                scene: `A ${context} moment — they walk in and say nothing.`,
+                options: ['“Come here.”', '“You’re late.”'],
+              },
+              {
+                scene: `Another ${context} moment — pinned against the counter.`,
+                options: ['“Don’t move.”', '“I’ve been thinking about this all day.”'],
+              },
+            ],
+          }),
+          usage: { inputTokens: 70, outputTokens: 50, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // Compatibility variant personalization (08 §3.6/§17.12/§17.14e) asks for a JSON array of objects
       // { prompt, options } — one per question, prompt + options both personalized. Echo each prompt tagged
       // with the OTHER participant ("experience with Y") so a test can verify each person is asked ABOUT the

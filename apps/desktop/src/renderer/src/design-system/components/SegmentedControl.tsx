@@ -13,6 +13,15 @@ interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void;
   'aria-label': string;
   iconOnly?: boolean;
+  /**
+   * How tall the segments are. Defaults to `compact` (28px) — the height every existing caller was built
+   * around, including the titlebar's appearance control, which is bounded by `--control-height`.
+   *
+   * `comfortable` is a full 44px tap target. It exists because the shared marking filter (74 §3.6.34) is a
+   * primary in-content control on six screens of this test, and the take's own UI audit flags it on every
+   * one of them: 28px is fine for chrome and under the minimum for something you tap while working.
+   */
+  size?: 'compact' | 'comfortable';
 }
 
 /** A single-select group of mutually exclusive options rendered as connected buttons. */
@@ -21,10 +30,15 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   iconOnly = false,
+  size = 'compact',
   ...aria
 }: SegmentedControlProps<T>): JSX.Element {
   return (
-    <div className={styles.group} role="group" aria-label={aria['aria-label']}>
+    <div
+      className={`${styles.group} ${size === 'comfortable' ? styles.comfortable : ''}`}
+      role="group"
+      aria-label={aria['aria-label']}
+    >
       {options.map((option) => {
         const active = option.value === value;
         const Icon = option.icon;

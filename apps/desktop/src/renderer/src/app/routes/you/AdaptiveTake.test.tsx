@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdaptiveBankView, AdaptiveStateView } from '@shared/schemas';
 import { installMockBridge } from '../../../test-utils/bridge';
+import { PROBE_SKIPPED } from '@selfos/core/schemas';
 import { useAdaptiveTestStore } from '../../../stores/adaptiveTestStore';
 import { AdaptiveTake } from './AdaptiveTake';
 
@@ -136,6 +137,45 @@ const ENOUGH_MARKS: Record<
   }),
 );
 
+/**
+ * 74 §3.6.35 — a fake that RECORDS the pass, the way the bridge does.
+ *
+ * The three AI steps render their set from the take's own turns now, because holding a generated set in
+ * renderer state alone is what made it disposable. So a fake that only returns `{lines}` from the phase call
+ * and never puts them on the draft is not a fake of the real thing — it is a fake of the bug. This mirrors
+ * `stampOffers`: the phase reply lands on the draft as answerless turns, and `testsAdaptiveState` hands them
+ * back on the re-read the store does next.
+ */
+function offering(): {
+  view: () => AdaptiveStateView;
+  offer: (phase: string, items: { id: string; text: string; options?: string[] }[]) => void;
+  answer: (phase: string, id: string, answer: string) => void;
+} {
+  let turns: NonNullable<AdaptiveStateView['draft']>['turns'] = [];
+  const view = (): AdaptiveStateView => state({ draft: { ...DRAFT, turns: [...(turns ?? [])] } });
+  return {
+    view,
+    offer: (phase, items) => {
+      const known = new Set((turns ?? []).filter((t) => t.phase === phase).map((t) => t.item.id));
+      turns = [
+        ...(turns ?? []),
+        ...items
+          .filter((item) => !known.has(item.id))
+          .map((item) => ({
+            phase,
+            item: { id: item.id, pack: phase, text: item.text, options: item.options ?? [] },
+            at: 'now',
+          })),
+      ];
+    },
+    answer: (phase, id, given) => {
+      turns = (turns ?? []).map((t) =>
+        t.phase === phase && t.item.id === id ? { ...t, answer: given } : t,
+      );
+    },
+  };
+}
+
 function renderTake(): void {
   render(
     <MemoryRouter initialEntries={['/tests/dirty-talk/take']}>
@@ -219,10 +259,11 @@ describe('AdaptiveTake (74 §3.2)', () => {
       lines: string[];
       degraded: boolean;
     }) => void = () => {};
+    const take = offering();
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
-      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
-      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+      testsAdaptiveStart: () => Promise.resolve(take.view()),
       testsAdaptiveLines: () =>
         new Promise((resolve) => {
           resolveLines = resolve;
@@ -238,6 +279,8 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // one by its own text rather than taking whichever `status` comes first.
     const status = await screen.findByText(/Writing lines for you/);
     expect(status).toHaveTextContent(/elapsed/);
+    // The bridge records the round before the renderer ever sees it, so the fake does too.
+    take.offer('lines', [{ id: 'good girl, just like that', text: 'good girl, just like that' }]);
     resolveLines({ ok: true, lines: ['good girl, just like that'], degraded: false });
     expect(await screen.findByText(/good girl, just like that/)).toBeInTheDocument();
   });
@@ -1023,11 +1066,20 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // A plain "no" means "this line doesn't land" and must not mint a boundary — a boundary is permanent and
     // lifts only by an explicit act. The escape is what catches "the word is fine, not like that".
     const edit = vi.fn(() => Promise.resolve(null));
+    const take = offering();
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
-      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
-      testsAdaptiveLines: () =>
-        Promise.resolve({ ok: true, lines: ['I want to beat that pussy'], degraded: false }),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+      testsAdaptiveLines: () => {
+        take.offer('lines', [
+          { id: 'I want to beat that pussy', text: 'I want to beat that pussy' },
+        ]);
+        return Promise.resolve({ ok: true, lines: ['I want to beat that pussy'], degraded: false });
+      },
+      testsAdaptiveTurn: ((input: { itemId: string; answer: string }) => {
+        take.answer('lines', input.itemId, input.answer);
+        return Promise.resolve(undefined);
+      }) as never,
       testsLexiconEdit: edit as never,
     });
     renderTake();
@@ -1038,7 +1090,10 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // Before the reaction there is no escape at all.
     expect(screen.queryByRole('button', { name: /Never anything like this/i })).toBeNull();
     await userEvent.click(
-      await screen.findByRole('button', { name: 'I want to beat that pussy — no' }),
+      // The mark's own words. The lines step uses the marking steps' control now, and a line reaction is
+      // NOT a boundary — the ban below it is — so this one reads "not this one" rather than the deck's
+      // "never", which would name the very thing the second tap exists to do (74 §3.6.35).
+      await screen.findByRole('button', { name: 'I want to beat that pussy — not this one' }),
     );
     expect(edit).not.toHaveBeenCalled();
 
@@ -1335,12 +1390,19 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
 
   it('lists every moment, marks the one you picked, and lets you change it', async () => {
     const turn = vi.fn(() => Promise.resolve(undefined));
+    const take = offering();
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
-      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
       testsAdaptiveTurn: turn as never,
-      testsAdaptiveScenario: () =>
-        Promise.resolve({
+      testsAdaptiveScenario: () => {
+        // As the bridge does: the moments are on the draft before anyone picks anything, which is what makes
+        // an unpicked one survive (74 §3.6.35).
+        take.offer('scenario', [
+          { id: 'buildUp#A moment.', text: 'A moment.', options: ['say this', 'or this'] },
+          { id: 'buildUp#Another moment.', text: 'Another moment.', options: ['third', 'fourth'] },
+        ]);
+        return Promise.resolve({
           ok: true,
           context: 'buildUp',
           degraded: false,
@@ -1350,7 +1412,8 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
             { scene: 'A moment.', options: ['say this', 'or this'] },
             { scene: 'Another moment.', options: ['third', 'fourth'] },
           ],
-        }),
+        });
+      },
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
@@ -1433,5 +1496,111 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     expect(await screen.findByRole('button', { name: /Write my profile/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Write my profile/i }));
     expect(synth).toHaveBeenCalled();
+  });
+});
+
+/**
+ * 74 §3.6.35 — the three AI steps show everything they generated, in one shape.
+ *
+ * Each of them used to show a different slice of its own set: the lines step showed the current round plus
+ * whatever had a reaction, the probe step filtered to answered questions only, and the moments step showed
+ * whatever this sitting happened to fetch. Nothing you passed over was reachable, and nothing you ignored
+ * survived a reload.
+ */
+describe('74 §3.6.35 — the generated set is reviewable and changeable', () => {
+  it('shows a question you skipped, says so, and still lets you answer it', async () => {
+    const take = offering();
+    take.offer('probe', [
+      { id: 'a#answered', text: 'Is it the word, or who says it?', options: ['the word', 'who'] },
+      { id: 'a#skipped', text: 'What phrasing kills it?', options: ['rehearsed', 'baby talk'] },
+      { id: 'a#open', text: 'Before, or during?', options: ['before', 'during'] },
+    ]);
+    take.answer('probe', 'a#answered', 'the word');
+    take.answer('probe', 'a#skipped', PROBE_SKIPPED);
+    const turn = vi.fn(() => Promise.resolve(undefined));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+      testsAdaptiveTurn: turn as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
+
+    // All three are on screen. The skipped one used to be filtered off it entirely — recorded, and
+    // unreachable — while the rail went on counting it as asked.
+    expect(await screen.findByText('Is it the word, or who says it?')).toBeInTheDocument();
+    expect(screen.getByText('What phrasing kills it?')).toBeInTheDocument();
+    expect(screen.getByText('Before, or during?')).toBeInTheDocument();
+    // A skip is still not an answer (74 §3.6.17) — it is labelled as what it is.
+    expect(screen.getByText('Skipped')).toBeInTheDocument();
+    expect(screen.getByText(/You passed over this one/)).toBeInTheDocument();
+
+    // …and it is answerable, which is the whole point of keeping it.
+    await userEvent.click(screen.getByRole('button', { name: 'baby talk' }));
+    expect(turn).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: 'probe', itemId: 'a#skipped', answer: 'baby talk' }),
+    );
+  });
+
+  it('filters to what has not been answered, without ever showing a fraction', async () => {
+    const take = offering();
+    take.offer('lines', [
+      { id: 'reacted', text: 'a line you answered' },
+      { id: 'untouched', text: 'a line you did not' },
+    ]);
+    take.answer('lines', 'reacted', 'love');
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
+
+    expect(await screen.findByText(/a line you answered/)).toBeInTheDocument();
+    expect(screen.getByText('2 lines')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Not answered yet' }));
+    expect(screen.queryByText(/a line you answered/)).toBeNull();
+    expect(screen.getByText(/a line you did not/)).toBeInTheDocument();
+    // A COUNT, never a fraction (74 §3.6.29) — "1 of 2" would pair it with a total and make the completion
+    // claim the durable rule forbids.
+    const count = screen.getByText('1 not answered');
+    expect(count).toBeInTheDocument();
+    // Scoped to the filter's OWN row: page-wide this catches "Step 4 of 7" in the eyebrow, which is a
+    // POSITION and stays (74 §3.6.29 — the rule's line is the denominator, not the count).
+    expect(count.parentElement?.textContent ?? '').not.toMatch(/\d+ of \d+/);
+  });
+
+  it('says a line is ruled out once it is, and offers the way back', async () => {
+    // The ban wrote a real boundary and changed nothing on screen: same link, same words, still enabled. And
+    // until `removeBoundary` there was nothing anywhere in the app that could lift it (74 §3.2/§3.6.35).
+    const take = offering();
+    take.offer('lines', [{ id: 'a ruled-out line', text: 'a ruled-out line' }]);
+    take.answer('lines', 'a ruled-out line', 'no');
+    const banned = state({
+      draft: take.view().draft,
+      lexicon: {
+        ...take.view().lexicon,
+        boundaries: [{ text: 'a ruled-out line', kind: 'theme' as const, at: 'now' }],
+      },
+    });
+    const edit = vi.fn(() => Promise.resolve(banned.lexicon));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(banned),
+      testsLexiconEdit: edit as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
+
+    // The row SAYS it, rather than offering the same tap again as though nothing had happened.
+    expect(await screen.findByText('Ruled out')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing in SelfOS will say this/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Never anything like this/i })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(edit).toHaveBeenCalledWith({ kind: 'removeBoundary', text: 'a ruled-out line' });
   });
 });

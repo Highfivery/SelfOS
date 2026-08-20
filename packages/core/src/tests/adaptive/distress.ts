@@ -54,8 +54,14 @@ export function readsAsDistress(text: string): boolean {
   return DISTRESS_MARKERS.some((marker) => lower.includes(marker));
 }
 
-/** Whether any free-text turn in a take carries a disclosure. */
-export function takeCarriesDistress(turns: readonly { answer: unknown }[] | undefined): boolean {
+/**
+ * Whether any free-text turn in a take carries a disclosure.
+ *
+ * `answer` is OPTIONAL since 74 §3.6.35 — a generated item recorded before anyone responded to it has none —
+ * and the `typeof` check below already reads that as "not free text", which is correct: nothing they wrote,
+ * nothing to detect.
+ */
+export function takeCarriesDistress(turns: readonly { answer?: unknown }[] | undefined): boolean {
   return (turns ?? []).some(
     (turn) => typeof turn.answer === 'string' && readsAsDistress(turn.answer),
   );

@@ -1072,17 +1072,31 @@ export const AdaptiveItemSchema = z.object({
 });
 export type AdaptiveItem = z.infer<typeof AdaptiveItemSchema>;
 
-/** One turn of an adaptive take: the item, the answer, when. Order is the array's order. */
+/**
+ * One turn of an adaptive take: the item, the answer, when. Order is the array's order.
+ *
+ * 74 §3.6.35 — `answer` is OPTIONAL, and an absent one means "this was put in front of them and they have not
+ * responded yet". That is the whole of the fix for the three AI steps: the generated set used to live in
+ * renderer state alone, so every line not reacted to, every question not answered and every moment not picked
+ * vanished on a reload and could never be reviewed. The set is stamped the moment it is generated now, so it
+ * is the take's own record rather than a screenful of state.
+ *
+ * Every consumer of an answer already had to narrow the union, so an absent one falls out correctly:
+ * `isAnsweredTurn` and `takeCarriesDistress` are `typeof === 'string'` checks, `answersDigest` filters
+ * `undefined`, and the report's "what you told it" reads through `isAnsweredTurn`.
+ */
 export const AdaptiveTurnSchema = z.object({
   phase: z.string().min(1),
   item: AdaptiveItemSchema,
-  answer: z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.string()),
-    z.record(z.string(), z.number()),
-  ]),
+  answer: z
+    .union([
+      z.string(),
+      z.number(),
+      z.boolean(),
+      z.array(z.string()),
+      z.record(z.string(), z.number()),
+    ])
+    .optional(),
   at: z.string(),
 });
 export type AdaptiveTurn = z.infer<typeof AdaptiveTurnSchema>;
@@ -1415,6 +1429,24 @@ export function ambiguityOfProbeTurn(turnId: string): string {
 }
 
 /**
+ * 74 §3.6.35 — a scenario turn's id, and the context it belongs to. The `probeTurnId` pair, one phase over.
+ *
+ * This format was built inline in the renderer when a moment was answered, and taken apart inline in the
+ * renderer when the answered moments were grouped by category — two hand-written copies of one format, with a
+ * third about to be written by the bridge now that a generated moment is recorded before anyone picks
+ * anything. The offer and the answer MUST land on the same id or `stampTurn` appends a second turn instead of
+ * filling in the first, and the moment would appear twice: once unanswered, once answered.
+ */
+export function scenarioTurnId(context: string, scene: string): string {
+  return `${context}#${scene.slice(0, 40)}`;
+}
+
+/** The moment category a scenario turn belongs to. */
+export function contextOfScenarioTurn(turnId: string): string {
+  return turnId.split('#')[0] ?? '';
+}
+
+/**
  * What a SKIPPED probe question records (74 §3.6.17).
  *
  * Skipping has to record the question as asked, or "skip this" hands back the same one forever. It used to
@@ -1464,7 +1496,13 @@ export type AdaptiveLexiconEdit =
       identity?: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' };
     }
   | { kind: 'addWord'; text: string; family: string; wordKind: 'word' | 'phrase' }
-  | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' };
+  | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' }
+  /**
+   * 74 §3.6.35 — lift a themed boundary. The counterpart `addBoundary` never had: a `never` is a preference
+   * (§3.2), and the lines step's "never anything like this again" was minting one that nothing in the app
+   * could take back.
+   */
+  | { kind: 'removeBoundary'; text: string };
 
 /**
  * One taking of a self-assessment ("Test"), per-person + encrypted at `people/<id>/tests/<result-id>.enc`

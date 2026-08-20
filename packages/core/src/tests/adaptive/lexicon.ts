@@ -648,6 +648,35 @@ export function addBoundary(
   };
 }
 
+/**
+ * 74 §3.6.35 — take a themed boundary back.
+ *
+ * There was no way to do this from anywhere in the app. `addBoundary` had no counterpart, and the lexicon edit
+ * seam offered `setAddress` / `clearSide` / `addWord` / `addBoundary` and nothing that removes one — so the
+ * "never anything like this again" tap on the lines step minted a permanent, unliftable suppression. That is
+ * exactly the un-gettable-rid-of preference §3.2 was amended to abolish (a `never` is a preference, not a
+ * locked door), reached from a direction the amendment did not cover: it fixed the MARKS, whose suppression is
+ * derived from a live mark and so lifts when the mark changes, and left the standalone theme record with no
+ * control at all.
+ *
+ * Matched the way `dedupeBoundaries` keys them — trimmed and case-insensitive — so the text on screen lifts the
+ * record it came from. Removing something that isn't there is a no-op that leaves `updatedAt` alone, so an
+ * accidental double-tap cannot make a lexicon look newer than it is.
+ *
+ * KNOWN LIMIT, unchanged and documented at `mergeLexicons`: boundaries UNION on merge, so a lift cannot be
+ * expressed to an older copy. There is no two-copy merge caller today (a conflicted vault is surfaced to the
+ * person, never merged automatically), so nothing can resurrect a lifted boundary; wiring one up needs a
+ * tombstone rather than a change here.
+ */
+export function removeBoundary(lexicon: EroticLexicon, text: string, now: Date): EroticLexicon {
+  const match = text.trim().toLowerCase();
+  const kept = lexicon.boundaries.filter(
+    (boundary) => boundary.text.trim().toLowerCase() !== match,
+  );
+  if (kept.length === lexicon.boundaries.length) return lexicon;
+  return { ...lexicon, boundaries: kept, updatedAt: now.toISOString() };
+}
+
 function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBoundary[] {
   const seen = new Map<string, LexiconBoundary>();
   for (const boundary of boundaries) {

@@ -2359,3 +2359,162 @@ details[open] > .foldHead .foldChevron {
   flex-wrap: wrap;
   margin-bottom: var(--space-1);
 }
+
+/* ── 74 §3.6.35 — the three AI steps, in the marking steps' shape ─────────────────────────────────────────
+ *
+ * Lines, questions and moments were three different surfaces for one job: react to a set the AI wrote. They
+ * share the row, the marks, the filter and the state chips now, so the take reads as one test.
+ */
+
+/* The line, and whatever the line's own state needs to say under it. The reaction marks are the row's second
+   child, exactly as on a bank row. */
+.lineMain {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The line is the hero of its row: serif at reading size, upright. It was italic body copy with the ban link
+   run straight on after the closing quote, so the escape hatch read as the end of the sentence. */
+.lineRow .lineText {
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.lineStruck {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--color-text-secondary);
+}
+
+/* Ruled out. Distinct from `.rowNo` (a soft no, dimmed) — this one is a boundary, and it keeps full contrast
+   because it is a state to read, not a row to skim past. */
+.rowBanned {
+  background: var(--color-danger-subtle-bg);
+  border-color: color-mix(in srgb, var(--color-danger) 40%, transparent);
+}
+
+/* The second, deliberate tap. Its own control under the line rather than an inline link inside it. */
+.banAsk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  background: none;
+  color: var(--color-danger);
+  cursor: pointer;
+}
+
+.banAsk:hover:not(:disabled) {
+  background: var(--color-danger-subtle-bg);
+}
+
+.banAsk:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.banState {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.banUndo {
+  min-height: 30px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
+/* What state an item in a generated set is in. Icon + word, never colour alone (§9). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+}
+
+.chipDone {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+.chipSkipped {
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+}
+
+.chipOpen {
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  border-color: var(--color-border);
+}
+
+.chipBan {
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-danger);
+}
+
+/* A question/moment card's head: the ask, with its state chip pinned to the top-right of it. */
+.qHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.qHead .probeAsk {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The card of the item currently being answered — the first one not answered yet. It is the same card as
+   every other, marked; a separate "live question" box below the reviewable list is what made this step two
+   shapes on one screen. */
+.qCardOpen {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+/*
+ * A line is a CARD, not a hairline strip. `.lineRow` shared the deck row's rule, which is a bottom border and
+ * 4px of padding — right for a dense 47-row area of short terms, wrong for a handful of full sentences that
+ * each carry their own state (loved / not this one / ruled out). A tinted background needs an edge to sit in,
+ * or the state bleeds into the row below it.
+ */
+.lineRow {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/*
+ * §12 — a title must never fight a tag for the same line.
+ *
+ * Beside the ask, the state chip is fine at desktop and ruinous at phone width: it holds its own width
+ * (`flex: none`) and the question loses the rest, so "Is it the word, or who says it?" came out as four lines
+ * of two words. The chip becomes an EYEBROW above the ask, which is the same answer §12 gives for a card
+ * title beside a framework tag — the ask gets the full width, and the chip still reads first.
+ */
+@media (max-width: 767px) {
+  .qHead {
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+}

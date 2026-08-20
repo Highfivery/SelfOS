@@ -9,6 +9,7 @@ import {
   tolerantArray,
 } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
+import { PROBE_SKIPPED } from '../../schemas';
 import type {
   AdaptiveProfile,
   AdaptiveReading,
@@ -65,6 +66,38 @@ between adults who both know that is what it is — never minors, never real non
 illegal. If something they wrote suggests real harm, coercion or an assault rather than a scene, do not treat \
 it as erotic material: stop, and say gently that it belongs with a person, not a test.`;
 
+/**
+ * 74 §3.6.35 — WHO THESE TWO ARE, in every generating prompt. Owner-directed.
+ *
+ * Identity and address were asked in the take's first two taps and then read by exactly one thing:
+ * `orientation.ts`, to decide which half of the bank a person is shown. No prompt has ever carried them — so
+ * the lines, probe and scenario phases each wrote for an unnamed pair and inferred the rest from whichever
+ * words happened to get marked. That is survivable for a term the person marked themselves and wrong the
+ * moment a phase invents anything: a line "pushing slightly past" what landed has nothing telling it which
+ * bodies are in the room, and a question phrased around a term has nothing telling it whose mouth it is in.
+ *
+ * Identity is the BODY, address is what they like being CALLED, and the two are deliberately separate (a man
+ * can want "good girl", §3.6.3) — so they are stated as two different facts and never collapsed. `either`, and
+ * an absent answer, are stated as themselves rather than guessed at: fail open, exactly as orientation does.
+ */
+export function whoBlock(lexicon: EroticLexicon): string {
+  const { identity, address } = lexicon;
+  if (!identity && !address) return '';
+  const body = (value: 'man' | 'woman' | 'either' | undefined): string =>
+    value === 'man' ? 'a man' : value === 'woman' ? 'a woman' : 'not stated — do not assume one';
+  const called = (value: 'girl' | 'man' | 'either' | undefined): string =>
+    value === 'girl'
+      ? 'likes being addressed as a girl'
+      : value === 'man'
+        ? 'likes being addressed as a man'
+        : 'has no preference either way about how they are addressed';
+  return `WHO THESE TWO ARE — write for these two, never a generic pair:
+- The person taking this: ${body(identity?.self)}, and ${called(address?.self)}.
+- The person they are with: ${body(identity?.partner)}, and ${called(address?.partner)}.
+Never give either of them a body they do not have, and never swap who is saying a line and who is hearing it. \
+How someone likes to be ADDRESSED is not their body — take each from the line it is on.`;
+}
+
 /** Their boundaries, as a hard negative constraint on anything generated. Belt; `violatesBoundary` is braces. */
 function boundaryBlock(lexicon: EroticLexicon): string {
   const banned = suppressedTexts(lexicon);
@@ -83,10 +116,20 @@ function boundaryBlock(lexicon: EroticLexicon): string {
  * Every generating phase takes this, so the take compounds instead of restarting.
  */
 export function answersDigest(
-  turns: readonly { phase: string; item: { text: string }; answer: unknown }[],
+  turns: readonly { phase: string; item: { text: string }; answer?: unknown }[],
 ): string {
   const lines = turns
-    .filter((turn) => turn.answer !== undefined && turn.answer !== null && turn.answer !== '')
+    .filter(
+      (turn) =>
+        turn.answer !== undefined &&
+        turn.answer !== null &&
+        turn.answer !== '' &&
+        // 74 §3.6.35 — a SKIP is not something they told us. It is stamped as a real marker rather than `''`
+        // (§3.6.17) so the question stays reachable, and that marker was reaching the model as though the
+        // person had answered "skipped". An OFFER — a generated item they have not responded to at all — has
+        // no answer and falls out on the `undefined` check above.
+        turn.answer !== PROBE_SKIPPED,
+    )
     .slice(-ANSWER_CONTEXT_CAP)
     .map((turn) => {
       const answer = typeof turn.answer === 'string' ? turn.answer : JSON.stringify(turn.answer);
@@ -330,6 +373,7 @@ export async function runLinesPhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     `Write exactly ${LINES_PER_ROUND} complete lines someone could actually SAY in bed — not topics, not \
 questions, the words themselves. Vary the register deliberately across praise, claiming, command, narration, \
 degradation, begging and filth, so their reactions tell us which register lands rather than which topic. Draw \
@@ -422,7 +466,13 @@ export interface ProbeQuestion {
  * ambiguity back off it, so the two halves must be one definition — and the renderer cannot import this
  * module, whose barrel pulls in crypto (the `generationReadiness` precedent).
  */
-export { probeTurnId, ambiguityOfProbeTurn, PROBE_SKIPPED } from '../../schemas';
+export {
+  probeTurnId,
+  ambiguityOfProbeTurn,
+  scenarioTurnId,
+  contextOfScenarioTurn,
+  PROBE_SKIPPED,
+} from '../../schemas';
 
 /**
  * Ask the questions that resolve ONE ambiguity — as many as it genuinely needs, not always exactly one.
@@ -446,6 +496,7 @@ export async function runProbePhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     /*
      * 74 §3.6.17 — SHORT, and answerable by tapping. Owner-directed, twice: "the questions are too long, they
      * should be quick to read, short, easy to answer, and specifically about dirty talk."
@@ -652,6 +703,7 @@ export async function runScenarioPhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     `Write ${MAX_SCENES} different short, concrete, explicit moments in the "${context}" context — genuinely \
 different situations, not one situation reworded — and for each, 3–4 things that could be SAID in it: real \
 lines, meaningfully different from each other in register, one of which may be "nothing, no words". The point \
@@ -776,6 +828,7 @@ export async function runSynthesis(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
+    whoBlock(lexicon),
     `Write their profile from everything below. Two parts.
 
 NARRATIVE — 6–8 short paragraphs, second person, in their register (frank, using the words THEY use). This is \

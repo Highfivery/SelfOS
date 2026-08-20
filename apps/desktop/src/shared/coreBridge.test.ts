@@ -7972,6 +7972,167 @@ describe('update awareness (36)', () => {
         expect(suppressedTexts(after, 'hear')).not.toContain('anal slut');
       });
 
+      /**
+       * 74 §3.6.35 — the whole loop, through the real handlers.
+       *
+       * Three separate defects, one cause: the generated set lived in renderer state and only a RESPONSE
+       * reached the draft. So an unreacted line vanished on the next load, it was absent from the avoid-list
+       * the next round is built from (the bridge assembles that from these same turns), and "write me more"
+       * hard-replaced what was on screen. This drives the bridge itself rather than the store, because the
+       * stamping is the bridge's job now — one write per pass, before the renderer has seen anything.
+       */
+      it('records a generated pass on the take, and re-offers nothing it has already asked', async () => {
+        const { bridge, host } = await freshOwner();
+        await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+        await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+        await bridge.testsAcknowledgeAdult();
+
+        const systems: string[] = [];
+        const users: string[] = [];
+        let round = 0;
+        host.host.claude = {
+          send: () => Promise.resolve(''),
+          stream: (options) => {
+            systems.push(options.system ?? '');
+            users.push(options.messages.map((m) => m.content).join('\n'));
+            round += 1;
+            const lines =
+              round === 1 ? ['first line', 'second line'] : ['third line', 'fourth line'];
+            return Promise.resolve({
+              text: JSON.stringify({ lines }),
+              usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+            });
+          },
+        };
+
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        const resultId = started!.draft!.id;
+        // Enough to clear the §3.6.9 readiness gate, which refuses a generating phase before any model call.
+        const bank = (await bridge.testsBank({ testId: 'dirty-talk' }))!;
+        const marks: Record<string, { hear: 'love' | 'okay'; say: 'love' | 'okay' }> = {};
+        for (const [i, entry] of bank.entries.slice(0, 16).entries()) {
+          marks[entry.key] = i < 5 ? { hear: 'love', say: 'love' } : { hear: 'okay', say: 'okay' };
+        }
+        await bridge.testsAdaptiveBank({ testId: 'dirty-talk', resultId, marks });
+
+        await bridge.testsAdaptiveLines({ testId: 'dirty-talk', resultId, round: 1 });
+        const afterFirst = await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        const linesOf = (view: typeof afterFirst): string[] =>
+          (view?.draft?.turns ?? []).filter((t) => t.phase === 'lines').map((t) => t.item.text);
+        // On the draft the moment they exist, and recorded as UNANSWERED — nobody has reacted to them.
+        expect(linesOf(afterFirst)).toEqual(['first line', 'second line']);
+        expect(
+          (afterFirst?.draft?.turns ?? [])
+            .filter((t) => t.phase === 'lines')
+            .every((t) => t.answer === undefined),
+        ).toBe(true);
+
+        // React to ONE of them, then ask for more. The set must GROW: the round that follows used to replace
+        // it outright, and the renderer only kept back the lines that happened to carry a reaction.
+        await bridge.testsAdaptiveTurn({
+          testId: 'dirty-talk',
+          resultId,
+          phase: 'lines',
+          itemId: 'first line',
+          text: 'first line',
+          answer: 'love',
+        });
+        await bridge.testsAdaptiveLines({ testId: 'dirty-talk', resultId, round: 2 });
+        const afterSecond = await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        expect(linesOf(afterSecond)).toEqual([
+          'first line',
+          'second line',
+          'third line',
+          'fourth line',
+        ]);
+        // The reaction survived the second round.
+        expect(
+          (afterSecond?.draft?.turns ?? []).find((t) => t.item.id === 'first line')?.answer,
+        ).toBe('love');
+        // …and the round the model was asked for knew about BOTH of the first round's lines, including the
+        // one nobody reacted to. Without the offer on the draft that line was invisible here, so the next
+        // round could hand back the very line it had just wiped off the screen.
+        expect(systems.at(-1)).toContain('second line');
+      });
+
+      /**
+       * 74 §3.6.35 — who the two of you are reaches the model. Owner-directed.
+       *
+       * Identity and address were asked in the take's first two taps and read by exactly one thing —
+       * `orientation.ts`, deciding which half of the bank is shown. No generating prompt has ever carried
+       * them, so every line, question and scene was written for an unnamed pair.
+       */
+      it('tells a generating phase who the two of them are', async () => {
+        const { bridge, host } = await freshOwner();
+        await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+        await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+        await bridge.testsAcknowledgeAdult();
+        const systems: string[] = [];
+        host.host.claude = {
+          send: () => Promise.resolve(''),
+          stream: (options) => {
+            systems.push(options.system ?? '');
+            return Promise.resolve({
+              text: JSON.stringify({ lines: ['a line'] }),
+              usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+            });
+          },
+        };
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        const resultId = started!.draft!.id;
+        const bank = (await bridge.testsBank({ testId: 'dirty-talk' }))!;
+        const marks: Record<string, { hear: 'love' | 'okay'; say: 'love' | 'okay' }> = {};
+        for (const [i, entry] of bank.entries.slice(0, 16).entries()) {
+          marks[entry.key] = i < 5 ? { hear: 'love', say: 'love' } : { hear: 'okay', say: 'okay' };
+        }
+        await bridge.testsAdaptiveBank({ testId: 'dirty-talk', resultId, marks });
+
+        await bridge.testsLexiconEdit({
+          kind: 'setAddress',
+          self: 'man',
+          partner: 'girl',
+          identity: { self: 'man', partner: 'woman' },
+        });
+        await bridge.testsAdaptiveLines({ testId: 'dirty-talk', resultId, round: 1 });
+
+        const system = systems.at(-1) ?? '';
+        expect(system).toContain('The person taking this: a man');
+        expect(system).toContain('The person they are with: a woman');
+        // Identity is the BODY and address is what they like being CALLED — stated as two separate facts,
+        // because a man can want "good girl" (§3.6.3) and collapsing them is the conflation #62 was about.
+        expect(system).toContain('likes being addressed as a man');
+        expect(system).toContain('likes being addressed as a girl');
+      });
+
+      /**
+       * 74 §3.6.35 — a boundary the lines step mints can be taken back.
+       *
+       * `addBoundary` had no counterpart at this seam: `setAddress` / `clearSide` / `addWord` / `addBoundary`
+       * and nothing that removes one. So "never anything like this again" wrote a suppression that nothing in
+       * the app could lift — the un-gettable-rid-of preference §3.2 abolished, one record type over.
+       */
+      it('lifts a themed boundary, so a ruled-out line is not ruled out for good', async () => {
+        const { bridge } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+
+        const banned = await bridge.testsLexiconEdit({
+          kind: 'addBoundary',
+          text: 'I want to beat that pussy',
+          boundaryKind: 'theme',
+        });
+        expect(banned?.boundaries.map((b) => b.text)).toEqual(['I want to beat that pussy']);
+
+        const lifted = await bridge.testsLexiconEdit({
+          kind: 'removeBoundary',
+          text: 'I want to beat that pussy',
+        });
+        expect(lifted?.boundaries).toEqual([]);
+        // …and it is really gone from the vault, not just from the value this call happened to return.
+        const reread = await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        expect(reread?.lexicon.boundaries).toEqual([]);
+      });
+
       it('denies the adaptive surface to a person without tests.own (Guest)', async () => {
         const { bridge } = await freshOwner();
         const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });

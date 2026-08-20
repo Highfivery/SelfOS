@@ -1684,6 +1684,75 @@ this bank owns with a key it does not. Neither was a behaviour regression; both 
 correct while nothing checked liveness. A bare invented key is a dependency on the bank's content just as much
 as a bare word is.
 
+### 3.6.35 The three AI steps become one shape — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+Owner, testing: _"none of them lets me see and change everything it generated."_ The names and words steps were
+made consistent with each other in §3.6.34; these three are the other half of the take, and each was a
+different shape.
+
+**The root cause is one defect, wearing three faces: the generated SET was never persisted — only the reaction
+to it was.** The lines lived in `store.lines`, the probe's pass in `probeQuestion` + a renderer queue, the
+moments in `store.scenarios`. None of that survives a reload, so a line nobody reacted to, a question nobody
+answered and a moment nobody picked were unreachable by construction. Measured against the shipped code:
+
+| step    | the set lived in | survived a reload          | survived "write me more"                                  |
+| ------- | ---------------- | -------------------------- | --------------------------------------------------------- |
+| lines   | renderer only    | no — reacted lines only    | no — hard replace, **and on failure** (`out.lines ?? []`) |
+| probe   | renderer only    | no — answered/skipped only | a queued question you navigated away from was lost        |
+| moments | renderer only    | no — picked moments only   | yes — already appended (§3.6.19)                          |
+
+So the moments step had already been given half this fix and the lines step never was. Three more of the same
+class, none of them reported: an unreacted line was **absent from the model's avoid-list** (the bridge builds it
+from these same turns), so "write me more" could hand back the lines it had just wiped; the rail counted every
+probe turn as "N asked" while the screen filtered to answered, so the two disagreed; and `answersDigest` was
+handing the model `→  skipped` as though a passed-over question were an answer.
+
+**The fix is that the take's own turns ARE the set.** `AdaptiveTurn.answer` is optional, and an absent one means
+"offered, not yet responded to". Every generating phase records its pass through a new `stampOffers` **in the
+bridge** — one write, before the renderer sees anything, so it survives a crash and joins the avoid-list for
+free. `stampTurn` replaces **in place** rather than filter-and-append, because the steps render from this list
+now and answering the second of six lines used to move it to the bottom.
+
+**Four owner decisions, taken before any code:**
+
+1. **Gender.** Measured first: identity and address reached `orientation.ts` and **no prompt at all**. Owner:
+   feed it in. `whoBlock` now states who each of them is in every generating prompt — identity is the BODY,
+   address is what they like being CALLED, stated as two separate facts because a man can want "good girl"
+   (§3.6.3). Applied to the synthesis as well as the three, and that fourth one was flagged as beyond the ask.
+2. **"Editable" means the response, not the AI's text.** A line, question or scene stays as written; what you
+   said about it is changeable any time.
+3. **Accumulation** is handled by the marking steps' own `MarkFilter`, with "Not answered yet" in place of
+   "Still unmarked" — a line is reacted to, a question is answered, and "unmarked" already means something
+   specific in this test.
+4. **The moment cards lose their denominator.** "2 of 5" paired a count with a total that GROWS every time you
+   ask for more, which is exactly why the register cards lost theirs (§3.6.29).
+
+**A `never` could not be taken back.** `addBoundary` had no counterpart in core or at the seam — `setAddress` /
+`clearSide` / `addWord` / `addBoundary` and nothing that removes one — so the lines step's "never anything like
+this again" minted a suppression **nothing in the app could lift**. That is the un-gettable-rid-of preference
+§3.2 abolished, reached from the one direction the amendment did not cover: it fixed the MARKS, whose
+suppression is derived from a live mark and lifts when the mark changes, and left the standalone theme record
+with no control at all. New `removeBoundary` in core + at the seam, and the row now shows a **Ruled out** state
+with an **Undo** instead of re-offering the same tap in silence. (`mergeLexicons` still unions boundaries; its
+own docstring records that there is no two-copy caller, so nothing can resurrect a lift today.)
+
+**Also fixed, found while doing it:** the offline fake had **no branch for any of the three phases**, so every
+offline run came back MALFORMED and the §3.6.9 audit walk had been photographing a warning banner where the
+step should be — the fake-hides-the-delivered-path trap (67 §3.3a), and the reason these screens had never been
+QA'd. Four E2E call sites still clicked a button §3.6.34 deleted, and one still asserted the register card's
+removed progress bar and its "1 of" fraction. The audit's 390px pass covered the profile, map, names and report
+and stopped, so the three rebuilt screens had **no narrow-width check at all**; adding one found the state chip
+squeezing a question into four lines of two words (§12's title-versus-tag rule) and the shared filter's
+`SegmentedControl` at a 28px tap target on all six screens it appears on — now an opt-in `comfortable` size, so
+the titlebar's height-bounded controls are untouched.
+
+**Lessons.** (1) A generated set held in renderer state is a set you have promised to show and cannot: persist
+it where the avoid-list already reads from, and "reviewable" and "never re-offered" fall out together. (2) When
+one step has already been fixed for a defect (the moments' append, §3.6.19) and its siblings have not, that is
+the shape of the whole bug — look for the other two before fixing the reported one. (3) An offline fake with no
+branch for a phase does not merely under-test it; it makes every screenshot of that phase a picture of a
+failure, which is how three screens reached a redesign having never been looked at.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

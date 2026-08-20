@@ -41,3 +41,14 @@
   background: var(--color-accent-subtle-bg);
   color: var(--color-accent-text);
 }
+
+/*
+ * A full 44px tap target, for a segmented control that is a primary in-content control rather than chrome.
+ * Opt-in: the default 28px is what the titlebar's appearance control and every settings row were built
+ * around, and raising it globally would break the height those are bounded by.
+ */
+.comfortable .segment {
+  height: 44px;
+  font-size: var(--text-sm);
+  padding: 0 var(--space-4);
+}

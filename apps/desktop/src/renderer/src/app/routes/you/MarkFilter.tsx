@@ -29,9 +29,20 @@ export function isStillUnmarked(
 /** What a marking screen is currently showing. */
 export type MarkFilterValue = 'all' | 'new';
 
-const OPTIONS = [
+const MARKING_OPTIONS = [
   { value: 'all' as const, label: 'Everything' },
   { value: 'new' as const, label: 'Still unmarked' },
+];
+/**
+ * 74 §3.6.35 — the AI steps say "answered", because that is what they take.
+ *
+ * The control, its place and its behaviour are shared with the two marking steps; only the verb differs. A
+ * line is REACTED to and a question is ANSWERED, and calling either "unmarked" would borrow a word this test
+ * already uses for something specific — the three marks on a bank entry.
+ */
+const ANSWER_OPTIONS = [
+  { value: 'all' as const, label: 'Everything' },
+  { value: 'new' as const, label: 'Not answered yet' },
 ];
 
 /**
@@ -51,6 +62,7 @@ export function MarkFilter({
   total,
   shown,
   noun,
+  unansweredLabel,
 }: {
   value: MarkFilterValue;
   onChange: (next: MarkFilterValue) => void;
@@ -58,16 +70,30 @@ export function MarkFilter({
   shown: number;
   /** What the total is counting, in the step's own words — "here" for an area, "names" for a register. */
   noun: string;
+  /**
+   * What the outstanding ones are called. Defaults to the marking steps' "still unmarked"; the AI steps pass
+   * "not answered" (74 §3.6.35), because a line is reacted to and a question is answered.
+   */
+  unansweredLabel?: string;
 }): JSX.Element {
   return (
     <div className={adaptive.markFilter}>
-      <SegmentedControl aria-label="Show" options={OPTIONS} value={value} onChange={onChange} />
+      {/* A real tap target: this is a control people use while working through 47 rows or 30 lines, not
+          titlebar chrome, and the take's own UI audit flagged the 28px default on all six screens it
+          appears on. */}
+      <SegmentedControl
+        aria-label="Show"
+        size="comfortable"
+        options={unansweredLabel ? ANSWER_OPTIONS : MARKING_OPTIONS}
+        value={value}
+        onChange={onChange}
+      />
       {/*
        * A COUNT, never a fraction (74 §3.6.29). "12 still unmarked" says how much is outstanding; "12 of 47"
        * would pair it with a total and make the completion claim the durable rule forbids.
        */}
       <Text size="sm" tone="tertiary">
-        {value === 'all' ? `${total} ${noun}` : `${shown} still unmarked`}
+        {value === 'all' ? `${total} ${noun}` : `${shown} ${unansweredLabel ?? 'still unmarked'}`}
       </Text>
     </div>
   );

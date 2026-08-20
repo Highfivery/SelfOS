@@ -1,7 +1,11 @@
 import { create } from 'zustand';
-// Values, not types — the probe turn id is stamped here and read back in the bridge, so both sides share one
-// definition (the `generationReadiness` precedent; `schemas` is the crypto-free half of core).
-import { probeTurnId, PROBE_SKIPPED } from '@selfos/core/schemas';
+// A value, not a type — the marker that distinguishes a recorded SKIP from an answer (74 §3.6.17), shared
+// with the bridge so both sides read one definition (`schemas` is the crypto-free half of core).
+//
+// `probeTurnId` used to be built here too. The BRIDGE mints a question's id now, at the moment the pass is
+// recorded (74 §3.6.35), so the renderer answers under the id it was given rather than reconstructing one and
+// hoping the two agree.
+import { PROBE_SKIPPED, scenarioTurnId } from '@selfos/core/schemas';
 import type {
   AdaptiveBankView,
   AdaptiveNamesView,
@@ -300,24 +304,17 @@ interface AdaptiveTestState {
   nameMarks: DirectionalMarks;
   /** Which register is open. `null` ⇒ the grid, which is where the phase starts. */
   openRegister: string | null;
-  lines: string[];
-  /** What the lines phase said when it could not produce anything — its words, not a guess. */
+  /**
+   * What the lines phase said when it could not produce anything — its words, not a guess.
+   *
+   * 74 §3.6.35 — the LINES themselves are no longer here. They, the probe's questions and the moments are all
+   * read from the take's own turns now, because holding a generated set in renderer state is what made it
+   * disposable: `store.lines` was hard-replaced by the next round (and blanked by a FAILED one), it started
+   * empty on every load, and the bridge's avoid-list — built from the turns — could not see any of it. The
+   * three sets were three copies of one bug.
+   */
   linesMessage: string | null;
   lineReactions: Record<string, 'love' | 'meh' | 'no'>;
-  probeQuestion: string | null;
-  /**
-   * 74 §3.6.17 — the tappable answers written for the current question, or empty for free text only.
-   *
-   * A one-line question is only answerable because concrete options carry the context that a paragraph of
-   * preamble used to. They are persisted with the turn, so an answered question can be re-opened and changed.
-   */
-  probeOptions: string[];
-  /** Remaining questions for the CURRENT ambiguity (74 §3.6.16) — one pass can ask more than one. */
-  probeQueue: { question: string; options: string[] }[];
-  /** The ambiguity the current question resolves — stamped as the turn's item id so the engine knows it has
-   *  been asked (without it the same ambiguity is returned forever). */
-  probeAmbiguityId: string | null;
-  probeAnswer: string;
   /** The probe has nothing left to ask — a real outcome, shown as one, not a silent hop to the next phase. */
   probeDone: boolean;
   /** Why the probe couldn't ask — kept apart from `probeDone`, which is the SUCCESS state. */
@@ -327,14 +324,6 @@ interface AdaptiveTestState {
    * the one that got reported over and over because of it.
    */
   synthesisMessage: string | null;
-  /**
-   * Moments written in THIS sitting (74 §3.6.19). Answered ones are read back from the take's own turns —
-   * the options are persisted now — so this only has to carry the ones nobody has answered yet.
-   *
-   * The singular `scenario` slot that used to sit beside this is gone: it held "the moment this visit
-   * fetched", which is what made leaving a category discard it.
-   */
-  scenarios: { context: string; scene: string; options: string[] }[];
   /** Why a moment produced no scene. Without it the tap read as doing nothing at all. */
   scenarioMessage: string | null;
   /**
@@ -353,6 +342,8 @@ interface AdaptiveTestState {
   skipped: string[];
 
   load(testId: string): Promise<void>;
+  /** 74 §3.6.35 — re-read the take alone, for the actions that only change its turns. See the impl. */
+  refreshState(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
   mark(key: string, side: 'hear' | 'say', mark: BankMark): void;
   /** Load the pet-name phase (free — no AI). */
@@ -378,15 +369,28 @@ interface AdaptiveTestState {
    * theme, so "beat that pussy" also stops "gonna beat that pussy up".
    */
   banLine(line: string): Promise<void>;
+  /**
+   * 74 §3.6.35 — take that boundary back.
+   *
+   * A `never` is a PREFERENCE, not a locked door (§3.2), and this one had no way out: `addBoundary` had no
+   * counterpart in core or at the seam, so the tap above minted a suppression that nothing in the app could
+   * lift. The marks were fixed for this in §3.2's amendment because their suppression is derived from a live
+   * mark; a themed boundary is a standalone record and was left behind.
+   */
+  unbanLine(line: string): Promise<void>;
   /** Remember the deck position so resuming lands where they stopped (74 §3.6.4). */
   rememberArea(area: number): Promise<void>;
   submitBank(testId: string): Promise<void>;
   loadLines(testId: string, round: number): Promise<void>;
   reactToLine(testId: string, line: string, reaction: 'love' | 'meh' | 'no'): Promise<void>;
   nextProbe(testId: string): Promise<void>;
-  /** Answer the current question. `answer` is the tapped option; omitted, it uses the free-text box. */
-  answerProbe(testId: string, answer?: string): Promise<void>;
-  skipProbe(testId: string): Promise<void>;
+  /** Record a question as passed over (74 §3.6.17) — it stays visible, and stays answerable. */
+  skipProbeQuestion(
+    testId: string,
+    itemId: string,
+    question: string,
+    options?: string[],
+  ): Promise<void>;
   loadScenario(testId: string, context: string): Promise<void>;
   /** Answer (or re-answer) one moment. The moment itself is passed in — see the implementation. */
   answerScenario(
@@ -438,18 +442,11 @@ const EMPTY = {
   names: null,
   nameMarks: {},
   openRegister: null,
-  lines: [],
   linesMessage: null,
   lineReactions: {},
-  probeQuestion: null,
-  probeOptions: [] as string[],
-  probeQueue: [] as { question: string; options: string[] }[],
-  probeAmbiguityId: null,
-  probeAnswer: '',
   probeDone: false,
   probeMessage: null,
   synthesisMessage: null,
-  scenarios: [],
   scenarioMessage: null,
   skipped: [] as string[],
   seeded: { names: 0, bank: 0 },
@@ -545,6 +542,24 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         phase: (next ?? 'map') as TakePhase,
         error: null,
       })),
+
+    /**
+     * 74 §3.6.35 — re-read the TAKE, and nothing else.
+     *
+     * The AI steps and every turn-stamping action need one thing back from the vault: the draft, with its
+     * turns. `load` is the mount-time read — it re-fetches the oriented bank and re-seeds `marks`,
+     * `lineReactions` and `seeded` from what is on disk — and using it here would let a re-read overwrite
+     * marking state that the 700ms autosave has not written yet. That is not hypothetical for a full `load`:
+     * `marks` is rebuilt from the lexicon, so anything still in the debounce would vanish off the screen.
+     *
+     * So this sets the state alone. A failed or refused read leaves the last good one standing rather than
+     * blanking the take (the `start` lesson — a gated handler reports a closed gate with `null`, not a throw).
+     */
+    refreshState: async (testId) => {
+      const state = await (window.selfos?.testsAdaptiveState({ testId }) ?? Promise.resolve(null));
+      if (!state) return;
+      set({ state });
+    },
 
     load: async (testId) => {
       set({ activeTestId: testId });
@@ -741,6 +756,22 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       set((prev) => ({ state: prev.state ? { ...prev.state, lexicon } : prev.state }));
     },
 
+    /*
+     * 74 §3.6.35 — the way back out, which did not exist.
+     *
+     * The patched `state.lexicon` is what the row reads to know it is ruled out, so both halves have to write
+     * it: without this the Undo would call the seam, succeed, and leave the row saying "Ruled out" until the
+     * next full load — the same say-nothing failure the ban itself had.
+     */
+    unbanLine: async (line) => {
+      const lexicon = await (window.selfos?.testsLexiconEdit({
+        kind: 'removeBoundary',
+        text: line,
+      }) ?? Promise.resolve(null));
+      if (!lexicon) return;
+      set((prev) => ({ state: prev.state ? { ...prev.state, lexicon } : prev.state }));
+    },
+
     rememberArea: async (area) => {
       await window.selfos?.testsAdaptiveSetArea({ testId: get().activeTestId, area });
     },
@@ -782,12 +813,17 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // relocating them was indistinguishable from the step having worked.
       // 74 §3.6.12 — keep the phase's OWN account of what went wrong. Without it the screen fell back to the
       // generic "AI isn't set up yet", which is a lie whenever a key is present and the call simply failed.
-      set({
-        lines: out.lines ?? [],
-        busy: false,
-        progress: null,
-        linesMessage: out.message ?? null,
-      });
+      /*
+       * 74 §3.6.35 — RE-READ, rather than assigning the round's lines into the store.
+       *
+       * `lines: out.lines ?? []` was a hard replace, and the `?? []` made it worse than that: a round that
+       * FAILED blanked the set the person was part-way through reacting to. It was half-hidden because the
+       * renderer unioned in the lines that had a reaction, so a line you had answered survived and a line you
+       * had not vanished — which reads as arbitrary rather than broken. The bridge records the whole round as
+       * offers now, so re-reading the take is what shows them, appended to what was already there.
+       */
+      set({ busy: false, progress: null, linesMessage: out.message ?? null });
+      await get().refreshState(testId);
     },
 
     reactToLine: async (testId, line, reaction) => {
@@ -815,12 +851,6 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const out = await (window.selfos?.testsAdaptiveProbe({ testId, resultId }) ??
         Promise.resolve(fallback));
       set({
-        probeQuestion: out.question ?? null,
-        probeOptions: out.questions?.[0]?.options ?? [],
-        // The rest of this ambiguity's questions, asked in turn before the next ambiguity is fetched.
-        probeQueue: (out.questions ?? []).slice(1),
-        probeAmbiguityId: out.ambiguityId ?? null,
-        probeAnswer: '',
         busy: false,
         progress: null,
         // "Nothing left to ask" is an OUTCOME, not a reason to relocate them. It used to jump to the
@@ -831,81 +861,35 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         // finished." The bridge returns the same `done` either way, so the two are separated here.
         probeDone: out.done && !out.degraded,
         probeMessage: out.degraded
-          ? (out.message ?? 'That didn’t come through — try again.')
+          ? (out.message ?? 'That didn\u2019t come through — try again.')
           : null,
       });
+      /*
+       * 74 §3.6.35 — the pass's questions come back from the TAKE, not from this reply.
+       *
+       * A pass writes up to six and only one of them existed anywhere: the first went into `probeQuestion` and
+       * the other five sat in a renderer queue that a reload, or walking to another step, threw away. They are
+       * all stamped as offers now, so re-reading is what puts the whole pass on screen — and the screen shows
+       * every question it has ever asked, which is what "reviewable" has to mean.
+       */
+      await get().refreshState(testId);
     },
 
-    answerProbe: async (testId, answer) => {
-      const { state, probeQuestion, probeOptions, probeAmbiguityId, probeAnswer } = get();
-      const resultId = state?.draft?.id;
-      if (!resultId || !probeQuestion) return;
-      const given = answer ?? probeAnswer;
-      if (given.trim() === '') return;
+    skipProbeQuestion: async (testId, itemId, question, options) => {
+      const resultId = get().state?.draft?.id;
+      if (!resultId) return;
       await window.selfos?.testsAdaptiveTurn({
         testId,
         resultId,
         phase: 'probe',
-        // Per QUESTION, not per ambiguity. A pass asks up to six and `stampTurn` replaces on the item id, so
-        // stamping them all under the bare ambiguity id meant every answer overwrote the one before it: six
-        // typed, one kept. `ambiguityOfProbeTurn` reads the ambiguity back off this in the bridge.
-        itemId: probeTurnId(probeAmbiguityId ?? probeQuestion, probeQuestion),
-        text: probeQuestion,
-        options: probeOptions,
-        answer: given,
+        itemId,
+        text: question,
+        // Carried for the same reason a revision carries them: a skipped question stays ANSWERABLE, so it must
+        // not lose the taps it would be answered with.
+        ...(options ? { options } : {}),
+        answer: PROBE_SKIPPED,
       });
-      // Re-read so the answered set below the current question reflects the write.
-      await get().load(testId);
-      // One ambiguity can ask more than one question (74 §3.6.16). Work through this pass's queue before
-      // spending another call on the next ambiguity.
-      const queue = get().probeQueue;
-      const nextInPass = queue[0];
-      if (nextInPass) {
-        set({
-          probeQuestion: nextInPass.question,
-          probeOptions: nextInPass.options,
-          probeQueue: queue.slice(1),
-          probeAnswer: '',
-        });
-        return;
-      }
-      set({ probeQuestion: null, probeOptions: [], probeAnswer: '' });
-    },
-
-    /**
-     * Skipping still RECORDS the question as asked — otherwise "skip this" hands back the same one.
-     *
-     * The marker is what distinguishes it from an answer. It used to stamp `''`, which is a string, so the
-     * review list counted a skipped question as answered and rendered it with an empty box under an
-     * "Answered" label. Skipped questions stay visible and stay answerable.
-     */
-    skipProbe: async (testId) => {
-      const { state, probeQuestion, probeOptions, probeAmbiguityId } = get();
-      const resultId = state?.draft?.id;
-      if (resultId && probeQuestion) {
-        await window.selfos?.testsAdaptiveTurn({
-          testId,
-          resultId,
-          phase: 'probe',
-          itemId: probeTurnId(probeAmbiguityId ?? probeQuestion, probeQuestion),
-          text: probeQuestion,
-          options: probeOptions,
-          answer: PROBE_SKIPPED,
-        });
-        await get().load(testId);
-      }
-      const queue = get().probeQueue;
-      const nextInPass = queue[0];
-      if (nextInPass) {
-        set({
-          probeQuestion: nextInPass.question,
-          probeOptions: nextInPass.options,
-          probeQueue: queue.slice(1),
-          probeAnswer: '',
-        });
-        return;
-      }
-      set({ probeQuestion: null, probeOptions: [], probeAnswer: '' });
+      await get().refreshState(testId);
     },
 
     loadScenario: async (testId, context) => {
@@ -915,17 +899,8 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const fallback: AdaptiveScenarioView = { ok: false, context, degraded: true };
       const out = await (window.selfos?.testsAdaptiveScenario({ testId, resultId, context }) ??
         Promise.resolve(fallback));
-      const scenes = (out.scenes ?? []).map((s) => ({ context: out.context, ...s }));
+      const scenes = out.scenes ?? [];
       set({
-        // Append, and dedupe by scene — "write more" must mean MORE. Dropping the context's existing set
-        // made the button a re-roll: five new moments replacing five you were part-way through answering.
-        scenarios:
-          scenes.length > 0
-            ? [
-                ...get().scenarios,
-                ...scenes.filter((s) => !get().scenarios.some((prior) => prior.scene === s.scene)),
-              ]
-            : get().scenarios,
         busy: false,
         progress: null,
         // A moment that produced nothing used to clear `busy` and set no scene — so the tap showed a thinking
@@ -934,6 +909,11 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         scenarioMessage:
           scenes.length > 0 ? null : (out.message ?? 'That didn’t come through — try again.'),
       });
+      // 74 §3.6.35 — the append-and-dedupe this used to do by hand happens in the bridge now, against the
+      // take's own turns, so an unpicked moment survives a reload instead of living until the next load. It
+      // was the only one of the three sets that appended at all; the other two are joining it rather than the
+      // other way round.
+      await get().refreshState(testId);
     },
 
     reviseProbeAnswer: async (testId, itemId, question, answer, options) => {
@@ -951,7 +931,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         ...(options ? { options } : {}),
         answer,
       });
-      await get().load(testId);
+      await get().refreshState(testId);
     },
 
     /*
@@ -969,8 +949,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         resultId,
         phase: 'scenario',
         // Per SCENE, not per context: a pass writes several, and keying them all to the context meant the
-        // second answer overwrote the first.
-        itemId: `${target.context}#${target.scene.slice(0, 40)}`,
+        // second answer overwrote the first. The format is shared with the bridge, which stamps the moment as
+        // an offer under this same id before anyone picks anything — two hand-written copies would mean the
+        // pick appended a second turn instead of filling in the first (74 §3.6.35).
+        itemId: scenarioTurnId(target.context, target.scene),
         text: target.scene,
         // The choices this moment offered, PERSISTED. Without them an answered moment could be seen but never
         // re-picked, and re-opening its category could only mean spending again on five different moments.
@@ -979,7 +961,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       });
       // Re-read so the answered list reflects the write — including a CHANGED answer, which replaces rather
       // than appending (`stampTurn`).
-      await get().load(testId);
+      await get().refreshState(testId);
       set({ scenarioMessage: null });
     },
 
@@ -1040,6 +1022,8 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // it is supposed to undo.
       await window.selfos?.testsAdaptiveSetArea({ testId, area: 0 });
       set({ ...EMPTY });
+      // The FULL read here, not the narrow one: `EMPTY` has just cleared the bank and every seeded mark, and
+      // start-over has to put them back (the marks live in the lexicon and are deliberately kept).
       await get().load(testId);
     },
 

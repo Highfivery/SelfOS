@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { memFileSystem } from '../../host/memFileSystem';
-import { probeTurnId, ambiguityOfProbeTurn } from '../../schemas';
+import { probeTurnId, ambiguityOfProbeTurn, PROBE_SKIPPED } from '../../schemas';
 import { readLedger } from '../../questionnaires/askLedger';
 import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
-import { readLexicon, writeLexicon, suppressedTexts, violatesBoundary } from './lexicon';
+import {
+  addBoundary,
+  readLexicon,
+  removeBoundary,
+  writeLexicon,
+  suppressedTexts,
+  violatesBoundary,
+} from './lexicon';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
+import { answersDigest } from './engine';
 import {
   abandonAdaptiveTake,
   completeAdaptiveTake,
@@ -16,6 +24,7 @@ import {
   getAdaptiveResult,
   openDraft,
   recordMarkingPass,
+  stampOffers,
   stampTurn,
   startAdaptiveTake,
 } from './adaptiveService';
@@ -714,5 +723,115 @@ describe('a retake keeps what you told it (74 §3.6.16)', () => {
     const revised = await getAdaptiveResult(fs, key, 'p1', draft.id);
     expect(revised?.turns).toHaveLength(3);
     expect(revised?.turns?.find((t) => t.item.text === pass[1])?.answer).toBe('changed my mind');
+  });
+});
+
+/**
+ * 74 §3.6.35 — the generated set is the take's own record, not a screenful of state.
+ *
+ * All three AI steps kept what they generated in renderer state and stamped a turn only when the person
+ * responded. So a line nobody reacted to, a question nobody answered and a moment nobody picked were gone on
+ * the next load — unreviewable by construction — and the avoid-lists the bridge builds from these same turns
+ * could not see them either, so "write me more" could return what it had just replaced.
+ */
+describe('74 §3.6.35 — a generated item is recorded before anyone responds to it', () => {
+  it('records the whole pass, keeps an existing answer, and never duplicates on a re-offer', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+
+    await stampOffers(
+      fs,
+      key,
+      'p1',
+      draft.id,
+      'lines',
+      ['one', 'two', 'three'].map((text) => ({ id: text, pack: 'lines', text, options: [] })),
+      now,
+    );
+    const offered = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    // Present, and present as UNANSWERED — which is what distinguishes an offer from a response.
+    expect(offered?.turns).toHaveLength(3);
+    expect(offered?.turns?.every((turn) => turn.answer === undefined)).toBe(true);
+    expect(offered?.turns?.map((turn) => turn.item.text)).toEqual(['one', 'two', 'three']);
+
+    await stampTurn(fs, key, 'p1', draft.id, {
+      phase: 'lines',
+      item: { id: 'two', pack: 'lines', text: 'two', options: [] },
+      answer: 'love',
+      at: now.toISOString(),
+    });
+    // A second round re-offers one they already answered. It must not blank that answer, and it must not
+    // append a second copy of it.
+    await stampOffers(
+      fs,
+      key,
+      'p1',
+      draft.id,
+      'lines',
+      ['two', 'four'].map((text) => ({ id: text, pack: 'lines', text, options: [] })),
+      now,
+    );
+    const after = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(after?.turns).toHaveLength(4);
+    expect(after?.turns?.find((turn) => turn.item.id === 'two')?.answer).toBe('love');
+    // …and the order it was written in survives: `stampTurn` replaces in place, so answering the second of
+    // three does not move it past the other two on a screen that renders this list.
+    expect(after?.turns?.map((turn) => turn.item.text)).toEqual(['one', 'two', 'three', 'four']);
+  });
+
+  it('leaves an offer out of what the model is told they said', async () => {
+    // `answersDigest` is "what they have told us already in this take". An unanswered item is not that, and
+    // neither is a question they passed over — which used to reach the model as `→  skipped`.
+    expect(
+      answersDigest([
+        { phase: 'lines', item: { text: 'a line nobody reacted to' } },
+        { phase: 'probe', item: { text: 'a question' }, answer: PROBE_SKIPPED },
+        { phase: 'probe', item: { text: 'another question' }, answer: 'what they actually said' },
+      ]),
+    ).toBe(
+      'What they have told us already in this take — build on it, never re-ask it:\n' +
+        '- (probe) another question → what they actually said',
+    );
+  });
+});
+
+/**
+ * 74 §3.6.35 — a `never` is a preference, and this one had no way out.
+ *
+ * `addBoundary` had no counterpart in core or at the seam, so the lines step's "never anything like this
+ * again" minted a suppression nothing in the app could lift — the un-gettable-rid-of preference §3.2 was
+ * amended to abolish, reached from the one direction that amendment did not cover.
+ */
+describe('74 §3.6.35 — a themed boundary can be taken back', () => {
+  it('lifts the boundary, stops suppressing, and leaves the others standing', async () => {
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const base = await readLexicon(memFileSystem(), KEY, P, now);
+    const withTwo = addBoundary(
+      addBoundary(base, { text: 'I want to beat that pussy', kind: 'theme' }, now),
+      { text: 'anything about being used', kind: 'theme' },
+      now,
+    );
+    expect(violatesBoundary(withTwo, 'I want to beat that pussy')).toBe(true);
+
+    // Matched the way core keys them — trimmed, case-insensitive — so the text on screen lifts the record it
+    // came from rather than needing an exact byte match.
+    const lifted = removeBoundary(withTwo, '  I Want To Beat That Pussy  ', now);
+    expect(lifted.boundaries.map((b) => b.text)).toEqual(['anything about being used']);
+    expect(violatesBoundary(lifted, 'I want to beat that pussy')).toBe(false);
+    // The other one is untouched — lifting one preference is not lifting them all.
+    expect(violatesBoundary(lifted, 'you love being used like that')).toBe(true);
+  });
+
+  it('is a no-op for a boundary that was never there, and does not touch updatedAt', async () => {
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const base = await readLexicon(memFileSystem(), KEY, P, now);
+    const withOne = addBoundary(base, { text: 'something', kind: 'theme' }, now);
+    // An accidental double-tap must not make the lexicon look newer than it is — `updatedAt` is what
+    // `mergeLexicons` resolves last-write-wins on.
+    const again = removeBoundary(removeBoundary(withOne, 'something', now), 'something', LATER);
+    expect(again.boundaries).toEqual([]);
+    expect(again.updatedAt).toBe(now.toISOString());
   });
 });

@@ -631,6 +631,18 @@ A running log of durable decisions and feedback captured into the project config
   scenario phase came back MALFORMED 1 run in 4 (3/3 on re-run, so model variance) because it was the last
   phase parsing STRICTLY — `SceneSchema` is per-element tolerant, which only helps once the OBJECT parses, so
   a truncated set lost every complete scene before the cut. It now falls back to the §37 salvage.
+  **The filter shipped with a bug, reported within the hour, and it is the §3.6.11 conflation in a FOURTH
+  place** (_"when answering one side, it goes away but if theres two sides, both must be answered"_). I wrote
+  `isStillUnmarked` as `hear === undefined && say === undefined` — "has this row any answer at all" — so
+  answering one side of a two-sided row hid it while the other side was blank, which is exactly the row the
+  filter exists to surface. Core has separated "has an answer" (`hasAnswer`) from "this direction was
+  answered" (`directionAnswered`) since §3.6.11, for the same underlying reason: reading a blank side as an
+  answer puts a false statement in front of the person. Fixed as ONE exported predicate both marking steps
+  import, keyed on `entry.sides`, guarded on both with the reported sequence and both verified to fail against
+  the original. **Then twelve more names cut on his list** — the pet-play leftovers plus both response twins I
+  had added (he had flagged that risk himself when they were offered). `names-soft-power` 46 → 36, **364
+  names**, not one of the twelve carrying a mark from either person and none with a same-name survivor, so all
+  twelve retire outright with no migration row.
   **Lessons: (1) a criterion is scoped to the thing it was written about — "sexual pet names" cannot be
   applied to lines, acts and suppression keys, and transposing it would have cut loved vocabulary for the
   first time; put it back as a NEW decision with the shape measured in front of him. (2) When a read-time
@@ -642,7 +654,7 @@ A running log of durable decisions and feedback captured into the project config
   (4) Two fixtures broke and both were asserting the opposite of their own claim: "another instrument's entry"
   built by spreading a Dirty Talk row carries a family this bank OWNS with a key it does not, which is
   precisely a retired entry. **A bare invented KEY is a dependency on the bank's content exactly as much as a
-  bare word is.** (5) I built a redesign mockup from a partial read of one component and dropped the shared
+  bare word is.** (5) four definitions of "answered" is three too many — when core already separates two concepts by name, the view layer's job is to mirror one of them, not invent a third. (6) I built a redesign mockup from a partial read of one component and dropped the shared
   step rail entirely; the owner's correction was "you're going off old designs, look at what's currently in
   place". Rebuild a mockup from the SHIPPED CSS, not from a component read.**
 

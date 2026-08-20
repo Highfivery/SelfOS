@@ -273,12 +273,25 @@ describe('NamesPhase (74 §3.6.8)', () => {
     await userEvent.click(screen.getByRole('button', { name: /praise/i }));
     const before = screen.getAllByRole('button', { name: /love it$/ }).length;
 
-    // Mark one name, both ways, so it drops out of "still unmarked".
     const hearAll = screen.getAllByRole('button', { name: /→ .* — love it$/ });
     // The first row's two columns are the first two matches: hear then say.
     await userEvent.click(hearAll[0]!);
-    await userEvent.click(hearAll[1]!);
 
+    /*
+     * OWNER-REPORTED, 2026-08-20 — ONE side is not an answer to a two-sided row.
+     *
+     * The first version of this filter asked "does this row have any answer at all", so answering the hear
+     * side made the row vanish from "still unmarked" while the say side was still blank — which is precisely
+     * the row the filter exists to surface. §3.6.11 separated "has an answer" from "this direction was
+     * answered" in core for the same reason; this is that distinction at the view layer.
+     */
+    await userEvent.click(screen.getByRole('button', { name: 'Still unmarked' }));
+    expect(screen.getAllByRole('button', { name: /love it$/ })).toHaveLength(before);
+
+    // …and once the OTHER side is answered too, it goes.
+    await userEvent.click(screen.getByRole('button', { name: 'Everything' }));
+    const sayAll = screen.getAllByRole('button', { name: /→ .* — love it$/ });
+    await userEvent.click(sayAll[1]!);
     await userEvent.click(screen.getByRole('button', { name: 'Still unmarked' }));
     const after = screen.getAllByRole('button', { name: /love it$/ }).length;
     expect(after).toBeLessThan(before);

@@ -1478,7 +1478,15 @@ and full/heavy/swollen. And the bodily-response axis was populated 12 girl-addre
 so **`my moaning boy`** and **`my panting boy`** complete a twin grid that already existed
 (`desperate boy`/`girl`, `dripping boy`/`girl`). These are not the §3.6.30 `names-masculine` mistake: that
 register was a gender-gap filler filled with admiration, and these are bodily-response names inside a live
-register, with their examples lifted from the exact girl twins. **376 names across 9 registers.**
+register, with their examples lifted from the exact girl twins. **376 names across 9 registers** — and
+then 364: on seeing them the owner cut twelve more, including both of those response twins, which he
+had flagged the risk of himself when they were offered. The other ten are the pet-play leftovers
+`names-hard-power` and the fourth pass had already been thinning (`puppy girl` · `puppy boy` ·
+`my little puppy` · `my sweet puppy` · `my sweet cub` · `my rag doll`) plus `my little princess`,
+`my darling pet`, `pretty pet` and `my quiet one`. `names-soft-power` 46 → 36, still well clear of the
+floor, with `pet`, `my little pet`, `my sweet pet`, `princess`, `kitten` and `bunny` all surviving, so
+the register still runs its own axis. **Not one of the twelve carried a mark from either person**, and
+none has a same-name survivor, so all twelve retire outright with no migration row.
 
 **The deck stays.** Put to the owner as its own decision rather than transposed, because "a sexual pet name
 said to turn on a partner" is a rule about NAMES and the deck is lines, acts and 128 anatomy/sensation words.
@@ -1581,6 +1589,20 @@ than conveniences: the index comes from the **bank's own order, never the card s
 when you re-sort is worse than no index), and a register change **resets the scroll and moves focus** to the
 new register's name, exactly as `goToArea` does — otherwise a keyboard or screen-reader user gets nine silent
 screen changes.
+
+**The filter shipped with a bug in it, reported within the hour, and it is the §3.6.11 conflation in a
+fourth place.** `isStillUnmarked` was written as `hear === undefined && say === undefined` — "does this row
+have any answer at all" — so answering ONE side of a two-sided row made it vanish from "still unmarked" while
+the other side was blank. That is precisely the row the filter exists to surface. The right question is "does
+every side this person was actually OFFERED have an answer", which needs `entry.sides`, and core has had
+exactly this distinction since §3.6.11 (`hasAnswer` vs `directionAnswered`) — for the same underlying reason:
+reading a blank side as an answer puts a false statement in front of the person. The fix is one exported
+predicate both marking steps import, so they cannot drift into two definitions of it again, and a row shown
+on NO side falls out correctly (`some` over an empty list is false). Guarded on both steps with the reported
+sequence — mark one side, assert the row is STILL listed, mark the other, assert it goes — and both verified
+to fail against the original predicate. **Lesson: four definitions of "answered" is three too many; when
+core already separates two concepts by name, the view layer's job is to mirror one of them, not invent a
+third.**
 
 **Two more consistency calls, both the owner's.** The words step carried a **filling progress bar** —
 `(areaIndex + 1) / 36 * 100%` — that reached full on the last area whether you had marked everything or

@@ -149,7 +149,7 @@ import { isAnsweredTurn } from '@selfos/core/schemas';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
 import { PracticeSheet } from './PracticeSheet';
-import { MarkFilter } from './MarkFilter';
+import { MarkFilter, isStillUnmarked } from './MarkFilter';
 import { NamesPhase } from './NamesPhase';
 import { TakeMap } from './TakeMap';
 import { StepActions, StepEyebrow, TakeRail, Tally } from './TakeRail';
@@ -503,7 +503,10 @@ export function AdaptiveTake(): JSX.Element {
    */
   const [showOnly, setShowOnly] = useState<'all' | 'new'>('all');
   const visibleAreaEntries = useMemo(
-    () => (showOnly === 'all' ? areaEntries : areaEntries.filter((e) => !store.marks[e.key])),
+    () =>
+      showOnly === 'all'
+        ? areaEntries
+        : areaEntries.filter((entry) => isStillUnmarked(entry.sides, store.marks[entry.key])),
     [areaEntries, showOnly, store.marks],
   );
   const withheld = area ? (bank?.withheldByFamily[area.id] ?? 0) : 0;

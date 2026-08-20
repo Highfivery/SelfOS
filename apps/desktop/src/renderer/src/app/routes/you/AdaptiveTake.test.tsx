@@ -929,8 +929,25 @@ describe('AdaptiveTake (74 §3.2)', () => {
     const before = screen.getAllByRole('button', { name: /— love it$/ }).length;
     expect(before).toBeGreaterThan(1);
 
-    const [firstMark] = screen.getAllByRole('button', { name: /— love it$/ });
-    await userEvent.click(firstMark!);
+    /*
+     * OWNER-REPORTED, 2026-08-20 — one side is not an answer to a two-sided row. The first version of this
+     * filter dropped a row as soon as it had ANY mark, so a half-answered row hid itself from the one view
+     * whose job is to find it (§3.6.11's distinction, at the view layer).
+     */
+    // Asserted, not assumed: a conditional here would go vacuous the moment the fixture changed.
+    const hear = screen.getAllByRole('button', { name: /— Them → You — love it$/ });
+    const say = screen.getAllByRole('button', { name: /— You → Them — love it$/ });
+    expect(hear.length).toBeGreaterThan(0);
+    expect(say.length).toBeGreaterThan(0);
+
+    await userEvent.click(hear[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Still unmarked' }));
+    // Half-answered: it must STILL be here.
+    expect(screen.getAllByRole('button', { name: /— love it$/ }).length).toBe(before);
+
+    // …and once the other side is answered, it goes.
+    await userEvent.click(screen.getByRole('button', { name: 'Everything' }));
+    await userEvent.click(screen.getAllByRole('button', { name: /— You → Them — love it$/ })[0]!);
     await userEvent.click(screen.getByRole('button', { name: 'Still unmarked' }));
     expect(screen.getAllByRole('button', { name: /— love it$/ }).length).toBeLessThan(before);
 

@@ -13,7 +13,7 @@ import {
   type RegisterSort,
   type RegisterStats,
 } from './registerStats';
-import { MarkFilter, type MarkFilterValue } from './MarkFilter';
+import { MarkFilter, isStillUnmarked, type MarkFilterValue } from './MarkFilter';
 import adaptive from './Adaptive.module.css';
 
 /**
@@ -193,10 +193,7 @@ export function NamesPhase({
   const visibleRows =
     showOnly === 'all'
       ? rows
-      : rows.filter((entry) => {
-          const mark = store.nameMarks[entry.key];
-          return mark?.hear === undefined && mark?.say === undefined;
-        });
+      : rows.filter((entry) => isStillUnmarked(entry.sides, store.nameMarks[entry.key]));
   const markedHere = rows.filter((entry) => {
     const mark = store.nameMarks[entry.key];
     return mark?.hear !== undefined || mark?.say !== undefined;

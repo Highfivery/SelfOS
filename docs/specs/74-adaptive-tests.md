@@ -1890,6 +1890,80 @@ and its risk is inverted from the usual: the safest-looking change (fix the cons
 whitespace character) is the one that silently rewrites the meaning of every historical row. Check what the
 old value does against the NEW predicate before touching either.
 
+### 3.6.39 What a mark MEANS, and one bad element — APPROVED + **BUILT** (2026-08-20, live-model pass)
+
+Found by running every phase against **real Claude at the owner's real shape** (563 entries resolved, 146
+loved, 395 suppressed, identity man/woman, address man/girl) — the check §3.6.35–§3.6.38 were all verified
+against the offline fake, which by construction cannot show either of these. Lines, the derived probe, the
+scenario and the synthesis all came back good, and §3.6.36 was confirmed working: every premise drawn within
+one direction, each term carrying its mark, the register named.
+
+**1) A premise called a LINE a name.** The split read
+
+> They love **being called** "suck me" … "trembling" … "touch me there" … "cock"
+
+`side === 'hear' ? 'being called' : 'saying'`, unconditional across all 42 families. You are not _called_
+"suck me" — you hear it. The bank separates this cleanly (9 `names-*` families against 33 line families, no
+label crossover), 202 of the owner's 563 entries sit in line families, and **4 of his 11 derived premises said
+it — every one of his hear-splits.** The same rule was in `openEndedAmbiguity`, where his own list happened to
+draw four names and so read correctly by luck.
+
+Both the right predicate and the right wording already existed: `steer.ts` filtered `family.startsWith('names-')`
+with a docstring saying why ("a name is a **vocative**"), and `frozen`, six lines below the split, already said
+"They love **hearing**". Three copies of one rule, and the two that mattered disagreed. It is now one exported
+`isNameFamily` in `lexicon.ts` that all three read — deliberately the PREFIX, not a list, and deliberately NOT
+folded into `EVERYDAY_NAME_FAMILIES` above it, which is opt-in by family precisely because getting _that_ one
+wrong fails OPEN on a hard no. This one fails to a sentence reading oddly.
+
+This is **§3.6.36 one level down**: that fixed WHICH DIRECTION a mark was made in, and left what that direction
+MEANS for the family it came from.
+
+**2) One bad element sank a whole pass.** **2 of 4 live open-ended probe passes returned MALFORMED — every one
+`end_turn`**, complete replies, not truncated and not refused. The model wrote one question with raw inner
+quotes (`"question": "When she says "my big cock" — …"`) while the other five escaped theirs correctly, and
+`extractJsonObject` returned null for the lot. This is the phase most exposed to it in the whole take, because
+its entire job is to quote the person's own marked terms back at them.
+
+`tolerantArray` is already per-element tolerant, but that only helps once the OBJECT parses — the §3.6.34
+lesson, in the sibling phase that never got the fix. The scenario phase was given `salvageJsonObjectArrayField`
+for exactly this; the probe had only the one-string salvage from §3.6.15, which predates the six-questions-per-
+pass shape (§3.6.17). Measured on the real captured reply: `extractJsonObject` → null, the salvage → **5 of 6
+recovered**, the malformed element dropped and nothing repaired into words the model did not write.
+
+**The lines phase had no salvage at all, and its parser was dead code.** `parseLines` was exported with a
+docstring reading "Exported for tests" and **had no callers anywhere in the repo, tests included** — so
+production parsed more strictly than the helper written for it, and the tolerant route it offers (a bare
+top-level array) was unreachable. Production now goes through it, and it gained the string twin
+`salvageJsonStringArrayField`, since `scanCompleteObjects` only sees `{…}` elements and an array of bare
+strings had nothing.
+
+**The synthesis is deliberately left alone, and this is the record of why** (owner-decided, after the
+alternative was measured rather than assumed). Truncation is already handled upstream — `runClaude` routes
+every phase through `streamWithContinuation` (66 §5.1), which continues a `max_tokens` reply. That leaves the
+stray-quote case, and neither existing string salvager is safe on a long prose field inside a multi-field
+object: `salvageJsonObjectField` stops at the first unescaped quote (returning a fragment), and
+`salvageLooseStringField` is anchored to the end of the object (`\}?\s*$`), so it would swallow every field
+after `narrative`. Saving a silently-truncated narrative as someone's finished profile is the §3.6.38 class
+exactly — the safest-looking change rewrites the meaning of the thing it "fixed". Its honest failure is
+correct, so it keeps it.
+
+**Guarded, each verified to fail when reverted with the revert asserted to have applied:** a hear-split on a
+line family says "hearing" and a name family still says "being called" (the anti-vacuity half — the fix must
+not just delete the vocative wording, which §3.6.33 established deliberately); the say direction is unchanged
+for both; the open-ended fallback splits the same way; the probe recovers the well-formed questions from the
+REAL captured reply and drops only the malformed one; a genuinely unusable reply still fails honestly; and the
+lines phase both accepts a bare top-level array and keeps the complete lines from a cut-off one.
+
+**Lessons.** (1) The offline fake cannot show either of these: it returns clean JSON forever, so the malformed
+element does not exist, and it cannot notice that a premise says something untrue about the person. A live pass
+at the REAL shape is not a nice-to-have for this feature — it is the only place two whole classes of defect are
+visible. (2) When the same rule is written in three places and one of them is right, the two that are wrong
+will disagree with it silently for as long as nobody reads them side by side; export the predicate the first
+time, not the third. (3) A helper exported "for tests" with zero callers is not dead weight but a live
+divergence — the production path had been quietly stricter than the code written to describe it. (4) Two
+salvagers built for opposite failures are not interchangeable, and picking the wrong one is worse than picking
+neither: check which failure a helper was written for before reaching for it.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

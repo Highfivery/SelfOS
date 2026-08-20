@@ -9,6 +9,7 @@ import {
   salvageJsonArray,
   salvageJsonObjectArrayField,
   salvageJsonObjectField,
+  salvageJsonStringArrayField,
   tolerantArray,
 } from './jsonSalvage';
 
@@ -148,5 +149,34 @@ describe('aiFailureMessage + classifyParseOutcome', () => {
       reason: 'TRUNCATED',
       message: 'The portrait was cut off before it finished. Please try again.',
     });
+  });
+});
+
+/*
+ * 74 §3.6.39 — the STRING-array twin. `scanCompleteObjects` only sees `{…}` elements, so an array of bare
+ * strings had no salvage at all: a reply cut off mid-array lost every line that HAD arrived.
+ */
+describe('salvageJsonStringArrayField', () => {
+  it('keeps the complete elements of a truncated array', () => {
+    expect(
+      salvageJsonStringArrayField('{"lines": ["hold still", "look at me", "don\'t you da', 'lines'),
+    ).toEqual(['hold still', 'look at me']);
+  });
+
+  it('decodes escapes and keeps an element containing quotes', () => {
+    expect(
+      salvageJsonStringArrayField('{"lines": ["say \\"please\\"", "line\\nbreak"]}', 'lines'),
+    ).toEqual(['say "please"', 'line\nbreak']);
+  });
+
+  it('reads through a fenced reply and stops at the array close', () => {
+    expect(
+      salvageJsonStringArrayField('```json\n{"lines": ["a", "b"], "other": ["c"]}\n```', 'lines'),
+    ).toEqual(['a', 'b']);
+  });
+
+  it('returns nothing for an absent field, and leaves an OBJECT array to its own salvager', () => {
+    expect(salvageJsonStringArrayField('{"lines": ["a"]}', 'scenes')).toEqual([]);
+    expect(salvageJsonStringArrayField('{"scenes": [{"scene": "a"}]}', 'scenes')).toEqual([]);
   });
 });

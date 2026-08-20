@@ -561,6 +561,50 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-20 — **Live-model pass on the three AI steps (the fake could not have shown either defect; SPEC 74
+  §3.6.39; on `chore/pet-name-purge-two`).** The §3.6.35–§3.6.38 work was all verified against the offline
+  fake, so every phase was run against **real Claude at the owner's real shape** (563 entries resolved, 146
+  loved, 395 suppressed, identity man/woman, address man/girl) on an in-memory COPY of his lexicon — read in
+  through `readLexicon`, never the parsed file, so the phases see what the app sees (§3.6.33). Lines, the
+  derived probe, the scenario and the synthesis all came back good, and **§3.6.36 was confirmed working**.
+  **Two defects the fake is structurally incapable of showing.** **(1) A premise called a LINE a name:**
+  `side === 'hear' ? 'being called' : 'saying'` ran unconditionally across all 42 families, so the split read
+  _"they love **being called** 'suck me'"_ / _"'trembling'"_ / _"'touch me there'"_ — **4 of his 11 premises,
+  every one of his hear-splits.** You are not called those, you hear them. The bank separates it cleanly (9
+  `names-*` against 33 line families, 202 of his 563 entries in the latter), and **both the right predicate and
+  the right wording already existed** — `steer.ts` filtered `startsWith('names-')` with a docstring saying "a
+  name is a vocative", and `frozen`, six lines below the split, already said "love **hearing**". Three copies
+  of one rule; the two that mattered disagreed. Now one exported `isNameFamily` all three read. This is
+  **§3.6.36 one level down**: that fixed WHICH DIRECTION a mark was made in, and left what that direction MEANS
+  for the family it came from. **(2) One bad element sank a whole pass:** **2 of 4 live open-ended probe passes
+  returned MALFORMED, every one `end_turn`** — complete replies where the model wrote ONE question with raw
+  inner quotes while the other five escaped theirs correctly. The phase whose entire job is to quote their own
+  marked terms is the one most exposed to it. `tolerantArray` is per-element tolerant but only once the OBJECT
+  parses (the §3.6.34 lesson, in the sibling that never got the fix); the scenario got
+  `salvageJsonObjectArrayField` for exactly this and the probe had only the one-string salvage from §3.6.15,
+  which predates the six-questions-per-pass shape. Measured on the REAL captured reply: `extractJsonObject` →
+  null, salvage → **5 of 6**. **The lines phase had no salvage and its parser was DEAD CODE** — `parseLines`,
+  exported "for tests", had **zero callers anywhere including tests**, so production parsed more strictly than
+  the helper written for it and its bare-top-level-array route was unreachable; production now goes through it,
+  plus a new `salvageJsonStringArrayField` (the object scanner only sees `{…}`). **The synthesis is
+  deliberately left alone and the reason is recorded** (owner-decided on a measurement, not an assumption):
+  truncation is already handled upstream by `streamWithContinuation` (66 §5.1), and for the residual
+  stray-quote case neither string salvager is safe on a long prose field in a multi-field object — one stops at
+  the first unescaped quote, the other is anchored to end-of-object — so salvaging would save a silently
+  truncated narrative as a finished profile, which is the §3.6.38 class exactly. Gate: typecheck ×4, lint,
+  format, **2506 core + 13 relay + 1762 desktop** unit, spec-74 E2E. Every new guard **verified to fail when
+  reverted, with the revert asserted to have applied** (a `count == 1` check before each patch). Verified live
+  after the fix: all four bad premises now read "love hearing", and the model writes coherent answerable
+  questions from them. **Lessons: (1) the offline fake cannot show either class — it returns clean JSON forever
+  so a malformed element does not exist, and it cannot notice a premise saying something untrue about the
+  person; a live pass at the REAL shape is the only place both are visible. (2) When one rule is written in
+  three places and one is right, the two that are wrong disagree with it silently until someone reads them side
+  by side — export the predicate the first time, not the third. (3) A helper exported "for tests" with zero
+  callers is not dead weight, it is a live divergence: the production path was quietly stricter than the code
+  written to describe it. (4) Two salvagers built for OPPOSITE failures are not interchangeable — check which
+  failure a helper was written for before reaching for it, because picking the wrong one is worse than picking
+  neither.**
+
 - 2026-08-20 — **Feedback (never run E2E with `pnpm dev` up — and it is NOT the single-instance lock; CLAUDE.md
   §6 step 7).** An hour was lost to this: with the owner's dev app running, **every** Playwright-Electron test
   failed as a bare 30s timeout — no assertion, no error — including tests untouched by the change and including a

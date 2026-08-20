@@ -864,3 +864,155 @@ describe('74 §3.6.34 — a truncated scenario set keeps the scenes that did arr
     ]);
   });
 });
+
+/*
+ * 74 §3.6.39 — a premise must state what the person actually marked, in the register they marked it in.
+ *
+ * §3.6.36 fixed WHICH DIRECTION a mark was made in and left what that direction MEANS for the family it came
+ * from: "being called" was used for all 42 families, so every hear-split drawn from one of the 33 LINE
+ * families said something untrue. Found live on the owner's own take — 4 of his 11 derived premises.
+ */
+describe('a hear-premise names the right register (74 §3.6.39)', () => {
+  const marked = (marks: Record<string, DirectionalMark>) =>
+    applyDirectionalMarks(emptyLexicon('p1', NOW), DIRTY_TALK.bank, marks, 'take:1', NOW);
+
+  it('a LINE family says "hearing" — you are not CALLED "suck me"', () => {
+    const lex = marked({
+      'oral:suck-me': { hear: 'love' },
+      'oral:lick-me': { hear: 'okay' },
+    });
+    const split = openAmbiguities(lex).find((a) => a.id === 'split:oral:hear');
+    expect(split).toBeDefined();
+    expect(split!.question).toContain('love hearing "suck me"');
+    expect(split!.question).toContain('lukewarm about hearing "lick me"');
+    expect(split!.question).not.toContain('being called');
+    expect(split!.termNote?.['suck me']).toBe('they love hearing this');
+    expect(split!.termNote?.['lick me']).toBe('only lukewarm about hearing this');
+  });
+
+  /*
+   * The anti-vacuity half: the fix must not simply delete the vocative wording. A name IS something you are
+   * called, and §3.6.33 established that register split deliberately — `names-body:my cock` is a vocative
+   * where `anatomy-him:cock` is descriptive.
+   */
+  it('a NAME family keeps "being called"', () => {
+    const lex = marked({
+      'names-warm:beautiful': { hear: 'love' },
+      'names-warm:babe': { hear: 'okay' },
+    });
+    const split = openAmbiguities(lex).find((a) => a.id === 'split:names-warm:hear');
+    expect(split).toBeDefined();
+    expect(split!.question).toContain('love being called "beautiful"');
+    expect(split!.question).not.toContain('love hearing');
+    expect(split!.termNote?.['beautiful']).toBe('they love being called this');
+  });
+
+  it('the SAY direction is unchanged for both — you say a name and you say a line', () => {
+    const line = marked({ 'oral:suck-me': { say: 'love' }, 'oral:lick-me': { say: 'okay' } });
+    const name = marked({
+      'names-warm:beautiful': { say: 'love' },
+      'names-warm:babe': { say: 'okay' },
+    });
+    expect(openAmbiguities(line).find((a) => a.id === 'split:oral:say')!.question).toContain(
+      'love saying "suck me"',
+    );
+    expect(openAmbiguities(name).find((a) => a.id === 'split:names-warm:say')!.question).toContain(
+      'love saying "beautiful"',
+    );
+  });
+
+  /*
+   * The same rule in the fallback that runs for most later passes. The owner's own list happened to draw four
+   * names, so it read correctly by luck — the first loved LINE to reach it would have said "landing to be
+   * called 'suck me'".
+   */
+  it('the open-ended fallback says "to hear" for a line and "to be called" for a name', () => {
+    const line = openEndedAmbiguity(marked({ 'oral:suck-me': { hear: 'love' } }));
+    expect(line!.question).toContain('"suck me" as landing to hear');
+    expect(line!.termNote?.['suck me']).toBe('landed to hear');
+
+    const name = openEndedAmbiguity(marked({ 'names-warm:beautiful': { hear: 'love' } }));
+    expect(name!.question).toContain('"beautiful" as landing to be called');
+    expect(name!.termNote?.['beautiful']).toBe('landed to be called');
+  });
+});
+
+/*
+ * 74 §3.6.39 — one bad element must not sink a whole pass.
+ *
+ * Measured live at the owner's real shape: 2 of 4 open-ended probe passes came back MALFORMED, every one of
+ * them `end_turn` — complete replies, not truncated and not refused. The model wrote ONE question with raw
+ * inner quotes while the other five escaped theirs correctly, and `extractJsonObject` returned null for the
+ * lot. This phase is the most exposed to it in the whole take, because its entire job is to quote the
+ * person's own marked terms back at them.
+ *
+ * The reply below is the real captured one, trimmed to three questions and keeping the defect verbatim.
+ */
+const PROBE_REPLY_WITH_ONE_RAW_QUOTE = `\`\`\`json
+{
+  "questions": [
+    {
+      "question": "When she says "my big cock" — what makes it land?",
+      "options": ["She means it like a fact, not a compliment", "It's the possessive"]
+    },
+    {
+      "question": "\\"My big cock\\" vs \\"my big dick\\" — do they hit differently?",
+      "options": ["\\"Cock\\" is rawer, that's the one", "Same hit, either works"]
+    },
+    {
+      "question": "You say \\"beautiful\\" — where does it belong?",
+      "options": ["Looking at her before anything starts", "Mid-fuck, no thinking"]
+    }
+  ]
+}
+\`\`\``;
+
+describe('a phase salvages what arrived (74 §3.6.39)', () => {
+  it('the probe keeps the well-formed questions when one carries unescaped quotes', async () => {
+    const { client } = fakeClient([PROBE_REPLY_WITH_ONE_RAW_QUOTE]);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { 'names-body:my-big-cock': { hear: 'love' }, 'names-body:my-good-cock': { hear: 'okay' } },
+      'take:1',
+      NOW,
+    );
+    const ambiguity = openAmbiguities(lex).find((a) => a.id.startsWith('split:'))!;
+    const out = await runProbePhase(deps(client), lex, ambiguity);
+    // Before the salvage this was ok:false / MALFORMED, and a billed call reported "an unexpected shape".
+    expect(out.ok).toBe(true);
+    expect(out.value?.map((q) => q.question)).toEqual([
+      '"My big cock" vs "my big dick" — do they hit differently?',
+      'You say "beautiful" — where does it belong?',
+    ]);
+    // The malformed element is dropped, never repaired into something the model didn't write.
+    expect(out.value?.some((q) => q.question.includes('what makes it land'))).toBe(false);
+  });
+
+  it('a reply that is genuinely unusable still fails honestly', async () => {
+    const { client } = fakeClient(['not json at all, and not a question']);
+    const lex = seeded();
+    const ambiguity = openAmbiguities(lex)[0]!;
+    const out = await runProbePhase(deps(client), lex, ambiguity);
+    expect(out.ok).toBe(false);
+    expect(out.degraded).toBe(true);
+  });
+
+  /*
+   * `parseLines` had NO callers anywhere — production parsed more strictly than the helper written for it,
+   * so a bare top-level array (a shape the model returns about as often as the wrapped one) was thrown away.
+   */
+  it('the lines phase accepts a bare top-level array, which never reached production before', async () => {
+    const { client } = fakeClient(['["hold still", "look at me"]']);
+    const out = await runLinesPhase(deps(client), emptyLexicon('p1', NOW), 1);
+    expect(out.ok).toBe(true);
+    expect(out.value).toEqual(['hold still', 'look at me']);
+  });
+
+  it('the lines phase keeps the complete lines when the array is cut off mid-element', async () => {
+    const { client } = fakeClient(['{"lines": ["hold still", "look at me", "don\'t you da']);
+    const out = await runLinesPhase(deps(client), emptyLexicon('p1', NOW), 1);
+    expect(out.ok).toBe(true);
+    expect(out.value).toEqual(['hold still', 'look at me']);
+  });
+});

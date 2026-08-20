@@ -7,6 +7,7 @@ import {
 import type { EroticLexicon, LexiconEntry } from '../../schemas';
 import {
   derivedWantsToSay,
+  isNameFamily,
   lovedEntries,
   okayEntries,
   readLexicon,
@@ -112,8 +113,7 @@ function registerLines(lexicon: EroticLexicon): string[] {
  * lines aimed AT them, and does not touch what they like calling someone else.
  */
 export function nameLines(lexicon: EroticLexicon): string[] {
-  const isName = (entry: LexiconEntry): boolean => entry.family.startsWith('names-');
-  const named = lexicon.entries.filter(isName);
+  const named = lexicon.entries.filter((entry) => isNameFamily(entry.family));
   if (named.length === 0) return [];
   const pick = (side: 'hearState' | 'sayState', mark: 'love' | 'okay' | 'never'): string[] =>
     named.filter((entry) => entry[side] === mark).map((entry) => entry.text);

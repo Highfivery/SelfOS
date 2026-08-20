@@ -6,6 +6,7 @@ import {
   salvageLooseStringField,
   extractJsonObject,
   salvageJsonObjectArrayField,
+  salvageJsonStringArrayField,
   tolerantArray,
 } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
@@ -18,7 +19,7 @@ import type {
   LexiconEntry,
 } from '../../schemas';
 import { runClaude, type AiDeps } from '../../questionnaires/aiCall';
-import { hasSayGap, suppressedTexts, violatesBoundary } from './lexicon';
+import { hasSayGap, isNameFamily, suppressedTexts, violatesBoundary } from './lexicon';
 
 /**
  * 74-adaptive-tests §5.1/§5.3 — the **adaptive half**: the phases that chase what the bank left ambiguous,
@@ -271,7 +272,21 @@ export function openAmbiguities(
       if (!pick || !contrast) continue;
       // Said in the person's own terms, and the direction is IN the sentence — the model reads this as the
       // thing to resolve, so a premise that does not name the direction cannot produce a question that does.
-      const loves = side === 'hear' ? 'being called' : 'saying';
+      /*
+       * 74 §3.6.39 — and in the terms of the RIGHT register, because "being called" is only true of a name.
+       *
+       * This was `side === 'hear' ? 'being called' : 'saying'` for all 42 families, so a hear-split drawn from
+       * any of the 33 LINE families stated something the person never marked: "they love being called 'suck
+       * me'", "'trembling'", "'touch me there'". You are not called those — you hear them. Measured on the
+       * owner's own take, live: 4 of 11 derived premises said it, and every one of his hear-splits did.
+       *
+       * The right wording was already six lines below in `frozen` ("They love hearing …") and the right
+       * predicate already in `steer.ts`, whose docstring says why it matters — a name is a vocative. This is
+       * §3.6.36 one level down: that fixed WHICH DIRECTION a mark was made in, and left what that direction
+       * MEANS for the family it came from.
+       */
+      const loves =
+        side === 'hear' ? (isNameFamily(family) ? 'being called' : 'hearing') : 'saying';
       // Named where the bank told us what it is called; without it the sentence asks about "the register"
       // and leaves the model to guess which one from two words.
       const register = familyLabels[family];
@@ -374,7 +389,12 @@ export function openEndedAmbiguity(lexicon: EroticLexicon): Ambiguity | null {
         entry.hearState === 'love' && entry.sayState === 'love'
           ? 'both ways'
           : entry.hearState === 'love'
-            ? 'to be called'
+            ? // 74 §3.6.39 — same rule as the split above: only a name is something you are CALLED. The
+              // owner's own fallback happened to draw four names, so it read correctly by luck; the first
+              // loved LINE to reach this list would have said "landing to be called 'suck me'".
+              isNameFamily(entry.family)
+              ? 'to be called'
+              : 'to hear'
             : 'to say',
     }));
   if (loved.length === 0) return null;
@@ -464,8 +484,15 @@ we know.${
       ...(out.reason ? { reason: out.reason } : {}),
       ...(out.message ? { message: out.message } : {}),
     };
-  const parsed = LinesSchema.safeParse(extractJsonObject(out.text));
-  const written = parsed.success ? parsed.data.lines : [];
+  /*
+   * 74 §3.6.39 — through the shared parser, which until now had NO callers anywhere.
+   *
+   * `parseLines` was exported with a docstring saying "Exported for tests" and nothing imported it, in this
+   * repo or any test — so the production path parsed MORE strictly than the helper written for it, and the
+   * tolerant route it offers (a bare top-level array, the shape a model returns about as often as the
+   * wrapped one) was dead. One parser, one behaviour, and the salvage below reaches production.
+   */
+  const written = parseLines(out.text);
   const seen = new Set(writtenBefore.map((line) => line.trim().toLowerCase()));
   const lines = written
     // Belt and braces: the prompt forbids their hard nos, and anything that slips through is dropped here.
@@ -637,9 +664,29 @@ Return ONLY {"questions": [{"question": string, "options": string[]}]}.`,
       options: z.array(z.string()).catch([]).default([]),
     }),
   ]);
-  const parsed = z
-    .object({ questions: tolerantArray(questionish, '', (v) => v !== '') })
-    .safeParse(extractJsonObject(out.text));
+  const QuestionsSchema = z.object({
+    questions: tolerantArray(questionish, '', (v) => v !== ''),
+  });
+  const parsed = QuestionsSchema.safeParse(extractJsonObject(out.text));
+  /*
+   * 74 §3.6.39 — salvage the well-formed questions rather than losing the whole pass to one bad element.
+   *
+   * `tolerantArray` above is already per-element tolerant, but that only helps once the OBJECT parses — the
+   * §3.6.34 lesson, in the sibling phase that never got the fix. And this is the phase most exposed to it:
+   * its entire job is to quote the person's own marked terms back at them, so the reply is full of nested
+   * quotes, and a single unescaped one makes the whole payload invalid JSON.
+   *
+   * Measured live at the owner's real shape: 2 of 4 open-ended passes came back MALFORMED, every one of them
+   * `end_turn` — not truncated, not refused, just one question written with raw inner quotes while the other
+   * five escaped theirs correctly. On that captured reply `extractJsonObject` returns null and all six are
+   * lost; this recovers 5. A billed call was reporting "the question came back in an unexpected shape".
+   */
+  const salvagedSet =
+    parsed.success && parsed.data.questions.length > 0
+      ? parsed.data.questions
+      : (QuestionsSchema.safeParse({
+          questions: salvageJsonObjectArrayField(out.text, 'questions'),
+        }).data?.questions ?? []);
   const asQuestion = (q: z.infer<typeof questionish>): ProbeQuestion =>
     typeof q === 'string'
       ? { question: q, options: [] }
@@ -657,8 +704,8 @@ Return ONLY {"questions": [{"question": string, "options": string[]}]}.`,
     // replies look like for a one-string payload.
     (salvageLooseStringField(out.text, 'question') ?? '');
   const written: ProbeQuestion[] =
-    parsed.success && parsed.data.questions.length > 0
-      ? parsed.data.questions.map(asQuestion)
+    salvagedSet.length > 0
+      ? salvagedSet.map(asQuestion)
       : salvaged
         ? [{ question: salvaged, options: [] }]
         : [];
@@ -1039,5 +1086,13 @@ export function parseLines(text: string): string[] {
   const direct = extractJsonArray(text);
   if (Array.isArray(direct)) return direct.filter((x): x is string => typeof x === 'string');
   const obj = LinesSchema.safeParse(extractJsonObject(text));
-  return obj.success ? obj.data.lines : [];
+  if (obj.success && obj.data.lines.length > 0) return obj.data.lines;
+  /*
+   * 74 §3.6.39 — keep the lines that DID arrive.
+   *
+   * Same rule the scenario phase got in §3.6.34 and the probe got here: `tolerantArray` inside `LinesSchema`
+   * is per-element tolerant, which only helps once the object parses, so a reply cut off mid-array or
+   * carrying one bad element lost all six lines. Strings, not objects, so it needs the string twin.
+   */
+  return salvageJsonStringArrayField(text, 'lines');
 }

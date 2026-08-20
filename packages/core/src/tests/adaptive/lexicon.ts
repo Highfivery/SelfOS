@@ -845,6 +845,26 @@ const EVERYDAY_NAME_FAMILIES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * 74 §3.6.39 — is this family a NAME register, i.e. are its entries vocatives?
+ *
+ * A name is something you are CALLED; a line is something you HEAR. The bank draws that line cleanly — 9
+ * `names-*` families against 33 line families, with no label crossover — and three separate places need it:
+ * `nameLines` (a model can drop a vocative into any line it writes, where a phrase can only be quoted,
+ * §3.6.8) and both premise builders in `engine.ts`, which state back what someone marked and were saying
+ * "they love being called 'suck me'".
+ *
+ * Deliberately the PREFIX and not a list. {@link EVERYDAY_NAME_FAMILIES} above is opt-in by family because
+ * getting it wrong there fails OPEN on a hard no — a family added tomorrow must not silently relax a
+ * suppression. This one is the opposite: a `names-` family added tomorrow is a name by construction, and the
+ * cost of a miss is a sentence reading slightly oddly, not a boundary going quiet. Same reason it lives here
+ * rather than being re-derived per caller: three copies of one rule is how the two premise builders came to
+ * disagree with `frozen` six lines below them.
+ */
+export function isNameFamily(family: string): boolean {
+  return family.startsWith('names-');
+}
+
+/**
  * Whether a candidate line touches a boundary. Two different checks, because the two kinds of boundary are
  * different things:
  *

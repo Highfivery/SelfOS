@@ -120,6 +120,47 @@ export function salvageJsonObjectArrayField(text: string, field: string): unknow
 }
 
 /**
+ * The STRING-array twin of {@link salvageJsonObjectArrayField}: recover the complete string elements of a
+ * named array from a reply whose object never parsed.
+ *
+ * `scanCompleteObjects` only sees `{…}` elements, so an array of bare strings — `{"lines": ["…", "…"]}` —
+ * had no salvage at all and lost every line to a truncated tail or one bad element. Same rule as its twin:
+ * a complete, well-formed element is kept, anything unterminated is dropped, and nothing is repaired.
+ */
+export function salvageJsonStringArrayField(text: string, field: string): string[] {
+  const s = stripFences(text);
+  const fieldIdx = s.indexOf(`"${field}"`);
+  if (fieldIdx === -1) return [];
+  const arrStart = s.indexOf('[', fieldIdx);
+  if (arrStart === -1) return [];
+  const out: string[] = [];
+  let start = -1;
+  let esc = false;
+  for (let i = arrStart + 1; i < s.length; i++) {
+    const c = s[i];
+    if (start !== -1) {
+      // Inside a string element: run to its closing quote, honouring escapes.
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') {
+        try {
+          out.push(JSON.parse(s.slice(start, i + 1)) as string);
+        } catch {
+          /* skip an element that doesn't decode */
+        }
+        start = -1;
+      }
+      continue;
+    }
+    if (c === '"') start = i;
+    // A nested structure means this is not a string array — leave it to the object salvager.
+    else if (c === '{' || c === '[') return out;
+    else if (c === ']') break;
+  }
+  return out;
+}
+
+/**
  * Recover a leading JSON STRING field from a (possibly truncated) object — the generalization of the
  * portrait's `"portrait":"..."` recovery. Lets a truncated object still yield its essential string field
  * (e.g. a session/distill `summary`, the `portrait` text). Returns `null` if the field never appeared or

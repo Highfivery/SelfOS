@@ -5145,6 +5145,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // if it is fully skipped, replace the impossible action with a state that says so. The summary is
         // counts only, so it is the same shape whether the send was Standard or Private.
         let skipped: SkipSummary | undefined;
+        let standardSkip = false;
         if (agg.analyzable) {
           const [snapshot, response] = await Promise.all([
             getAssignmentSnapshot(ctx.fs, ctx.key, agg.analyzable.id),
@@ -5156,6 +5157,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             );
             if (isFullySkipped(snapshot.questions, answers)) {
               skipped = summarizeSkips(snapshot.questions, answers);
+              // On a STANDARD send there IS something to read — the refusal itself (§34.3) — so the action
+              // stays, relabelled by the card. Only a Private send has nothing we are allowed to say, and
+              // only there is withholding it correct.
+              standardSkip = agg.latestByRecipient.size > 0 && privacy === 'standard';
             }
           }
         }
@@ -5172,7 +5177,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(analyzed && agg.latestInsight
             ? { insightSummary: agg.latestInsight.summary, insightId: agg.latestInsight.id }
             : {}),
-          ...(agg.analyzable && !skipped ? { analyzableAssignmentId: agg.analyzable.id } : {}),
+          ...(agg.analyzable && (!skipped || standardSkip)
+            ? { analyzableAssignmentId: agg.analyzable.id }
+            : {}),
           ...(skipped ? { skipped } : {}),
         };
       }

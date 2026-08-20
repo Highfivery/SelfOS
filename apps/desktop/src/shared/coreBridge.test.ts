@@ -6327,8 +6327,10 @@ describe('createCoreBridge', () => {
     });
 
     const overview = (await bridge.questionnairesSentOverview())[q.id];
-    // The bug: this used to stay set forever, re-offering an Analyze that bails EMPTY before the model.
-    expect(overview?.analyzableAssignmentId).toBeUndefined();
+    // This send is STANDARD, so there IS something to read — the refusal itself (§34.3) — and the action
+    // stays, relabelled by the card. What used to be broken was offering the ORDINARY analyze, which bails
+    // EMPTY before the model; the `skipped` summary is what tells the card to say so.
+    expect(overview?.analyzableAssignmentId).toBe(assignment.id);
     expect(overview?.analyzed).toBe(false);
     expect(overview?.skipped).toEqual({
       total: 2,
@@ -6361,6 +6363,24 @@ describe('createCoreBridge', () => {
     const partial = (await bridge.questionnairesSentOverview())[q2.id];
     expect(partial?.analyzableAssignmentId).toBe(second.assignment.id);
     expect(partial?.skipped).toBeUndefined();
+
+    // A PRIVATE send that came back empty has nothing we are allowed to say back, so the action is
+    // withheld entirely — the reported dead button, in the mode it was actually dead in.
+    const q3 = await bridge.questionnairesSave({
+      title: 'Private and unanswered',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'One', required: false }],
+    });
+    const third = await bridge.assignmentsCreate({ questionnaireId: q3.id, privacy: 'private' });
+    await bridge.assignmentsSubmit({
+      assignmentId: third.assignment.id,
+      answers: [{ questionId: 'q1', value: { declined: true } }],
+    });
+    const priv = (await bridge.questionnairesSentOverview())[q3.id];
+    expect(priv?.analyzableAssignmentId).toBeUndefined();
+    expect(priv?.skipped?.total).toBe(1);
   });
 
   it('card privacy badges (§3.1): sentOverview derives private/mixed; a compatibility Inbox item carries its visibility', async () => {

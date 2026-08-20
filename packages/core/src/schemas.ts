@@ -803,6 +803,11 @@ export const InsightProvenanceSchema = z.object({
   // stale analysis (`response.revision > analyzedRevision`) after a recipient edits + resubmits. Absent on a
   // pre-56 insight → treated as 1, so an un-edited send is never falsely flagged stale.
   analyzedRevision: z.number().int().positive().optional().catch(undefined),
+  // This Insight is a read of a REFUSAL (08 §34.3) — every question came back unanswered, so it is about the
+  // QUESTIONS, not the person. Additive-optional; absent everywhere before §34. It exists so a refusal read
+  // can replace an earlier refusal read without ever replacing a real analysis, which `saveInsight` would
+  // otherwise overwrite whole (losing its metrics, crisis flag, shared facts and approved state).
+  refusalRead: z.literal(true).optional().catch(undefined),
   // Who a SENT questionnaire's insight is ABOUT — the recipient, when it isn't the subject (the sender). A
   // questionnaire you send to someone else produces an Insight for YOUR coaching (`subjectPersonId` = you)
   // whose facts describe THEIR answers, so Memory groups these as "responses to your questionnaires" instead

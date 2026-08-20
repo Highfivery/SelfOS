@@ -270,7 +270,7 @@ export function SentCard({
             )
           }
         />
-      ) : analyzable ? (
+      ) : analyzable && !skipped ? (
         <div className={styles.analyzePrompt} aria-busy={analyzing ?? false}>
           <span>Responses are in.</span>
           {analyzingOther && !analyzing ? (
@@ -304,6 +304,19 @@ export function SentCard({
               </span>
             ))}
           </span>
+          {/* On a Standard send the refusal itself can be read (§34.3); a Private one has nothing we may
+              say, so it shows the counts and stops there. */}
+          {analyzable ? (
+            <button
+              type="button"
+              className={styles.analyzeGo}
+              disabled={analyzing ?? false}
+              onClick={() => onAnalyze(analyzable)}
+            >
+              <Sparkles size={13} aria-hidden="true" />
+              {analyzing ? 'Reading…' : 'Read what this tells you →'}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

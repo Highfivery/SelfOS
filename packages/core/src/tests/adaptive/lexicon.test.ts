@@ -28,7 +28,7 @@ const LATER = new Date('2026-08-17T12:00:00.000Z');
 const KEY = new Uint8Array(32).fill(7);
 
 const GOOD_GIRL = 'names-praise:good-girl';
-const WHORE = 'names-rough-heavy:whore';
+const WHORE = 'names-rough-heavy:manwhore';
 const CUNT = 'anatomy-her:cunt';
 
 function seeded(): EroticLexicon {
@@ -67,7 +67,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     // which is what used to make it unliftable (74 §3.2, amended 2026-08-19).
     expect(lex.boundaries).toEqual([]);
     // `notYet`/`okay` are NOT suppressed — they are coachable material, not a refusal.
-    expect(suppressedTexts(lex)).toEqual(['whore']);
+    expect(suppressedTexts(lex)).toEqual(['manwhore']);
   });
 
   it('leaves everything unmarked genuinely unrated — never read as a no', () => {
@@ -78,7 +78,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
 
   it('lets a later mark lift a no — it is a preference, respected only while it is set', () => {
     const lex = seeded();
-    expect(suppressedTexts(lex)).toContain('whore');
+    expect(suppressedTexts(lex)).toContain('manwhore');
     const reMarked = applyDirectionalMarks(
       lex,
       DIRTY_TALK.bank,
@@ -88,8 +88,8 @@ describe('the erotic lexicon (74 §4.4)', () => {
     );
     expect(reMarked.entries.find((e) => e.key === WHORE)?.hearState).toBe('love');
     // The whole point: the suppression goes WITH the mark, on the very next read.
-    expect(suppressedTexts(reMarked)).not.toContain('whore');
-    expect(violatesBoundary(reMarked, 'come here, whore')).toBe(false);
+    expect(suppressedTexts(reMarked)).not.toContain('manwhore');
+    expect(violatesBoundary(reMarked, 'come here, manwhore')).toBe(false);
   });
 
   it('lifts a no by taking the mark back, which drops the suppression with it', () => {
@@ -138,7 +138,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
       LATER,
     );
     const merged = mergeLexicons(mine, theirs);
-    // The newer side never touched `whore`, so the older side's answer stands.
+    // The newer side never touched `manwhore`, so the older side's answer stands.
     expect(merged.entries.find((e) => e.key === WHORE)?.hearState).toBe('never');
     // Only the theme is a record now; a bank entry's suppression rides its state.
     expect(merged.boundaries.map((b) => b.text)).toEqual(['anything about being used']);
@@ -157,7 +157,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     );
     const merged = mergeLexicons(seeded(), lifted);
     expect(merged.entries.find((e) => e.key === WHORE)?.hearState).toBe('love');
-    expect(suppressedTexts(merged)).not.toContain('whore');
+    expect(suppressedTexts(merged)).not.toContain('manwhore');
   });
 
   it('suppresses a candidate line that touches any boundary', () => {
@@ -169,7 +169,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
       'take:2',
       LATER,
     );
-    expect(violatesBoundary(lex, 'You filthy whore')).toBe(true);
+    expect(violatesBoundary(lex, 'You filthy manwhore')).toBe(true);
     expect(violatesBoundary(lex, 'yes daddy, please')).toBe(true);
     expect(violatesBoundary(lex, 'good girl, just like that')).toBe(false);
   });
@@ -187,7 +187,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     expect(goals).toContain('good girl');
     // The middle mark is a MILD YES now, not "I'd feel like an idiot", so it is not a goal.
     expect(goals).not.toContain('cunt');
-    expect(goals).not.toContain('whore'); // a hard no is never a goal
+    expect(goals).not.toContain('manwhore'); // a hard no is never a goal
   });
 
   it('ranks loved entries and never surfaces a boundary among them', () => {
@@ -225,7 +225,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     await writeLexicon(fs, KEY, seeded());
     const read = await readLexicon(fs, KEY, 'p1', NOW);
     expect(read.entries).toHaveLength(3);
-    expect(suppressedTexts(read)).toEqual(['whore']);
+    expect(suppressedTexts(read)).toEqual(['manwhore']);
     // A corrupt doc must never throw out of the surface that depends on it.
     await fs.writeAtomic('people/p1/tests/lexicon.enc', new TextEncoder().encode('not json'));
     expect((await readLexicon(fs, KEY, 'p1', NOW)).entries).toEqual([]);
@@ -245,7 +245,7 @@ describe('boundary matching (74 §5.7)', () => {
     let lex = seeded();
     lex = addBoundary(lex, { text: 'anything about being used', kind: 'theme' }, NOW);
     // Literal.
-    expect(violatesBoundary(lex, 'you filthy whore')).toBe(true);
+    expect(violatesBoundary(lex, 'you filthy manwhore')).toBe(true);
     // Themed — no substring in common, which is exactly why a substring check isn't enough on its own.
     expect(violatesBoundary(lex, 'I love using you')).toBe(true);
     expect(violatesBoundary(lex, 'use me')).toBe(true);
@@ -481,14 +481,14 @@ describe('a hard no is respected while set, and changeable (74 §3.2, amended 20
         LATER,
       );
       expect(after.entries.find((e) => e.key === WHORE)?.hearState).not.toBe('never');
-      expect(suppressedTexts(after)).not.toContain('whore');
+      expect(suppressedTexts(after)).not.toContain('manwhore');
     }
   });
 
   it('suppresses for exactly as long as it is set — the half that must not regress', () => {
     const lex = seeded();
-    expect(violatesBoundary(lex, 'you filthy whore')).toBe(true);
-    expect(suppressedTexts(lex)).toContain('whore');
+    expect(violatesBoundary(lex, 'you filthy manwhore')).toBe(true);
+    expect(suppressedTexts(lex)).toContain('manwhore');
   });
 
   it('never appears in the goal list, however it was marked', () => {
@@ -501,7 +501,7 @@ describe('a hard no is respected while set, and changeable (74 §3.2, amended 20
       'e',
       LATER,
     );
-    expect(derivedWantsToSay(downgraded)).not.toContain('whore');
+    expect(derivedWantsToSay(downgraded)).not.toContain('manwhore');
   });
 
   it('matches a literal boundary on word boundaries, so a short word cannot suppress everything', () => {
@@ -686,7 +686,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
   const withSlut = base({
     entries: [
       {
-        key: 'names-rough-heavy:slut',
+        key: 'names-rough-heavy:anal-slut',
         text: 'slut',
         kind: 'word',
         family: 'names-degrading',
@@ -716,8 +716,8 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
     const legacy = base({
       entries: [
         {
-          key: 'names-rough-heavy:whore',
-          text: 'whore',
+          key: 'names-rough-heavy:manwhore',
+          text: 'manwhore',
           kind: 'word',
           family: 'names-degrading',
           tier: 4,
@@ -731,7 +731,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
       boundaries: [{ text: 'being used', kind: 'theme' as const, at: 'now' }],
     });
     for (const direction of ['hear', 'say'] as const) {
-      expect(violatesBoundary(legacy, 'you filthy whore', direction)).toBe(true);
+      expect(violatesBoundary(legacy, 'you filthy manwhore', direction)).toBe(true);
       expect(violatesBoundary(legacy, 'I love using you', direction)).toBe(true);
     }
   });
@@ -751,7 +751,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
 describe('74 §3.6.8 — the pet-name pass', () => {
   const now = new Date('2026-08-17T10:00:00.000Z');
   const start = (): EroticLexicon => emptyLexicon('p1', now);
-  const KEY = 'names-rough-heavy:slut';
+  const KEY = 'names-rough-heavy:anal-slut';
 
   it('writes each direction separately, and derives the ratings the rest of the app reads', () => {
     const lex = applyDirectionalMarks(
@@ -777,8 +777,8 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       now,
     );
     expect(lex.boundaries).toEqual([]);
-    expect(violatesBoundary(lex, 'take it, slut', 'hear')).toBe(true);
-    expect(violatesBoundary(lex, 'take it, slut', 'say')).toBe(false);
+    expect(violatesBoundary(lex, 'take it, anal slut', 'hear')).toBe(true);
+    expect(violatesBoundary(lex, 'take it, anal slut', 'say')).toBe(false);
   });
 
   it('lets a LATER take mark over a no, per direction — nothing is settled for good', () => {
@@ -797,7 +797,7 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       now,
     );
     expect(second.entries.find((e) => e.key === KEY)?.hearState).toBe('love');
-    expect(violatesBoundary(second, 'take it, slut', 'hear')).toBe(false);
+    expect(violatesBoundary(second, 'take it, anal slut', 'hear')).toBe(false);
   });
 
   it('takes back ONE direction, leaving the other standing', () => {
@@ -813,8 +813,8 @@ describe('74 §3.6.8 — the pet-name pass', () => {
     expect(entry?.hearState).toBeUndefined();
     expect(entry?.sayState).toBe('never');
     // The direction they took back stops suppressing; the one they left standing does not.
-    expect(violatesBoundary(cleared, 'take it, slut', 'hear')).toBe(false);
-    expect(violatesBoundary(cleared, 'take it, slut', 'say')).toBe(true);
+    expect(violatesBoundary(cleared, 'take it, anal slut', 'hear')).toBe(false);
+    expect(violatesBoundary(cleared, 'take it, anal slut', 'say')).toBe(true);
   });
 
   it('lets a LATER sitting take back an earlier mark — a preference is not take-scoped', () => {
@@ -827,7 +827,7 @@ describe('74 §3.6.8 — the pet-name pass', () => {
     );
     const taken = clearDirectionalMarks(first, { [KEY]: ['say'] }, now);
     expect(taken.entries.find((e) => e.key === KEY)?.sayState).toBeUndefined();
-    expect(violatesBoundary(taken, 'take it, slut', 'say')).toBe(false);
+    expect(violatesBoundary(taken, 'take it, anal slut', 'say')).toBe(false);
   });
 });
 
@@ -886,11 +886,11 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
 
   it('keeps a CRUDE name family matching anywhere — the word IS the slur', () => {
     const lex: EroticLexicon = {
-      ...lexiconWith(['whore']),
+      ...lexiconWith(['manwhore']),
       entries: [
         {
-          key: 'names-rough-heavy:whore',
-          text: 'whore',
+          key: 'names-rough-heavy:manwhore',
+          text: 'manwhore',
           kind: 'word',
           family: 'names-rough-heavy',
           tier: 4,
@@ -901,7 +901,7 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
         },
       ],
     };
-    expect(violatesBoundary(lex, 'You filthy whore')).toBe(true);
+    expect(violatesBoundary(lex, 'You filthy manwhore')).toBe(true);
   });
 
   it('fails CLOSED for a family it has never heard of — a new family must not relax a hard no', () => {
@@ -1093,8 +1093,8 @@ describe('74 §3.6.29 — the legacy word-boundary records are gone', () => {
       NOW,
     );
     const cleaned = dropLegacyWordBoundaries(marked, LATER).lexicon;
-    expect(suppressedTexts(cleaned)).toContain('whore');
-    expect(violatesBoundary(cleaned, 'you filthy whore')).toBe(true);
+    expect(suppressedTexts(cleaned)).toContain('manwhore');
+    expect(violatesBoundary(cleaned, 'you filthy manwhore')).toBe(true);
   });
 
   it('heals a stored vault on the very next read, with no migration step', async () => {

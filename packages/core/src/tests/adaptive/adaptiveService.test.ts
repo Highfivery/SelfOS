@@ -27,7 +27,7 @@ const P = 'angel';
 
 const GOOD_GIRL = 'names-praise:good-girl';
 const MINE = 'claiming:you-re-mine';
-const WHORE = 'names-rough-heavy:whore';
+const WHORE = 'names-rough-heavy:manwhore';
 const CUNT = 'anatomy-her:cunt';
 
 async function fullTake(fs = memFileSystem(), now = NOW) {
@@ -133,9 +133,9 @@ describe('the adaptive take (74 §5)', () => {
     const { fs } = await fullTake();
     const insight = (await listAllInsights(fs, KEY))[0]!;
     const text = JSON.stringify(insight);
-    expect(text).not.toContain('whore');
+    expect(text).not.toContain('manwhore');
     // …but the lexicon still suppresses it, which is what every consumer reads.
-    expect(suppressedTexts(await readLexicon(fs, KEY, P, NOW))).toEqual(['whore']);
+    expect(suppressedTexts(await readLexicon(fs, KEY, P, NOW))).toEqual(['manwhore']);
   });
 
   it('carries the hear/say GAP into the Insight as a goal the practice session can run on', async () => {
@@ -185,7 +185,7 @@ describe('the adaptive take (74 §5)', () => {
       LATER,
     );
     expect(lexicon.entries.find((e) => e.key === WHORE)?.hearState).toBe('love');
-    expect(suppressedTexts(lexicon)).not.toContain('whore');
+    expect(suppressedTexts(lexicon)).not.toContain('manwhore');
   });
 
   // --- 74 §3.4 — autosaving the passes ---
@@ -264,7 +264,7 @@ describe('the adaptive take (74 §5)', () => {
 
   it('takes back an EARLIER take’s mark from the open one — changing your mind is not take-scoped', () => {
     return (async () => {
-      const { fs } = await fullTake(); // sets `whore` → never, in take #1
+      const { fs } = await fullTake(); // sets `manwhore` → never, in take #1
       const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
       const lexicon = await recordMarkingPass(
         fs,
@@ -281,7 +281,7 @@ describe('the adaptive take (74 §5)', () => {
         LATER,
       );
       expect(lexicon.entries.find((e) => e.key === WHORE)?.hearState).toBeUndefined();
-      expect(suppressedTexts(lexicon)).not.toContain('whore');
+      expect(suppressedTexts(lexicon)).not.toContain('manwhore');
     })();
   });
 
@@ -304,7 +304,7 @@ describe('the adaptive take (74 §5)', () => {
       LATER,
     );
     expect(lexicon.entries.find((e) => e.key === WHORE)?.hearState).toBe('never');
-    expect(suppressedTexts(lexicon)).toContain('whore');
+    expect(suppressedTexts(lexicon)).toContain('manwhore');
   });
 
   it('un-marking a 🔥 clears the ratings it seeded, not just the state', async () => {
@@ -399,14 +399,14 @@ describe('74 §3.6.8 — start over from the top', () => {
         resultId: draft.id,
         marks: {
           'names-praise:good-girl': { hear: 'love', say: 'love' },
-          'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+          'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
         },
       },
       NOW,
     );
     await completeAdaptiveTake(fs, key, DIRTY_TALK, { personId: 'p1', resultId: draft.id }, LATER);
     const before = await readLexicon(fs, key, 'p1', LATER);
-    expect(suppressedTexts(before)).toContain('whore');
+    expect(suppressedTexts(before)).toContain('manwhore');
 
     await deleteAllAdaptiveResults(fs, key, DIRTY_TALK, 'p1', LATER);
 
@@ -430,7 +430,7 @@ describe('74 §3.6.8 — start over from the top', () => {
         phase: 'bank',
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        marks: { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
       },
       NOW,
     );
@@ -469,14 +469,14 @@ describe('74 §3.6.8 — start over from the top', () => {
         resultId: draft.id,
         marks: {
           'names-praise:good-girl': { hear: 'love', say: 'love' },
-          'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+          'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
         },
       },
       NOW,
     );
     const before = await readLexicon(fs, key, 'p1');
     expect(before?.entries.length).toBeGreaterThan(0);
-    expect(suppressedTexts(before)).toContain('whore');
+    expect(suppressedTexts(before)).toContain('manwhore');
 
     await abandonAdaptiveTake(fs, 'p1', draft.id, key);
 
@@ -579,7 +579,7 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     const fs = memFileSystem();
     const key = new Uint8Array(32).fill(9);
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
-    const KEY = 'names-rough-heavy:whore';
+    const KEY = 'names-rough-heavy:manwhore';
     await recordMarkingPass(
       fs,
       key,
@@ -611,7 +611,7 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     expect(lex?.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
     // The draft guard is what bounced it: `resultId` was not the open take. Changing your mind is free,
     // but only through the take you actually have open.
-    expect(violatesBoundary(lex, 'take it, whore', 'hear')).toBe(true);
+    expect(violatesBoundary(lex, 'take it, manwhore', 'hear')).toBe(true);
   });
 });
 

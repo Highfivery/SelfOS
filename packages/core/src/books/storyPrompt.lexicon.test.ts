@@ -11,7 +11,7 @@ const CONFIG: BookConfig = {
   autoRefresh: false,
 } as BookConfig;
 
-const LEXICON = 'Loves to hear: good girl · mine.\nNEVER use: whore.';
+const LEXICON = 'Loves to hear: good girl · mine.\nNEVER use: manwhore.';
 
 describe('the book prompt takes their own vocabulary (74 §5.8)', () => {
   it('refines the register for an ADULT-GATED book, without softening it', () => {
@@ -57,10 +57,10 @@ describe('the book prompt takes their own vocabulary (74 §5.8)', () => {
       undefined,
       {},
       {
-        suppression: 'NEVER use: whore.',
+        suppression: 'NEVER use: manwhore.',
       },
     );
-    expect(system).toContain('NEVER use: whore.');
+    expect(system).toContain('NEVER use: manwhore.');
     // …and still no positive steer on a non-adult book: the halves are separate, not merged.
     expect(system).not.toContain('THEIR OWN VOCABULARY');
   });
@@ -77,7 +77,7 @@ describe('the book prompt takes their own vocabulary (74 §5.8)', () => {
       },
     );
     expect(system).toContain('THEIR OWN VOCABULARY');
-    expect(system.split('NEVER use: whore.').length - 1).toBe(1);
+    expect(system.split('NEVER use: manwhore.').length - 1).toBe(1);
   });
 
   it('leaves the prompt byte-unchanged when there is no lexicon', () => {

@@ -42,7 +42,7 @@ async function seedPair(): Promise<{ fs: FileSystem; ben: string; angel: string;
       // has to express it in now (§3.6.26: a `say` of 0 can only be a `never`, which is a hard no).
       'names-praise:good-girl': { hear: 'love', say: 'okay' },
       'claiming:you-re-mine': { hear: 'love', say: 'love' },
-      'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+      'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
     },
     'take:1',
     NOW,
@@ -59,7 +59,7 @@ describe('the lexicon steer (74 §5.7/§8.4)', () => {
     const block = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
     expect(block).toContain('good girl');
     expect(block).toContain('NEVER use');
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     // The gap is framed as something to practise, never a failing.
     expect(block).toContain('PRACTISE');
   });
@@ -95,7 +95,7 @@ describe('the lexicon steer (74 §5.7/§8.4)', () => {
   it('SUPPRESSES her hard nos in his prompt with or without any steer, and never says why', async () => {
     const { fs, ben, angel } = await seedPair();
     const block = await buildSuppressionBlock(fs, KEY, ben, angel);
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     expect(block).toContain('NEVER suggest');
     expect(block).toContain('never say why');
     // It carries the boundary and NOTHING else about her — not what she likes, not that a test exists.
@@ -118,7 +118,7 @@ describe('the couples block (74 §5.8)', () => {
     expect(block).not.toMatch(/Angel|Ben/);
     expect(block).toContain('NEVER say which of them likes what');
     // The union of both hard-no lists rides along — a limit either drew is never suggested to either.
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     // …and the goal list (the shame material) never appears in the shared room at all.
     expect(block).not.toMatch(/freezes|PRACTISE/);
   });
@@ -265,7 +265,7 @@ describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
       DIRTY_TALK.bank,
       {
         'names-praise:good-girl': { hear: 'love', say: 'okay' },
-        'names-rough-heavy:slut': { hear: 'never', say: 'love' },
+        'names-rough-heavy:anal-slut': { hear: 'never', say: 'love' },
         'names-warm:baby': { hear: 'okay' },
       },
       'take:1',
@@ -275,10 +275,10 @@ describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
   it('tells their own coach what to CALL them, and what they like calling their partner', () => {
     const block = buildOwnLexiconBlock(marked());
     expect(block).toContain('CALL THEM: good girl');
-    expect(block).toContain('What they like CALLING their partner: slut');
+    expect(block).toContain('What they like CALLING their partner: anal slut');
     // Per direction, so a one-way limit is never read as a two-way one — which would delete something they
     // actively want.
-    expect(block).toContain('NEVER call them: slut');
+    expect(block).toContain('NEVER call them: anal slut');
     expect(block).not.toContain('Never put these in THEIR mouth: slut');
   });
 
@@ -298,7 +298,7 @@ describe('the shared blocks every generation path can call (74 §5.8)', () => {
   it("gives a person's OWN hard nos to any path, with no partner and no ack needed", async () => {
     const { fs, angel } = await seedPair();
     const block = await buildOwnSuppressionBlock(fs, KEY, angel);
-    expect(block).toContain('whore');
+    expect(block).toContain('manwhore');
     expect(block).toMatch(/NEVER use or suggest/);
     // The whole point: it does not depend on a relationship, a topic, or a tier. It can only prevent.
     expect(block).not.toBe('');

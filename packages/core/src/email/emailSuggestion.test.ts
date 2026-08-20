@@ -508,7 +508,7 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
       applyDirectionalMarks(
         emptyLexicon(PERSON, now),
         DIRTY_TALK.bank,
-        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
         'take:1',
         now,
       ),
@@ -539,7 +539,7 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
       },
     } as unknown as ClaudeClient;
     await generateSuggestion(deps(fs, client), intimacyInput);
-    expect(seen).toContain('whore');
+    expect(seen).toContain('manwhore');
     expect(seen).toMatch(/NEVER use any of these/i);
   });
 
@@ -548,7 +548,9 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
     // line is not enough on its own — not sending beats sending the one thing they ruled out.
     const fs = memFileSystem();
     await withBoundary(fs);
-    const client = clientReturning('{"headline":"Tonight","body":"Tell him you are his whore."}');
+    const client = clientReturning(
+      '{"headline":"Tonight","body":"Tell him you are his manwhore."}',
+    );
     expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
   });
 
@@ -631,7 +633,7 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
     await withBoundary(fs);
     const client = clientReturning(
       '{"headline":"Tonight","body":"What sounds good tonight?","options":[' +
-        '{"label":"Call me your whore","stance":"yes"},{"label":"Something slower","stance":"other"}]}',
+        '{"label":"Call me your manwhore","stance":"yes"},{"label":"Something slower","stance":"other"}]}',
     );
     expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
   });

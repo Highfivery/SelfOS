@@ -450,7 +450,7 @@ const INSIGHT_FACT_CAP = 8;
  * gate do the work: the profile reaches the taker's own intimacy-topic context only, is excluded from the
  * topic-free digests, and never reaches another person's context (50 §5.4 / 54).
  *
- * Boundaries are NOT written as facts. A coach does not need "she hates the word whore" in its context to
+ * Boundaries are NOT written as facts. A coach does not need "she hates the word manwhore" in its context to
  * behave correctly — the suppression list does that structurally, and putting a boundary in a prompt is how
  * it ends up being restated back to her.
  */

@@ -7704,13 +7704,13 @@ describe('update awareness (36)', () => {
             // Loved to hear, only okay to say — the gap the profile is built on.
             'names-praise:good-girl': { hear: 'love', say: 'okay' },
             'claiming:you-re-mine': { hear: 'love', say: 'love' },
-            'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+            'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
           },
         });
         // Suppression rides the entry's live marks — no second record, which is what used to make a no
         // unliftable (74 §3.6.11).
         expect(
-          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:whore')?.hearState,
+          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:manwhore')?.hearState,
         ).toBe('never');
         expect(marked?.lexicon.boundaries).toEqual([]);
 
@@ -7763,7 +7763,7 @@ describe('update awareness (36)', () => {
         const insight = insights.find((i) => i.provenance?.testId === 'dirty-talk');
         expect(insight?.facts.every((f) => f.lifeArea === 'Intimacy')).toBe(true);
         // A boundary is NEVER written into the Insight — suppression is structural (74 §5.5).
-        expect(JSON.stringify(insight)).not.toContain('whore');
+        expect(JSON.stringify(insight)).not.toContain('manwhore');
       });
 
       it('always shows a person ALL of their own lexicon, and lets them edit it', async () => {
@@ -7773,22 +7773,22 @@ describe('update awareness (36)', () => {
         await bridge.testsAdaptiveBank({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
-          marks: { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+          marks: { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
         });
 
         const noState = async (): Promise<string | undefined> =>
-          (await bridge.testsLexicon())?.entries.find((e) => e.key === 'names-rough-heavy:whore')
+          (await bridge.testsLexicon())?.entries.find((e) => e.key === 'names-rough-heavy:manwhore')
             ?.hearState;
         expect(await noState()).toBe('never');
         // The report's explicit "changed my mind" still lifts it, per direction (74 §3.6.26) — and it works
         // for a WORD as well as a name now, which is the only route back once a term leaves the bank.
         const cleared = await bridge.testsLexiconEdit({
           kind: 'clearSide',
-          key: 'names-rough-heavy:whore',
+          key: 'names-rough-heavy:manwhore',
           side: 'hear',
         });
         expect(
-          cleared?.entries.find((e) => e.key === 'names-rough-heavy:whore')?.hearState,
+          cleared?.entries.find((e) => e.key === 'names-rough-heavy:manwhore')?.hearState,
         ).toBeUndefined();
         // Their own word, in their own words.
         const added = await bridge.testsLexiconEdit({
@@ -7940,22 +7940,22 @@ describe('update awareness (36)', () => {
         await bridge.testsAdaptiveNames({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
-          marks: { 'names-rough-heavy:slut': { hear: 'never', say: 'never' } },
+          marks: { 'names-rough-heavy:anal-slut': { hear: 'never', say: 'never' } },
           autosave: true,
         });
         await bridge.testsLexiconEdit({
           kind: 'clearSide',
-          key: 'names-rough-heavy:slut',
+          key: 'names-rough-heavy:anal-slut',
           side: 'hear',
         });
         const { fs, key } = (await host.host.vaultAndKey())!;
         const after = await readLexicon(fs, key, ownerId);
-        const entry = after.entries.find((e) => e.key === 'names-rough-heavy:slut');
+        const entry = after.entries.find((e) => e.key === 'names-rough-heavy:anal-slut');
         expect(entry?.hearState).toBeUndefined();
         expect(entry?.sayState).toBe('never');
         // Still suppressed overall — he took back being called it, not calling her it.
-        expect(suppressedTexts(after)).toContain('slut');
-        expect(suppressedTexts(after, 'hear')).not.toContain('slut');
+        expect(suppressedTexts(after)).toContain('anal slut');
+        expect(suppressedTexts(after, 'hear')).not.toContain('anal slut');
       });
 
       it('denies the adaptive surface to a person without tests.own (Guest)', async () => {

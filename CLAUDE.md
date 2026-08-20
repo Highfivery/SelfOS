@@ -622,6 +622,15 @@ A running log of durable decisions and feedback captured into the project config
   losing 35 of 54 — its 19 survivors (sir, ma'am, mistress, daddy, master, owner, alpha, dominatrix) ARE the
   register, which is the actual §3.6.29 test. The owner then asked for a better instrument than pasted lists,
   so the bank is now published as an **interactive checklist** regenerated from the bank after each pass.
+  **A fifth pass removed 236 more** — all matched, no typos — **ending at 374 names across 9 registers**, marks
+  524 → 305, and again 385 `never` sides against not one `love`. The cost was almost entirely in the TESTS:
+  `whore`/`slut` were the canonical single-word crude fixtures across **19 files**, so removing them broke 30
+  tests at once. **A bare-word fixture is a dependency on the bank's CONTENT** — the replacement had to be
+  single-word, in a family outside `EVERYDAY_NAME_FAMILIES` (so substring matching still applies rather than the
+  vocative relaxation), and untagged where a test asserts no tag. And **a blanket find-and-replace across test
+  files is itself a defect generator**: it rewrote the SOURCE key of the migration tests to their own target
+  (asserting a name migrates to itself) and dropped a `man`-tagged name into a list asserting the tag is
+  undefined. Both passed the replace and failed the run, which is the only reason they were caught.
   **Lessons: (1) my first vault measurement was WRONG in the most convincing way — a hand-built `Orientation`
   missing `selfAddress`/`partnerAddress` made `addressMatches` false for every tagged entry, so I measured "135
   of Ben's marks dropped" and "ALL of Angel's dropped" and both were artifacts of my own harness. Identical

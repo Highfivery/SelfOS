@@ -985,7 +985,7 @@ describe('74 §8.4/§5.8a — a hard no suppresses in EVERY session, uncondition
       applyDirectionalMarks(
         emptyLexicon(personId, now),
         DIRTY_TALK.bank,
-        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
         'take:1',
         now,
       ),
@@ -1025,23 +1025,23 @@ describe('74 §8.4/§5.8a — a hard no suppresses in EVERY session, uncondition
     await pair();
     await acknowledgeAdult(fs, key, 'p1');
     await ruleOut('p2');
-    expect(await systemFor('c-partner-topic')).toContain('whore');
+    expect(await systemFor('c-partner-topic')).toContain('manwhore');
   });
 
   it("carries the person's OWN hard nos on a non-intimate session", async () => {
     await pair();
     await acknowledgeAdult(fs, key, 'p1');
     await ruleOut('p1');
-    expect(await systemFor('c-own-topic')).toContain('whore');
+    expect(await systemFor('c-own-topic')).toContain('manwhore');
   });
 
   it('carries both with NO 18+ ack — revoking it must not re-open a ruled-out word', async () => {
     await pair();
     // Deliberately no `acknowledgeAdult`.
     await ruleOut('p1');
-    expect(await systemFor('c-own-noack')).toContain('whore');
+    expect(await systemFor('c-own-noack')).toContain('manwhore');
     await ruleOut('p2');
-    expect(await systemFor('c-partner-noack')).toContain('whore');
+    expect(await systemFor('c-partner-noack')).toContain('manwhore');
   });
 });
 
@@ -1064,7 +1064,7 @@ describe('the challenge coach speaks in their words too (74 §5.8)', () => {
       DIRTY_TALK.bank,
       {
         'names-praise:good-girl': { hear: 'love', say: 'love' },
-        'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+        'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
       },
       'take:1',
       now,
@@ -1104,6 +1104,6 @@ describe('the challenge coach speaks in their words too (74 §5.8)', () => {
     // the app deliberately speaking explicitly with the person's own words withheld.
     expect(system).toContain('good girl');
     // Suppression was already unconditional and stays so.
-    expect(system).toContain('whore');
+    expect(system).toContain('manwhore');
   });
 });

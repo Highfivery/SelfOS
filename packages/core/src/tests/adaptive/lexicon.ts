@@ -716,7 +716,7 @@ function contentStems(text: string): string[] {
  *
  * So: these families relax to address-only matching, and everything else — `rough-heavy`, `object`,
  * `worthless`, `feminising`, `service`, `sharing`, `breeding`, and any family added tomorrow — keeps the plain
- * substring match, so `whore` in "you filthy whore" is off wherever it sits. Multi-word names ("good girl")
+ * substring match, so `manwhore` in "you filthy manwhore" is off wherever it sits. Multi-word names ("good girl")
  * keep it too: no innocent use, nothing to disambiguate.
  */
 const EVERYDAY_NAME_FAMILIES: ReadonlySet<string> = new Set([

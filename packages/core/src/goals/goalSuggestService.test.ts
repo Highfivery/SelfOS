@@ -170,7 +170,7 @@ describe('goals finally read the goal list the profile derives (74 §5.8)', () =
       DIRTY_TALK.bank,
       {
         'names-praise:good-girl': { hear: 'love', say: 'okay' },
-        'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+        'names-rough-heavy:manwhore': { hear: 'never', say: 'never' },
       },
       'take:1',
       now,
@@ -211,7 +211,7 @@ describe('goals finally read the goal list the profile derives (74 §5.8)', () =
     // The READING, which until now was written once and consumed by nothing.
     expect(system).toContain('not pushed around');
     // And a suggested goal can never name something they ruled out.
-    expect(system).toContain('whore');
+    expect(system).toContain('manwhore');
     expect(system).toMatch(/NEVER use or suggest/);
   });
 });

@@ -90,7 +90,7 @@ describe('74 §5.8a — the hard-no list is unconditional', () => {
       applyDirectionalMarks(
         emptyLexicon('p1', now),
         DIRTY_TALK.bank,
-        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
         'take:1',
         now,
       ),
@@ -98,7 +98,7 @@ describe('74 §5.8a — the hard-no list is unconditional', () => {
     await saveInsight(fs, key, insight('i1'));
     const { client, system } = jsonClient();
     await suggestChallenge(deps(client, { adultAllowed: false }));
-    expect(system()).toContain('whore');
+    expect(system()).toContain('manwhore');
     expect(system()).toMatch(/NEVER use any of these/i);
   });
 });

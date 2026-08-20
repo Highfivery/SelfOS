@@ -74,8 +74,8 @@ function seeded() {
     {
       // Loves hearing it, saying it is merely okay — the hear/say gap (§3.6.26).
       'names-praise:good-girl': { hear: 'love', say: 'okay' },
-      'names-rough-heavy:whore': both('never'),
-      'names-rough-heavy:slut': both('love'),
+      'names-rough-heavy:manwhore': both('never'),
+      'names-rough-heavy:anal-slut': both('love'),
       'anatomy-her:cunt': both('okay'),
     },
     'take:1',
@@ -88,7 +88,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     const ambiguities = openAmbiguities(seeded());
     const ids = ambiguities.map((a) => a.id);
     // The family split is drawn against the MIDDLE mark now, never a hard no (74 §3.6.15). Loved `slut` +
-    // ruled out `whore` no longer produces one: a hard no is settled, and a question that names it both asks
+    // ruled out `manwhore` no longer produces one: a hard no is settled, and a question that names it both asks
     // them to justify a boundary and is then rejected for containing it.
     expect(ids).not.toContain('split:names-rough-heavy');
     // Loves hearing "good girl", rated 0 to say → preference or goal?
@@ -102,14 +102,14 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     const { client, prompts } = fakeClient(['{"lines": ["good girl"]}']);
     await runLinesPhase(deps(client), seeded(), 1);
     expect(prompts[0]?.system).toContain('THEIR HARD NOS');
-    expect(prompts[0]?.system).toContain('whore');
+    expect(prompts[0]?.system).toContain('manwhore');
     // …and the explicit register that makes the model engage rather than deflect.
     expect(prompts[0]?.system).toContain('Frank, explicit, filthy language is appropriate');
   });
 
   it('DROPS a generated line that touches a boundary, even when the prompt was ignored', async () => {
     const { client } = fakeClient([
-      '{"lines": ["good girl, just like that", "you filthy whore", "you\'re mine"]}',
+      '{"lines": ["good girl, just like that", "you filthy manwhore", "you\'re mine"]}',
     ]);
     const out = await runLinesPhase(deps(client), seeded(), 1);
     expect(out.value).toEqual(['good girl, just like that', "you're mine"]);
@@ -162,7 +162,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     // and it is the phase that asks open questions. "Never ask them to justify a boundary" has to be
     // enforced, not requested.
     const { client } = fakeClient([
-      JSON.stringify({ questions: ['What is it about being called a whore?'] }),
+      JSON.stringify({ questions: ['What is it about being called a manwhore?'] }),
     ]);
     const ambiguity = openAmbiguities(seeded())[0]!;
     const out = await runProbePhase(deps(client), seeded(), ambiguity);
@@ -174,7 +174,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     const { client } = fakeClient([
       JSON.stringify({
         scenes: [
-          { scene: 'He calls you a whore across the room.', options: ['tease', 'escalate'] },
+          { scene: 'He calls you a manwhore across the room.', options: ['tease', 'escalate'] },
         ],
       }),
     ]);
@@ -218,7 +218,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
 
     const bad = fakeClient([
       JSON.stringify({
-        narrative: 'You loved being called a whore.',
+        narrative: 'You loved being called a manwhore.',
         registers: {},
         contexts: {},
         themes: [],
@@ -241,7 +241,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
             text: 'The praise is about effort.',
             source: 'Your onboarding answers.',
           },
-          { kind: 'gap', text: 'You loved being called a whore.' },
+          { kind: 'gap', text: 'You loved being called a manwhore.' },
         ],
         registers: {},
         contexts: {},
@@ -288,7 +288,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
         narrative: 'You want to be claimed.',
         registers: {},
         contexts: {},
-        themes: ['being claimed', 'being called a whore'],
+        themes: ['being claimed', 'being called a manwhore'],
         wantsToSay: [],
       }),
     ]);
@@ -299,7 +299,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
   it('carries what the bank already established, so a phase never re-asks what it knows', () => {
     const digest = lexiconDigest(seeded());
     expect(digest).toContain('good girl');
-    expect(digest).not.toContain('whore'); // a hard no is never offered back as material
+    expect(digest).not.toContain('manwhore'); // a hard no is never offered back as material
   });
 
   it('surfaces the hear/say GAP as context — the signal that replaced the old cringe list (§3.6.2)', () => {
@@ -561,7 +561,7 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
       JSON.stringify({
         lede: 'You want to be claimed.',
         narrative:
-          'A good paragraph about what lands.\n\nYou loved being called a whore.\n\nAnd a third.',
+          'A good paragraph about what lands.\n\nYou loved being called a manwhore.\n\nAnd a third.',
         readings: [{ kind: 'pattern', text: 'Praise lands.' }],
         registers: {},
         contexts: {},
@@ -571,7 +571,7 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
     ]);
     const out = await runSynthesis(deps(client), seeded(), 'turns…');
     // The boundary is still absolute — no sentence containing it is ever shown…
-    expect(out.value?.narrative).not.toContain('whore');
+    expect(out.value?.narrative).not.toContain('manwhore');
     // …but the other 3,000 words survive. Rejecting the whole thing for one hit is what "the psychological
     // analysis didn't come through" WAS: the model wrote it and we threw it away.
     expect(out.value?.narrative).toContain('A good paragraph');
@@ -583,7 +583,7 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
     const { client } = fakeClient([
       JSON.stringify({
         lede: 'You want to be claimed.',
-        narrative: 'You loved being called a whore.',
+        narrative: 'You loved being called a manwhore.',
         readings: [{ kind: 'pattern', text: 'Praise lands.' }],
         registers: {},
         contexts: {},
@@ -611,14 +611,14 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
     const now = new Date('2026-08-18T00:00:00.000Z');
     const naughtyGirl = DIRTY_TALK.bank.entries.find((e) => e.text === 'naughty girl')!;
-    const whore = DIRTY_TALK.bank.entries.find((e) => e.text === 'whore')!;
+    const manwhore = DIRTY_TALK.bank.entries.find((e) => e.text === 'manwhore')!;
 
     let lex = applyDirectionalMarks(
       emptyLexicon('p1', now),
       DIRTY_TALK.bank,
       {
         [naughtyGirl.key]: { hear: 'never', say: 'love' },
-        [whore.key]: { hear: 'never', say: 'never' },
+        [manwhore.key]: { hear: 'never', say: 'never' },
       },
       'take:1',
       now,
@@ -642,7 +642,7 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
 
     // …and a question that reaches for a DIFFERENT ruled-out word is still dropped.
     const bad = fakeClient([
-      JSON.stringify({ questions: ['Is "naughty girl" different from being called a whore?'] }),
+      JSON.stringify({ questions: ['Is "naughty girl" different from being called a manwhore?'] }),
     ]);
     const dropped = await runProbePhase(deps(bad.client), lex, {
       id: 'x',

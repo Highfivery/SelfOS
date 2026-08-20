@@ -47,7 +47,7 @@ describe('the spine (74 §4.2)', () => {
 
   it('reads a boundary as a genuine zero, not a missing answer', () => {
     const scores = score({
-      'names-rough-heavy:whore': both('never'),
+      'names-rough-heavy:manwhore': both('never'),
       'degradation:beg-like-the-slut-you-are': both('never'),
     });
     expect(scores.get('dirtytalk.degradation')).toBe(0);
@@ -58,7 +58,7 @@ describe('the spine (74 §4.2)', () => {
       'claiming:you-re-mine': both('love'),
       'names-praise:good-girl': both('love'),
       'degradation:beg-like-the-slut-you-are': both('never'),
-      'names-rough-heavy:whore': both('never'),
+      'names-rough-heavy:manwhore': both('never'),
     });
     expect(scores.get('dirtytalk.claiming')).toBeGreaterThan(0.7);
     expect(scores.get('dirtytalk.degradation')).toBe(0);
@@ -154,7 +154,7 @@ describe('honesty (74 §3.3)', () => {
     const lex = applyDirectionalMarks(
       emptyLexicon('p1', NOW),
       DIRTY_TALK.bank,
-      { 'names-rough-heavy:whore': both('never') },
+      { 'names-rough-heavy:manwhore': both('never') },
       'take:1',
       NOW,
     );

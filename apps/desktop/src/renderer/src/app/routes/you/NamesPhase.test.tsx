@@ -49,7 +49,7 @@ const NAMES: AdaptiveNamesView = {
       sides: ['hear', 'say'],
     },
     {
-      key: 'names-rough-heavy:slut',
+      key: 'names-rough-heavy:anal-slut',
       text: 'slut',
       family: 'names-rough-heavy',
       tier: 4,
@@ -212,7 +212,7 @@ describe('NamesPhase (74 §3.6.8)', () => {
     );
     // …and tapping a different mark actually changes it.
     await userEvent.click(screen.getByRole('button', { name: 'slut — Angel → Ben — love it' }));
-    expect(useAdaptiveTestStore.getState().nameMarks['names-rough-heavy:slut']).toMatchObject({
+    expect(useAdaptiveTestStore.getState().nameMarks['names-rough-heavy:anal-slut']).toMatchObject({
       hear: 'love',
     });
   });

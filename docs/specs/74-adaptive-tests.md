@@ -1363,6 +1363,34 @@ affected**. `names-hard-power` was NOT retired whole despite losing 35 of 54: un
 survivors are its core — sir, ma'am, mistress, daddy, master, owner, alpha, dominatrix — so the register
 still represents what it is for, which is the test §3.6.29 actually sets.
 
+**A fifth pass, the largest: 236 names, all matched, no typos.** 158 from `names-rough-heavy`, 36 from
+`names-rough-mild`, 17 from `names-soft-power`, 15 from `names-body`, 8 from `names-praise`, and one each
+from `names-warm` and `names-yours`. **The names bank ends at 374 across 9 registers**; the owner's marks
+go 524 to 305, and once again **385 `never` sides, 2 `okay`, not one `love`.** `names-rough-heavy` was NOT
+retired despite losing 158 of 182: its 24 survivors are the specifically sexual crude names (`my cock
+queen`, `anal slut`, `my three-hole slut`, `sex slave`, `my personal fucktoy`) where what went was the
+generic slut/whore/skank/tramp mass — so, as with `names-hard-power`, the register still represents what it
+is for.
+
+**The cost of this one was almost entirely in the TESTS, and it is worth recording why.** `whore` and
+`slut` were the canonical single-word crude fixtures across **19 files** — the stand-in for "a term this
+person ruled out" in the lexicon, steer, engine, spine, chat, email, goals, challenges and coreBridge
+suites. Removing them broke 30 tests at once. Two lessons came out of the repair:
+
+- **A bare-word fixture is a dependency on the bank's CONTENT, not just its shape.** The replacement had to
+  be single-word (`manwhore`), in a family outside `EVERYDAY_NAME_FAMILIES` (so plain substring matching
+  still applies rather than the vocative relaxation), and untagged where the test asserted no tag — three
+  constraints that only became visible once the original was gone.
+- **A blanket find-and-replace across test files is itself a defect generator.** It silently rewrote the
+  _source_ key of the retirement-migration tests to their own target, making two of them assert that a name
+  migrates to itself; and it dropped a `man`-tagged name into a list whose whole assertion is that the tag
+  is undefined. Both passed the replace and failed the run — which is the only reason they were caught.
+  Every swapped fixture was re-checked against what its test actually claims, not just against compiling.
+
+Where a rule genuinely lost its subject it was removed with the reason recorded rather than re-pointed at
+something that does not exercise it: the possessor half of the head-noun rule ("my daddy's slut" is a slut
+of any gender) has no subject left, because no possessive-owner name survives.
+
 The owner then asked for a better way to do this than pasting lists, so the bank is now also published as
 an **interactive checklist** — every name grouped by register with its tier, example and tags, ticked by
 default; unticking marks it for removal (strike + a cut stripe, so the state reads in FORM and not colour

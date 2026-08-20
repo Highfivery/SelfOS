@@ -89,7 +89,7 @@ describe('names are oriented per direction', () => {
     // #62: never infer a preference from gender. A man may absolutely want these, so they stay both ways —
     // deciding for himself is the entire point of the phase.
     for (const key of [
-      'names-rough-heavy:slut',
+      'names-rough-heavy:anal-slut',
       'names-warm:beautiful',
       'names-warm:baby',
       'names-soft-power:kitten',
@@ -120,11 +120,9 @@ describe('names are oriented per direction', () => {
   it('reads the head noun, not the possessor', () => {
     // A gendered head is read…
     expect(name('names-praise:good-girl').addresses).toBe('girl');
-    // …and a MALE possessor over a genderless head decides nothing, which is the half that can actually go
-    // wrong: "my daddy's slut" is a slut of any gender. (The gendered-possessive examples this also used —
-    // "daddy's girl", "mommy's boy" — left with the kinship register in §3.6.27.)
-    expect(name('names-rough-heavy:my-daddy-s-slut').addresses).toBeUndefined();
-    expect(name('names-rough-heavy:my-master-s-slut').addresses).toBeUndefined();
+    // 74 §3.6.33 — the possessor half of this rule ("my daddy's slut" is a slut of any gender) no longer has
+    // a subject: NO possessive-owner name survives the owner's purges. Removed rather than re-pointed at a
+    // name that does not carry a possessor, which would assert nothing about the rule it names.
   });
 
   it('leaves everything open when either axis is unanswered', () => {
@@ -318,13 +316,15 @@ describe('a gendered role noun is tagged wherever its family already tags its si
   });
 
   it('leaves a word gendered only by convention open, however feminine it reads', () => {
-    // #62 again, and the owner's line: `queen` as an intensifier is not the honorific, `whore` and `slut`
+    // #62 again, and the owner's line: `queen` as an intensifier is not the honorific, `manwhore` and `slut`
     // are conventions, and a gendered POSSESSOR does not constrain the person being called it.
+    // 74 §3.6.33 — re-pointed at survivors. `my cock queen` IS the documented case (queen as an
+    // intensifier, not the honorific); the rest are crude conventions that constrain nobody's gender.
     for (const key of [
-      'names-rough-heavy:size-queen',
-      'names-rough-heavy:whore',
-      'names-rough-heavy:my-daddy-s-slut',
-      'names-rough-heavy:my-sir-s-slut',
+      'names-rough-heavy:my-cock-queen',
+      'names-rough-heavy:anal-slut',
+      'names-rough-heavy:slutty-little-thing',
+      'names-rough-heavy:my-private-whore',
     ]) {
       expect(tag(key)).toBeUndefined();
     }

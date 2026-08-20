@@ -145,7 +145,7 @@ describe('narrateResult — the only metered call', () => {
       applyDirectionalMarks(
         emptyLexicon('p1', now),
         DIRTY_TALK.bank,
-        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
         'take:1',
         now,
       ),
@@ -166,7 +166,7 @@ describe('narrateResult — the only metered call', () => {
       now,
       overBudget: false,
     });
-    expect(captured.system).toContain('whore');
+    expect(captured.system).toContain('manwhore');
     // …and no adult boundary, which is the half that IS gated.
     expect(captured.system).not.toContain('consensual adults');
   });

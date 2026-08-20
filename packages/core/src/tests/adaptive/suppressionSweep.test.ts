@@ -21,7 +21,7 @@ async function seedWithAHardNo(fs: FileSystem, name: string): Promise<string> {
   const lex = applyDirectionalMarks(
     emptyLexicon(id, NOW),
     DIRTY_TALK.bank,
-    { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+    { 'names-rough-heavy:manwhore': { hear: 'never', say: 'never' } },
     'take:1',
     NOW,
   );
@@ -50,11 +50,11 @@ describe('74 §5.8a — suppression is unconditional on every path that writes p
     };
 
     const unacked = await buildTogetherSystemPrompt(fs, KEY, session, { allAdultAcked: false });
-    expect(unacked).toContain('whore');
+    expect(unacked).toContain('manwhore');
 
     // …and an acked pair still gets it — carried by the merged block rather than twice.
     const acked = await buildTogetherSystemPrompt(fs, KEY, session, { allAdultAcked: true });
-    expect(acked).toContain('whore');
+    expect(acked).toContain('manwhore');
   });
 
   it('keeps the de-dup invariant the couples path rides on', async () => {
@@ -66,7 +66,7 @@ describe('74 §5.8a — suppression is unconditional on every path that writes p
      */
     const fs = memFileSystem();
     const ben = await seedWithAHardNo(fs, 'Ben');
-    expect(await buildCouplesSuppressionBlock(fs, KEY, [ben])).toContain('whore');
+    expect(await buildCouplesSuppressionBlock(fs, KEY, [ben])).toContain('manwhore');
 
     const bare = memFileSystem();
     const nobody = (
@@ -105,6 +105,6 @@ describe('74 §5.8a — suppression is unconditional on every path that writes p
       },
       { adultAllowed: false },
     );
-    expect(captured).toContain('whore');
+    expect(captured).toContain('manwhore');
   });
 });

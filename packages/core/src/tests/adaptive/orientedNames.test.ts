@@ -298,7 +298,8 @@ describe('a gendered role noun is tagged wherever its family already tags its si
     expect(tag('names-hard-power:sir')).toBe('man');
     expect(tag('names-hard-power:ma-am')).toBe('girl');
     // The neutral form of the same role stays open — it is the tagging criterion, not the topic, that decides.
-    expect(tag('names-hard-power:my-dominant')).toBeUndefined();
+    // 74 §3.6.33 — was `my dominant` until the owner removed it; `my dom` is the same neutral form.
+    expect(tag('names-hard-power:my-dom')).toBeUndefined();
     expect(tag('names-hard-power:dominatrix')).toBe('girl');
   });
 

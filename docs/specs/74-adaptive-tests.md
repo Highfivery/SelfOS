@@ -1355,6 +1355,20 @@ retired whole. Plus 23 in `names-body` and `my deity` in `names-worship`. **The 
 across 9 registers, from 1,297 across 20 at the start of this section.** On the vault: 547 to 524, all 23
 from `names-body`, all `never`, and **zero marks in `names-aftercare`** — retiring it whole cost nothing.
 
+**A fourth pass, and a better instrument for the next one.** 41 more names: 33 in `names-hard-power` plus
+two confirmed typos (`my loard`, `my load and master`), and 6 in `names-soft-power` — the pet-play leftovers
+(`pup`, `puppy`, `good pup`, `good puppy`, `cub`) and `my bottom`, whose counterpart `my top` was in
+hard-power. **The names bank ends at 610 across 9 registers**, and **zero of the owner's marks were
+affected**. `names-hard-power` was NOT retired whole despite losing 35 of 54: unlike aftercare its 19
+survivors are its core — sir, ma'am, mistress, daddy, master, owner, alpha, dominatrix — so the register
+still represents what it is for, which is the test §3.6.29 actually sets.
+
+The owner then asked for a better way to do this than pasting lists, so the bank is now also published as
+an **interactive checklist** — every name grouped by register with its tier, example and tags, ticked by
+default; unticking marks it for removal (strike + a cut stripe, so the state reads in FORM and not colour
+alone) and the removal list builds itself, ready to paste back. It is regenerated from the bank after each
+pass, so it never drifts from what is actually shipped.
+
 Two references to the retired register were left deliberately, both matching precedent: the FIXED spine
 (which already carries `names-playful` and others, where a stale id is inert and removing one would change
 a dimension's identity across retakes), and `EVERYDAY_NAME_FAMILIES` — a RELAXATION scope that already

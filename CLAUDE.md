@@ -617,6 +617,11 @@ A running log of durable decisions and feedback captured into the project config
   across 9 registers, from 1,297 across 20.** Vault 547 → 524, every retired mark a `never`, and zero marks in
   aftercare. Three typos in the list were CONFIRMED with the owner rather than guessed — they mattered because
   all three were among that register's survivors.
+  **A fourth pass took 41 more** (33 hard-power + 2 confirmed typos, 6 soft-power), **ending at 610 names
+  across 9 registers with zero marks affected**. `names-hard-power` was deliberately NOT retired whole despite
+  losing 35 of 54 — its 19 survivors (sir, ma'am, mistress, daddy, master, owner, alpha, dominatrix) ARE the
+  register, which is the actual §3.6.29 test. The owner then asked for a better instrument than pasted lists,
+  so the bank is now published as an **interactive checklist** regenerated from the bank after each pass.
   **Lessons: (1) my first vault measurement was WRONG in the most convincing way — a hand-built `Orientation`
   missing `selfAddress`/`partnerAddress` made `addressMatches` false for every tagged entry, so I measured "135
   of Ben's marks dropped" and "ALL of Angel's dropped" and both were artifacts of my own harness. Identical

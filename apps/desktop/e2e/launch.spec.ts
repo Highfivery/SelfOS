@@ -6912,6 +6912,153 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
   }
 });
 
+test('questionnaires cards (§3.1): the type label reads in full, pills never break inside themselves, and a short card does not stretch to its row', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('card geometry e2e: master key missing');
+
+  // The three shapes that used to fight each other inside a 240px column: the LONGEST built-in type label
+  // (36 chars), a card carrying an auto check-in rationale (the one prose block that had no clamp), and a
+  // bare awaiting card with almost nothing in it (the one that used to be stretched by its neighbours).
+  const longLabel = 'Appreciation, strengths & weaknesses';
+  const send = async (
+    title: string,
+    type: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> => {
+    const q = await saveQuestionnaire(
+      fs,
+      key,
+      {
+        title,
+        type,
+        sensitivity: 'standard',
+        questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+        ...extra,
+      },
+      'owner-1',
+    );
+    await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'owner-1',
+      recipient: { kind: 'person', personId: 'owner-1' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+  };
+
+  // Created oldest-first; the list is newest-first, so the long-titled card leads and shares a row with a
+  // short one — the pairing that used to leave the short card stretched with ~150px of nothing in it.
+  await send('After the move', 'perspective');
+  await send('Blind spots', 'blind-spots');
+  await send('Untitled check-in', 'general');
+  await send(
+    'What am I not seeing about how I handle conflict when things get heated',
+    'appreciation',
+    {
+      autoCheckin: {
+        targetId: 'owner-1',
+        intent: 'explore',
+        rationale: 'A way into feeling unseen at work without making it about the job.',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+  );
+
+  const app = await launch(userData);
+  const w = await app.firstWindow();
+  try {
+    await w.setViewportSize({ width: 1280, height: 900 });
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
+    const sent = w.getByRole('tabpanel', { name: 'Sent questionnaires' });
+    await expect(sent.getByRole('button', { name: /^What am I not seeing/ })).toBeVisible();
+
+    // (1) The type label is NOT clipped. It used to get ~125px at this width against a 36-character label,
+    //     because the header's fixed-width icon cluster could not shrink and the label absorbed the deficit.
+    const eyebrow = await w.evaluate((label) => {
+      const el = [...document.querySelectorAll('span')].find(
+        (e) => e.textContent?.trim() === label,
+      );
+      if (!el) return null;
+      return { clientWidth: el.clientWidth, scrollWidth: el.scrollWidth };
+    }, longLabel);
+    expect(eyebrow, 'the long type label should render').not.toBeNull();
+    expect(eyebrow!.scrollWidth).toBeLessThanOrEqual(eyebrow!.clientWidth + 1);
+
+    // (2) No pill or meta part breaks inside itself — each is a flex item in a wrapping row, so without an
+    //     explicit nowrap a label that doesn't fit the space left on its line wraps inside its own radius.
+    //     This is a property fence, not a reproduction: raising the track floor to 360px means the pills no
+    //     longer have room to wrap at any width the app supports, so the geometry can't be made to fail.
+    //     Asserting the property still fails the moment someone drops `nowrap`, which is the regression.
+    const pillWhiteSpace = await w.evaluate(() => {
+      const of = (label: string): string | null => {
+        const el = [...document.querySelectorAll('[role="tabpanel"] article span')].find(
+          (e) => e.textContent?.trim() === label,
+        );
+        return el ? getComputedStyle(el).whiteSpace : null;
+      };
+      return { status: of('Awaiting response'), provenance: of('Auto check-in') };
+    });
+    expect(pillWhiteSpace.status, 'the status pill must never break inside its radius').toBe(
+      'nowrap',
+    );
+    expect(
+      pillWhiteSpace.provenance,
+      'the provenance pill must never break inside its radius',
+    ).toBe('nowrap');
+
+    // (3) The dead space is gone: two cards sharing a grid row have DIFFERENT heights, i.e. a short card is
+    //     no longer stretched to match the tallest one beside it (`align-items: start` on the grid).
+    const rows = await w.evaluate(() => {
+      const byTop = new Map<number, number[]>();
+      document.querySelectorAll('[role="tabpanel"] article').forEach((card) => {
+        const r = card.getBoundingClientRect();
+        const top = Math.round(r.top);
+        byTop.set(top, [...(byTop.get(top) ?? []), Math.round(r.height)]);
+      });
+      return [...byTop.values()].filter((heights) => heights.length > 1);
+    });
+    expect(rows.length, 'expected at least one grid row with two cards').toBeGreaterThan(0);
+    expect(
+      rows.some((heights) => new Set(heights).size > 1),
+      `cards in a row should keep their own height, got ${JSON.stringify(rows)}`,
+    ).toBe(true);
+
+    // (4) The header holds exactly TWO buttons. This is the guard for the icon consolidation itself, and it
+    //     is deliberately a count rather than a width: at 1280 the eyebrow gets exactly the 280px it needs
+    //     even with the old four-icon cluster restored, so a width assertion here would pass on the unfixed
+    //     header. Four fixed 32px buttons in a `flex: none` cluster is 134px the eyebrow cannot have.
+    const headerButtons = await w.evaluate(() => {
+      const card = [...document.querySelectorAll('[role="tabpanel"] article')].find((c) =>
+        c.textContent?.includes('What am I not seeing'),
+      );
+      // Anchor on the favourite button and count its siblings: the card's first child is the "N new" badge
+      // on some cards and the header on others, so an index-based walk is not stable.
+      const fav = card?.querySelector('button[aria-label^="Pin "], button[aria-label^="Unpin "]');
+      const cluster = fav?.parentElement;
+      return cluster ? cluster.querySelectorAll('button').length : null;
+    });
+    expect(headerButtons, 'the card header should expose its action cluster').not.toBeNull();
+    expect(headerButtons, 'the card header holds a favourite + a ⋯ menu, nothing more').toBe(2);
+
+    // (5) …and the actions that used to be icons are reachable inside that menu.
+    await sent.getByRole('button', { name: /Options for What am I not seeing/ }).click();
+    await expect(w.getByRole('menuitem', { name: 'See what was sent' })).toBeVisible();
+    await w.keyboard.press('Escape');
+
+    // (5) Phone width stays clean — no page overflow and no inner scroller.
+    await w.setViewportSize({ width: 360, height: 800 });
+    await expect(sent.getByRole('button', { name: /^What am I not seeing/ })).toBeVisible();
+    await expectNoInnerOverflow(w);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('questionnaires excerpt (§3.1): the Insight excerpt clamps whole lines, expands in place, and deep-links to the insight in Memory', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);

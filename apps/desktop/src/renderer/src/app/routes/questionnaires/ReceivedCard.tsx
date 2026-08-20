@@ -39,10 +39,14 @@ export function ReceivedCard({
   const cta = receivedCta(item);
   const sender = item.senderName ?? 'Someone';
   return (
-    <article className={`${styles.card} ${styles.receivedCard}`}>
+    <article className={styles.card}>
       {status.isNew ? <span className={styles.newDot}>New</span> : null}
       <div className={styles.cardTop}>
-        <span className={styles.eyebrow}>
+        {/* Ellipsises at phone width, so carry the full label — same reason as the title below. */}
+        <span
+          className={styles.eyebrow}
+          title={item.autoCheckin ? 'Auto check-in' : typeLabel(item.type)}
+        >
           {item.autoCheckin ? 'Auto check-in' : typeLabel(item.type)}
         </span>
         <div className={styles.cardIcons}>
@@ -66,7 +70,8 @@ export function ReceivedCard({
         <span className={styles.fromName}>From {sender}</span>
       </span>
 
-      <button type="button" className={styles.cardTitleButton} onClick={onOpen}>
+      {/* Clamped to 2 lines, so carry the full title in `title` — otherwise a long one is unrecoverable. */}
+      <button type="button" className={styles.cardTitleButton} title={item.title} onClick={onOpen}>
         {item.title}
       </button>
 

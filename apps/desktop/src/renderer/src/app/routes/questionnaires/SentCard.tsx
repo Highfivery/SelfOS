@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Bot, Check, Clock, Eye, Link2, RefreshCw, Sparkles, Star } from 'lucide-react';
+import { BookOpen, Bot, Check, Clock, RefreshCw, Sparkles, Star } from 'lucide-react';
 import type {
   Questionnaire,
   QuestionnaireSendState,
@@ -51,7 +51,8 @@ function RecipientChip({ recipient }: { recipient: SentRecipientSummary }): JSX.
 
 /**
  * One card in the redesigned Questionnaires landing "Sent" section (08 §3.1) — a questionnaire the active
- * person authored. Shows the type, title, favourite + share-link + view + more actions, recipient chips with
+ * person authored. Shows the type, title, favourite + a ⋯ menu (view · share link · duplicate · delete —
+ * two icons, not four, so the type label has room to read; §33), recipient chips with
  * per-person answered state, and a state-aware body: a Draft, an awaiting/answered status, a one-tap Analyze
  * prompt (answered-not-analysed), an Insight excerpt (analysed), and a gentle "ask again" nudge when the
  * answers are stale. Sent + answered times show as date · time.
@@ -129,11 +130,14 @@ export function SentCard({
         : null;
 
   return (
-    <article className={`${styles.card} ${styles.sentCard} ${isDraft ? styles.draftCard : ''}`}>
+    <article className={`${styles.card} ${isDraft ? styles.draftCard : ''}`}>
       {newCount > 0 ? <span className={styles.newDot}>{newCount} new</span> : null}
 
       <div className={styles.cardTop}>
-        <span className={styles.eyebrow}>{typeLabel(questionnaire.type)}</span>
+        {/* Ellipsises at phone width, so carry the full label — same reason as the title below. */}
+        <span className={styles.eyebrow} title={typeLabel(questionnaire.type)}>
+          {typeLabel(questionnaire.type)}
+        </span>
         <div className={styles.cardIcons}>
           <IconButton
             variant="ghost"
@@ -151,37 +155,70 @@ export function SentCard({
               {...(questionnaire.favorite ? { fill: 'currentColor' } : {})}
             />
           </IconButton>
-          {onShare ? (
-            <IconButton
-              variant="ghost"
-              aria-label="Copy share link"
-              title="Copy share link"
-              onClick={onShare}
-            >
-              <Link2 size={16} aria-hidden="true" />
-            </IconButton>
-          ) : null}
-          {sent ? (
-            <IconButton
-              variant="ghost"
-              aria-label="See what was sent"
-              title="See what was sent"
-              onClick={onOpen}
-            >
-              <Eye size={16} aria-hidden="true" />
-            </IconButton>
-          ) : null}
           <QuestionnaireRowMenu
             title={questionnaire.title}
+            {...(sent ? { onView: onOpen } : {})}
+            {...(onShare ? { onShare } : {})}
             {...(sent ? { onDuplicate } : {})}
             onDelete={onDelete}
           />
         </div>
       </div>
 
-      <button type="button" className={styles.cardTitleButton} onClick={onOpen}>
+      {/* Clamped to 2 lines, so carry the full title in `title` — otherwise a long one is unrecoverable. */}
+      <button
+        type="button"
+        className={styles.cardTitleButton}
+        title={questionnaire.title}
+        onClick={onOpen}
+      >
         {questionnaire.title}
       </button>
+
+      <div className={styles.cardFoot}>
+        {isDraft ? (
+          <span className={`${styles.pill} ${styles.pillDraft}`}>Draft · not ready</span>
+        ) : analyzed ? (
+          <span className={`${styles.pill} ${styles.pillDone}`}>
+            <Sparkles size={12} aria-hidden="true" />
+            Analyzed
+          </span>
+        ) : answeredCount > 0 && answeredCount === total ? (
+          <span className={`${styles.pill} ${styles.pillOk}`}>
+            <Check size={12} aria-hidden="true" />
+            Answered
+          </span>
+        ) : answeredCount > 0 ? (
+          <span className={`${styles.pill} ${styles.pillOk}`}>
+            {answeredCount} of {total} answered
+          </span>
+        ) : sent ? (
+          <span className={`${styles.pill} ${styles.pillWait}`}>
+            <Clock size={12} aria-hidden="true" />
+            Awaiting response
+          </span>
+        ) : (
+          <span className={`${styles.pill} ${styles.pillDraft}`}>Not sent yet</span>
+        )}
+        {provenance ? (
+          <span
+            className={`${styles.pill} ${styles.pillAuto}`}
+            title={
+              provenance === 'biographer'
+                ? 'SelfOS created this for your story — you didn’t send it by hand.'
+                : 'SelfOS created this from your Auto check-ins — you didn’t send it by hand.'
+            }
+          >
+            {provenance === 'biographer' ? (
+              <BookOpen size={12} aria-hidden="true" />
+            ) : (
+              <Bot size={12} aria-hidden="true" />
+            )}
+            {provenance === 'biographer' ? 'From your biographer' : 'Auto check-in'}
+          </span>
+        ) : null}
+        {privacyBadge ? <PrivacyChip badge={privacyBadge} /> : null}
+      </div>
 
       {shown.length > 0 ? (
         <div className={styles.recips}>
@@ -239,51 +276,6 @@ export function SentCard({
           </span>
         </div>
       ) : null}
-
-      <div className={styles.cardFoot}>
-        {isDraft ? (
-          <span className={`${styles.pill} ${styles.pillDraft}`}>Draft · not ready</span>
-        ) : analyzed ? (
-          <span className={`${styles.pill} ${styles.pillDone}`}>
-            <Sparkles size={12} aria-hidden="true" />
-            Analyzed
-          </span>
-        ) : answeredCount > 0 && answeredCount === total ? (
-          <span className={`${styles.pill} ${styles.pillOk}`}>
-            <Check size={12} aria-hidden="true" />
-            Answered
-          </span>
-        ) : answeredCount > 0 ? (
-          <span className={`${styles.pill} ${styles.pillOk}`}>
-            {answeredCount} of {total} answered
-          </span>
-        ) : sent ? (
-          <span className={`${styles.pill} ${styles.pillWait}`}>
-            <Clock size={12} aria-hidden="true" />
-            Awaiting response
-          </span>
-        ) : (
-          <span className={`${styles.pill} ${styles.pillDraft}`}>Not sent yet</span>
-        )}
-        {provenance ? (
-          <span
-            className={`${styles.pill} ${styles.pillAuto}`}
-            title={
-              provenance === 'biographer'
-                ? 'SelfOS created this for your story — you didn’t send it by hand.'
-                : 'SelfOS created this from your Auto check-ins — you didn’t send it by hand.'
-            }
-          >
-            {provenance === 'biographer' ? (
-              <BookOpen size={12} aria-hidden="true" />
-            ) : (
-              <Bot size={12} aria-hidden="true" />
-            )}
-            {provenance === 'biographer' ? 'From your biographer' : 'Auto check-in'}
-          </span>
-        ) : null}
-        {privacyBadge ? <PrivacyChip badge={privacyBadge} /> : null}
-      </div>
 
       <div className={styles.cardMeta}>
         <span>

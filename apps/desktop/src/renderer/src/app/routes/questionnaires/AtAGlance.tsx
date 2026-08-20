@@ -15,7 +15,9 @@ function DistBar({
   const width = max > 0 ? Math.round((count / max) * 100) : 0;
   return (
     <div className={styles.glanceRow}>
-      <span className={styles.glanceLabel}>{label}</span>
+      <span className={styles.glanceLabel} title={label}>
+        {label}
+      </span>
       <span className={styles.glanceTrack}>
         <span className={styles.glanceFill} style={{ width: `${width}%` }} />
       </span>
@@ -40,7 +42,9 @@ function AvgBar({
   const width = span > 0 ? Math.round(((average - min) / span) * 100) : 0;
   return (
     <div className={styles.glanceRow}>
-      <span className={styles.glanceLabel}>{label}</span>
+      <span className={styles.glanceLabel} title={label}>
+        {label}
+      </span>
       <span className={styles.glanceTrack}>
         <span
           className={styles.glanceFill}
@@ -96,7 +100,9 @@ function Body({ q }: { q: QuestionAggregate }): JSX.Element {
         <Stack gap={1}>
           {q.rows.map((r) => (
             <div key={r.label} className={styles.glanceRow}>
-              <span className={styles.glanceLabel}>{r.label}</span>
+              <span className={styles.glanceLabel} title={r.label}>
+                {r.label}
+              </span>
               <span className={styles.glanceTrack}>
                 <span
                   className={styles.glanceFill}

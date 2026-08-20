@@ -576,6 +576,60 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-20 — **Pre-release audit ×2 of Dirty Talk (the bank he wants; the hard-no list finally reaches
+  everything; owner-directed; SPEC 74 §3.6.34; on `chore/pet-name-purge-two`).** A second full pass after
+  §3.6.33. **The duplicate answer is again "almost none":** 2 exact collisions (`harder`/`harder?` —
+  a demand and a check-in) and 52 stem-collisions, 47 of them the `sensation`-vs-`demands-receiving` register
+  split §3.6.33 already settled, so not re-litigated. **Five names cut, owner-decided from measured lists,
+  none carrying a love:** `names-warm` held BOTH `babydoll` and `baby doll` (one name, two spellings — and
+  since suppression keys on TEXT a `never` on one left the other live); two exact-synonym pairs at the same
+  tier in `names-rough-heavy`; and the two a keyword scan structurally could not find — **`my ward` and
+  `my charge`, the retired kinship/custody axis in a coat with no family word in it.** **Seven added, closing
+  the one real hole: the mouth.** 123 body names covered every part except mouth/throat/lips/tongue, of which
+  there were **zero in all 374** — plus the two parts missing the bare rung every other part has (`my clit`,
+  `my balls`) and the two response twins that were 12 girl-addressed against 4. **376 names.**
+  **The DECK stays**, put to him as its own decision rather than transposed, because three properties that
+  made the name purges obviously safe do not hold: a deck cut **can take a love** (he holds 22 deck marks,
+  **16 carry one**, where ~600 retired name marks carried none); the **128 word entries ARE the suppression
+  keys** (§3.6.2 — ban a word and every future generated line is caught; ban a sentence and a paraphrase
+  sails through); and **all 33 families feed a FIXED spine dimension**. §3.6.30 had already measured the deck
+  against the older line at 5 of 929. So only its **seven authoring defects** were fixed — five word entries
+  illustrated with a verbatim copy of another entry's line, `your holes` quoting `all your holes`, `wrecked`
+  illustrated with a DEMAND where every sibling reports the state, and **`breathe and let me`, whose TEXT was
+  truncated** (its own example completes it; its sibling `relax and let me in` is the same construction).
+  **The defect under all of it: 242 orphaned suppressions, live on his vault.** `pruneUnshownMarks` retires a
+  cut entry's mark, but needs an ORIENTATION as well as a bank, so it only runs on the Tests screens — while
+  `chatService`, the books, the emails, questionnaires, challenges and the steer all call `readLexicon`
+  directly and got the raw file. `suppressedTexts` emits `entry.text` for any `never` without asking whether
+  the bank still has it, **so a purge does not fail to clean up — it STARTS suppressions**, with no row
+  anywhere able to lift them. Measured: 563 on disk, 320 live, **242 orphaned**, suppressing 514 words where
+  272 is correct. **Stated honestly because the temptation was to overstate it:** they refuse ~5% of the live
+  bank's explicit lines and — checked — **zero ordinary ones**, and it self-heals on opening the take. Fixed
+  where the rule belongs: retirement needs only the BANK, so it moved into `readLexicon` beside the two
+  migrations already there (via a LEAF `lexiconBanks.ts`, because `dirtyTalk → spine → lexicon` is a cycle).
+  **242 → 0 on the real vault.** **Six MORE §5.8a gaps**, the two worst being `buildIntakeSystem`, which feeds
+  BOTH the live onboarding interview turn and the section reflection — so a person chatted live inside the
+  18+ `restricted` intimacy section with their hard-no list absent, while `synthesizePortrait` one function
+  over has carried it since §5.8a _and its comment gives the reason for all three_. Plus
+  `refreshNextCandidates`, whose own prompt instructs the model to avoid boundaries **it was never given**;
+  the planner's `angle`; the topic blurbs; and the memory working title. Gate green: typecheck ×4, lint,
+  format, **2473 core + 13 relay + 1745 desktop** unit. Every new guard **verified to fail when reverted**,
+  with the revert asserted (`count == 1`) before believing the result.
+  **Lessons: (1) a criterion is scoped to the thing it was written about — "sexual pet names" cannot be
+  applied to lines, acts and suppression keys, and transposing it would have cut loved vocabulary for the
+  first time; put it back as a NEW decision with the shape measured in front of him. (2) When a read-time
+  migration heals in memory, it MASKS the change-detection that persists it: moving retirement into
+  `readLexicon` silently stopped `orientationForMarking` ever writing back, so the stale rows would have sat
+  on disk being re-healed forever. A migration that heals must return `changed`, or its own success hides the
+  write. (3) A prompt that asserts a constraint it was given no data for is a whole defect class worth
+  grepping for — `CANDIDATE_SYSTEM` said "NEVER propose anything that touches a boundary" and received none.
+  (4) Two fixtures broke and both were asserting the opposite of their own claim: "another instrument's entry"
+  built by spreading a Dirty Talk row carries a family this bank OWNS with a key it does not, which is
+  precisely a retired entry. **A bare invented KEY is a dependency on the bank's content exactly as much as a
+  bare word is.** (5) I built a redesign mockup from a partial read of one component and dropped the shared
+  step rail entirely; the owner's correction was "you're going off old designs, look at what's currently in
+  place". Rebuild a mockup from the SHIPPED CSS, not from a component read.**
+
 - 2026-08-20 — **Production audit of Dirty Talk (the duplicate question answered, 61 broken examples fixed, six
   more suppression gaps closed; owner-directed from measured lists; SPEC 74 §3.6.33; on
   `chore/pet-name-purge-two`).** A full pre-release pass over the whole bank. **The duplicate question has an

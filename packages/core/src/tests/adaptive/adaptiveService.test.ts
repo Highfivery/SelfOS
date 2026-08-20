@@ -435,6 +435,11 @@ describe('74 §3.6.8 — start over from the top', () => {
       NOW,
     );
     // A row some other adaptive instrument wrote: same lexicon, a source this delete does not own.
+    //
+    // 74 §3.6.34 — its FAMILY has to be one this bank has never heard of, which is what "another
+    // instrument's entry" actually means. Spreading a Dirty Talk entry gave it `names-rough-heavy` with a
+    // key the bank does not have, which is the exact shape of a RETIRED entry — so once `readLexicon`
+    // started retiring dead keys the fixture was asserting the opposite of its own claim.
     const mine = await readLexicon(fs, key, 'p1', NOW);
     await writeLexicon(fs, key, {
       ...mine,
@@ -443,6 +448,7 @@ describe('74 §3.6.8 — start over from the top', () => {
         {
           ...mine.entries[0]!,
           key: 'other:thing',
+          family: 'other-instrument-family',
           text: 'from another test',
           source: 'test:other',
         },

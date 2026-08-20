@@ -1,7 +1,11 @@
 import type { BankRetirements } from '../bank';
 
 /**
- * 74 §3.6.25 — pet names retired INTO another name, and where each one's marks go.
+ * 74 §3.6.25 — bank entries retired INTO another entry, and where each one's marks go.
+ *
+ * Overwhelmingly pet names (it was named for them until §3.6.34), but the map is bank-wide by
+ * construction — `retireCutMarks` resolves any key — and a deck line whose TEXT is corrected has the same
+ * problem a retired name does: the key changes, so an existing mark is orphaned unless it is moved.
  *
  * Generated from the 2026-08-19 purge and then frozen: 184 of these are a name and its own possessive
  * ("love" / "my love"), which the owner cut because the "my" decides nothing and doubled the taps; the
@@ -16,7 +20,20 @@ import type { BankRetirements } from '../bank';
  * Frozen on purpose. A later purge adds rows; it never rewrites these, or a mark migrated once would move
  * again to somewhere its owner never chose.
  */
-export const DIRTY_TALK_NAME_RETIREMENTS: BankRetirements = {
+export const DIRTY_TALK_RETIREMENTS: BankRetirements = {
+  // 74 §3.6.34 — the 2026-08-20 duplicate cuts. Each of these three is the SAME NAME as its survivor
+  // (a second spelling, or an exact synonym in the same slot at the same tier), so the mark moves rather
+  // than dying with the word. `names-soft-power:my-ward` and `:my-charge` are NOT here: they were cut for
+  // meaning what the retired kinship/custody axis meant, and there is nothing on-register to move them to,
+  // so they retire outright by derivation.
+  'names-warm:baby-doll': 'names-warm:babydoll',
+  // The one DECK row. `breathe and let me` was a truncation — its own example completed it as
+  // "breathe — and let me in", and its sibling `relax and let me in` is the same construction — so the
+  // text was corrected, which changes the key. Nobody in this household held the mark; the row exists so
+  // that anyone who did keeps it.
+  'anal:breathe-and-let-me': 'anal:breathe-and-let-me-in',
+  'names-rough-heavy:my-all-holes-slut': 'names-rough-heavy:my-three-hole-slut',
+  'names-rough-heavy:my-personal-fucktoy': 'names-rough-heavy:my-private-fucktoy',
   // 74 §3.6.29 — `names-playful` was down to these two after the four purges, which renders as an almost
   // empty register card. They move into `names-rough-mild`, where the register actually reads, and their
   // marks move with them rather than dying with the family.

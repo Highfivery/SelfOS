@@ -515,7 +515,22 @@ function buildUsage(
   };
 }
 
-/** Assemble the interviewer system prompt: persona + safety + the person's OWN context + the addendum. */
+/**
+ * Assemble the interviewer system prompt: persona + safety + the person's OWN context + the addendum.
+ *
+ * 74 §5.8a — and their hard-no list, UNCONDITIONALLY.
+ *
+ * This feeds BOTH the live interview turn and the per-section reflection, and both write prose this person
+ * reads — the turn streams straight into a chat they are having, the reflection is rendered verbatim on the
+ * closing portrait. Neither is reviewed by anyone. The `intimacy` section is `adult: true, restricted: true`
+ * and carries a go-deeper composer, so without this a person chats live about sex with the one list of words
+ * they have ruled out absent from the prompt.
+ *
+ * `synthesizePortrait` one function over already did this, and its comment gives the reason in so many words
+ * — "their hard nos apply to what is written about them as much as to what is asked of them". The comment
+ * was right and the two siblings above it were not; that is the §3.6.24 two-comments-disagree tell again.
+ * Unconditional because suppression can only ever PREVENT: a person with no lexicon gets ''.
+ */
 async function buildIntakeSystem(
   fs: FileSystem,
   key: Uint8Array,
@@ -525,7 +540,15 @@ async function buildIntakeSystem(
   const def = getIntakeSection(sectionId);
   if (!def) return null;
   const context = await buildContext(fs, key, person.id);
-  return [PERSONA, SAFETY, context, buildInterviewerAddendum(person.displayName, def), FORMATTING]
+  const suppression = await buildOwnSuppressionBlock(fs, key, person.id);
+  return [
+    PERSONA,
+    SAFETY,
+    context,
+    buildInterviewerAddendum(person.displayName, def),
+    suppression,
+    FORMATTING,
+  ]
     .filter(Boolean)
     .join('\n\n');
 }

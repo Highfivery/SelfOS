@@ -11,6 +11,7 @@ import {
   GENERAL_LIFE_AREAS,
   type CoverageAssessment,
 } from './coverageModel';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 import { readLedger } from './askLedger';
 import { gatherRecipientPartnerContext } from './partnerContext';
 import {
@@ -220,7 +221,7 @@ const CANDIDATE_SENTINEL: z.infer<typeof CandidateProposalSchema> = {
   kind: 'new',
 };
 
-function buildCandidateUser(steering: string, grounding: string): string {
+function buildCandidateUser(steering: string, grounding: string, suppression: string): string {
   // Cap the (unbounded) grounding BEFORE assembly — like `buildUser` — so the trailing instruction + count are
   // never truncated away, however long the person's history is.
   const g = grounding.trim().slice(0, CANDIDATE_DIGEST_CAP);
@@ -232,6 +233,12 @@ function buildCandidateUser(steering: string, grounding: string): string {
     g
       ? `What they have shared (draw go-deeper candidates from this; never re-ask it verbatim):\n${g}`
       : '',
+    '',
+    // 74 §5.8a — CANDIDATE_SYSTEM already tells the model to propose nothing that "touches a boundary they'd
+    // rather leave". Until now it was never given the boundaries: an instruction with no data behind it, and
+    // the prompts it writes are rendered verbatim to the person on the Explored tab with nobody reviewing
+    // them. Same defect `challengeSuggestService` documents and fixed.
+    suppression.trim(),
     '',
     `Propose up to ${CANDIDATE_ASK_COUNT} candidate questions now.`,
   ]
@@ -268,10 +275,11 @@ export async function refreshNextCandidates(
     .filter((s) => s.trim() !== '')
     .join('\n\n');
 
-  const [insightFacts, session, askedPrompts] = await Promise.all([
+  const [insightFacts, session, askedPrompts, suppression] = await Promise.all([
     gatherRecipientInsightFacts(deps.fs, deps.key, recipientPersonId),
     getIntakeSession(deps.fs, deps.key, recipientPersonId),
     gatherRecipientAskedPrompts(deps.fs, deps.key, recipientPersonId),
+    buildOwnSuppressionBlock(deps.fs, deps.key, recipientPersonId),
   ]);
   const intake = session ? formatIntakeForGeneration(session) : { text: '' };
   const grounding = [
@@ -284,7 +292,7 @@ export async function refreshNextCandidates(
   const call = await runClaude(
     deps,
     CANDIDATE_SYSTEM,
-    buildCandidateUser(steering, grounding),
+    buildCandidateUser(steering, grounding, suppression),
     'questionnaire.profile',
     1500,
   );

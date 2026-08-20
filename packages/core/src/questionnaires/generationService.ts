@@ -372,6 +372,15 @@ export async function generateQuestions(
   // Plan only when there is ground to reason about. An EXTERNAL recipient has no household record, so there
   // are no statuses, no repetition risk to steer around, and nothing for a planning call to decide — spending
   // one would be pure cost. Generation's own guidance covers that case, exactly as it did before spec 71.
+  // The RECIPIENT's hard nos — they are the one who will read the questions. Falls back to the author for a
+  // self-send, and to nothing at all for an external recipient (no vault, nothing known).
+  //
+  // 74 §5.8a — resolved BEFORE the plan, not just before generation: the planner names the ground and writes
+  // each thread's `angle`, and that angle is rendered to the person on the Explored tab. Steering toward
+  // ground built out of a word they ruled out is the same defect one layer earlier.
+  const suppressed = request.recipientPersonId
+    ? suppressedTexts(await readLexicon(deps.fs, deps.key, request.recipientPersonId))
+    : [];
   const plan =
     statuses.length > 0 && ledgerAuthoritative
       ? await planQuestions(deps, {
@@ -385,6 +394,7 @@ export async function generateQuestions(
           ...(request.feedbackGuidance !== undefined
             ? { feedbackGuidance: request.feedbackGuidance }
             : {}),
+          suppressed,
         })
       : { threads: [], degraded: false };
 
@@ -406,11 +416,6 @@ export async function generateQuestions(
     ...request.context,
     questionnaireType: request.type,
   });
-  // The RECIPIENT's hard nos — they are the one who will read the questions. Falls back to the author for a
-  // self-send, and to nothing at all for an external recipient (no vault, nothing known).
-  const suppressed = request.recipientPersonId
-    ? suppressedTexts(await readLexicon(deps.fs, deps.key, request.recipientPersonId))
-    : [];
   // An explicit-tier intimacy draft draws its subject matter from the recipient's own open ground (§5.3).
   const user = buildGenerationUserMessage({
     type: request.type,

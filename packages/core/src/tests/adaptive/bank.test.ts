@@ -171,6 +171,32 @@ describe('74 §3.6.1 #1 — the examples', () => {
     expect(lazy.map((e) => e.key)).toEqual([]);
   });
 
+  /*
+   * 74 §3.6.34 — and never illustrates one entry with ANOTHER entry's whole line.
+   *
+   * The sibling above catches an example that restates its OWN entry. This catches the other shape, which is
+   * what the production audit actually found: five word entries in `sensation` whose examples were verbatim
+   * copies of a `praise-him`/`narration`/`size-fit` line, so the same string appeared twice on screen as two
+   * separate rows — and `anatomy-her:your holes`, illustrated with the t5 entry `all your holes`, which made
+   * the two rows indistinguishable in practice.
+   *
+   * A word entry SHOULD be shown inside a sentence; the rule is only that the sentence must not itself be a
+   * row the person is separately asked to mark.
+   */
+  it('never illustrates one entry with ANOTHER entry’s whole line (74 §3.6.34)', () => {
+    const byText = new Map<string, string[]>();
+    for (const entry of DIRTY_TALK.bank.entries) {
+      const t = entry.text.trim().toLowerCase();
+      byText.set(t, [...(byText.get(t) ?? []), entry.key]);
+    }
+    const collisions = DIRTY_TALK.bank.entries.flatMap((entry) => {
+      const ex = (entry.example ?? '').trim().toLowerCase();
+      const owners = (byText.get(ex) ?? []).filter((k) => k !== entry.key);
+      return owners.length > 0 ? [`${entry.key} → is verbatim ${owners.join(', ')}`] : [];
+    });
+    expect(collisions).toEqual([]);
+  });
+
   it('keeps every example inside the boundary the bank itself sets', () => {
     // The content standard is the same one the entries carry (74 §8.1) — the examples are not an exception.
     const forbidden = /\b(child|kid|minor|teen|underage)\b/i;

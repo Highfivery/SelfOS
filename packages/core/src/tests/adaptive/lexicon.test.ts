@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { OPEN_ORIENTATION } from './orientation';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 
+import type { FileSystem } from '../../host';
 import { memFileSystem } from '../../host/memFileSystem';
 import type { EroticLexicon, LexiconEntry } from '../../schemas';
 import {
@@ -17,6 +18,7 @@ import {
   lovedEntries,
   mergeLexicons,
   readLexicon,
+  retireDeadKeys,
   suppressedTexts,
   violatesBoundary,
   writeLexicon,
@@ -44,6 +46,97 @@ function seeded(): EroticLexicon {
     NOW,
   );
 }
+
+const KEY34 = new Uint8Array(32).fill(34);
+const NOW34 = new Date('2026-08-20T10:00:00.000Z');
+
+describe('74 §3.6.34 — a mark whose entry has left the bank is retired on EVERY read', () => {
+  const write = async (fs: FileSystem, entries: LexiconEntry[]) => {
+    await writeLexicon(fs, KEY34, {
+      ...emptyLexicon('p34', NOW34),
+      entries,
+    });
+  };
+  const row = (
+    over: Partial<LexiconEntry> & { key: string; family: string; text: string },
+  ): LexiconEntry => ({
+    kind: 'word',
+    tier: 3,
+    hear: 0,
+    say: 0,
+    ...over,
+  });
+
+  it('drops a dead-keyed mark, so its word stops suppressing app-wide with nothing left to lift it', async () => {
+    const fs = memFileSystem();
+    // A family this bank owns, with a key it no longer has: exactly what a purge leaves behind.
+    await write(fs, [
+      row({
+        key: 'names-rough-heavy:my-long-gone-name',
+        family: 'names-rough-heavy',
+        text: 'zzquux',
+        hearState: 'never',
+      }),
+    ]);
+    const read = await readLexicon(fs, KEY34, 'p34', NOW34);
+    expect(read.entries).toEqual([]);
+    // The point of the fix: nothing is suppressed on behalf of a row no screen can show.
+    expect(suppressedTexts(read)).not.toContain('zzquux');
+  });
+
+  it('MOVES the mark when the bank names a survivor, rather than dropping it', async () => {
+    const fs = memFileSystem();
+    await write(fs, [
+      row({
+        key: 'names-warm:baby-doll',
+        family: 'names-warm',
+        text: 'baby doll',
+        hearState: 'never',
+      }),
+    ]);
+    const read = await readLexicon(fs, KEY34, 'p34', NOW34);
+    expect(read.entries.map((e) => e.key)).toEqual(['names-warm:babydoll']);
+    expect(read.entries[0]?.hearState).toBe('never');
+  });
+
+  it('leaves ANOTHER instrument’s family and the person’s own write-in alone', async () => {
+    const fs = memFileSystem();
+    await write(fs, [
+      row({
+        key: 'some-other-instrument:thing',
+        family: 'some-other-instrument',
+        text: 'not ours',
+        hearState: 'never',
+      }),
+      row({
+        key: 'names-rough-heavy:mine',
+        family: 'names-rough-heavy',
+        text: 'my own word',
+        custom: true,
+        hearState: 'never',
+      }),
+    ]);
+    const read = await readLexicon(fs, KEY34, 'p34', NOW34);
+    expect(read.entries.map((e) => e.key).sort()).toEqual([
+      'names-rough-heavy:mine',
+      'some-other-instrument:thing',
+    ]);
+  });
+
+  it('leaves a LIVE mark exactly as it is, and is idempotent', async () => {
+    const fs = memFileSystem();
+    const live = row({
+      key: 'names-warm:babydoll',
+      family: 'names-warm',
+      text: 'babydoll',
+      hearState: 'love',
+    });
+    await write(fs, [live]);
+    const once = await readLexicon(fs, KEY34, 'p34', NOW34);
+    expect(once.entries).toEqual([live]);
+    expect(retireDeadKeys(once).changed).toBe(false);
+  });
+});
 
 describe('the erotic lexicon (74 §4.4)', () => {
   it('derives a rating per direction from the mark, and a no zeroes and suppresses', () => {

@@ -7907,12 +7907,26 @@ describe('update awareness (36)', () => {
             e.key === 'names-praise:good-girl' ? { ...e, key: 'names-praise:a-retired-name' } : e,
           ),
         });
-        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
+        /*
+         * 74 §3.6.34 — this used to assert the ORPHAN first ("`suppressedTexts` still contains it until you
+         * open the take"), which was true and was the defect: `readLexicon` is the read every consumer goes
+         * through, and until the fix it handed `chatService`, the books, the emails and the steer a word the
+         * person had no row anywhere to un-ban. Measured on the owner's real vault at the time: 242 of them.
+         *
+         * The guarantee is now the stronger one — ANY read clears it, with no visit to the take required.
+         */
+        const healed = await readLexicon(fs, key, ownerId);
+        expect(suppressedTexts(healed)).not.toContain('good girl');
+        expect(healed.entries.some((e) => e.key === 'names-praise:a-retired-name')).toBe(false);
 
+        // …and opening the take still PERSISTS it, so the row does not sit on disk being re-healed forever.
         await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
-        const after = await readLexicon(fs, key, ownerId);
-        expect(suppressedTexts(after)).not.toContain('good girl');
-        expect(after.entries.some((e) => e.key === 'names-praise:a-retired-name')).toBe(false);
+        const onDisk = (await readEncryptedJson(
+          fs,
+          `people/${ownerId}/tests/lexicon.enc`,
+          key,
+        )) as { entries: { key: string }[] } | null;
+        expect(onDisk?.entries.some((e) => e.key === 'names-praise:a-retired-name')).toBe(false);
       });
 
       it('leaves a custom write-in alone — it was never the bank’s to retire', async () => {

@@ -1432,9 +1432,151 @@ that changes with the viewport is the §3.6.11 broken-locator trap one level dow
 ONE child, because `Button` is a flex row with a gap and a two-node label doubles it (§3.6.13).
 
 **Deliberately NOT wired, recorded so the next audit does not re-tread it:** classifiers, the semantic
-dedup, the ask-ledger backfill, structural planners, image-prompt distillations, `coverageService` /
-`gapFinderService` (the drafting pass that consumes them carries the list), and `improveQuestion` (its
-`deps.personId` is the AUTHOR, not the recipient, and the rewrite is author-reviewed in the editor).
+dedup, image-prompt distillations, `gapFinderService` (the drafting pass that consumes it carries the list),
+and `improveQuestion` (its `deps.personId` is the AUTHOR, not the recipient, and the rewrite is
+author-reviewed in the editor before it is sent).
+
+> **Corrected 2026-08-20 (§3.6.34).** Three of the entries above were wrong, and the reason each was wrong is
+> the same: they were excluded as "planners" or "backfill" by the NAME of the pass rather than by what the
+> pass emits. `coverageService.refreshNextCandidates` writes full questions, the ask-ledger backfill writes
+> topic blurbs, and `planService` writes each thread's `angle` — and all three are rendered to the person on
+> the Explored tab. All three now carry the list. `refreshCoverage` (which returns only
+> `{lifeArea, depth, subTopics}`) and the semantic dedup (which returns indices) stay excluded, correctly:
+> the test is what the pass RETURNS, never what it is called.
+
+### 3.6.34 The pre-release audit — the bank is what he wants it to be, and the hard-no list finally reaches everything — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+A second full pass over the whole bank before release, and a second sweep of the §5.8a class. The bank work
+is small; the correctness work under it is not.
+
+**The duplicate question, answered again and cheaply.** A mechanical scan over all 1,298 entries found **2
+exact normalized collisions** (`harder`/`harder?`, `more`/`more?` — a demand and a check-in, a real register
+split) and **52 content-stem near-collisions**, of which 47 are in the deck. Those 47 are overwhelmingly the
+same `sensation` vs `demands-receiving` split §3.6.33 already adjudicated — `pounded` is a state you report,
+`pound me` is a thing you ask for — so the answer is the same answer, and it is not re-litigated. Inside the
+374 names there were **five** near-collisions, and every one is the deliberate bare-vs-claimed axis
+(`warm:babe` against `yours:my babe`).
+
+**Five names cut, and the interesting one is not a duplicate.** `names-warm` carried **both** `babydoll` and
+`baby doll` at the same tier — one name, two spellings, and since suppression keys on TEXT a `never` on one
+left the other live. `names-rough-heavy` carried `my all-holes slut` beside `my three-hole slut` and
+`my personal fucktoy` beside `my private fucktoy`, each pair naming the identical thing at the identical tier
+with no rung between them. All three keep their marks: the survivor is the same name, so the row is listed in
+the retirement map rather than retired outright. The fifth and sixth are the ones a keyword pass would never
+have found — **`names-soft-power:my ward` and `my charge`**, which are the retired kinship/custody axis
+wearing a coat with no family word in it. That is how they survived §3.6.27's scan. The register's real axis
+is smallness and softness (`my small one`, `pet`, `kitten`), and it is intact without them.
+
+**Seven names added, closing the one real hole in the bank: the mouth.** 123 body names covered cock, dick,
+balls, pussy, cunt, clit, ass, tits, nipples, holes and the whole body — and there were **zero** entries
+containing mouth, throat, lips or tongue anywhere in all 374 (the only near-hits, `mouthy thing` and
+`my mouthy girl`, are back-talk). `my mouth` (t3) · `my greedy mouth` (t4) · `my tight throat` (t5), tiered
+against their own siblings (`my pussy` 3, `my greedy cock` 4, `my tight cunt` 5). The mouth also needs no
+`body` tag, so unlike every cock/pussy name it is never withheld by orientation. Two parts were missing the
+bare rung every other part has — **`my clit`** and **`my balls`**, which existed only as hard/needy/swollen
+and full/heavy/swollen. And the bodily-response axis was populated 12 girl-addressed against 4 man-addressed,
+so **`my moaning boy`** and **`my panting boy`** complete a twin grid that already existed
+(`desperate boy`/`girl`, `dripping boy`/`girl`). These are not the §3.6.30 `names-masculine` mistake: that
+register was a gender-gap filler filled with admiration, and these are bodily-response names inside a live
+register, with their examples lifted from the exact girl twins. **376 names across 9 registers.**
+
+**The deck stays.** Put to the owner as its own decision rather than transposed, because "a sexual pet name
+said to turn on a partner" is a rule about NAMES and the deck is lines, acts and 128 anatomy/sensation words.
+Three things make a deck cut categorically unlike the five name purges, and all three were measured first:
+
+- **A deck cut can take a LOVE.** He holds 22 marks in live deck families and **16 of them carry a love**
+  (`anal` 21, `cum` 1). Across the ~600 marks the name purges retired, not one was a love — which is exactly
+  why those were obviously correct. That safety property does not hold here, and the live-model synthesis
+  built its best reading on this precise ground.
+- **The 128 word entries ARE the suppression keys** (§3.6.2). `violatesBoundary` matches word-boundaried
+  short strings, so banning a WORD catches every future generated line containing it while banning a SENTENCE
+  lets a paraphrase through. Removing a word entry removes the person's ability to suppress that word
+  app-wide.
+- **All 33 deck families now feed a spine dimension** (§3.6.29 closed the 14 that did not), and the spine is
+  FIXED so retakes stay comparable. Retiring a family starves a live dimension, which is a spec decision
+  about the spine, not a bank edit.
+
+§3.6.30 had already checked the deck against the older, looser line and found **5 of 929** — the act families
+are sex acts by construction. So the deck keeps every entry, and only its defects were fixed.
+
+**Seven authoring defects, all in the deck, none of them content calls.** Five word entries were illustrated
+with a verbatim copy of another entry's line — `sensation:hard` with the `praise-him` line, `dripping` and
+`leaking` with the `narration` lines, `split open` with the `size-fit` line — so the same string appeared
+twice on screen as two separately-markable rows. `anatomy-her:your holes` (t3) quoted the t5 entry
+`all your holes`, making the two rows indistinguishable in practice. **The example is what changes, never the
+entry**: the word/line split is the suppression model. Two more the scan surfaced on its own: `sensation:wrecked`
+was illustrated with `wreck me` — a DEMAND, where every one of its siblings reports the state ("you've
+destroyed me", "I'm completely spent") — and **`anal:breathe and let me` was a truncated TEXT**, completed by
+its own example as "breathe — and let me in" and mirrored exactly by its sibling `relax and let me in`.
+Correcting the text changes the key, so it takes a migration row — which meant the map could no longer be
+called `DIRTY_TALK_NAME_RETIREMENTS`. It is `DIRTY_TALK_RETIREMENTS` now, because a constant whose name
+contradicts its contents is the §3.6.24 tell in advance.
+
+**The defect under all of it: 242 orphaned suppressions, live on the real vault.**
+
+`pruneUnshownMarks` retires a mark whose bank entry has been cut — but it needs an orientation as well as a
+bank, so it can only run on the Tests screens, and it is the only thing that writes the result back. Every
+other consumer — `chatService`, `storyGenerationService`, `emailSuggestionService`, `generationService`,
+`challengeSuggestService`, the steer — calls `readLexicon` directly and got the raw file. And `suppressedTexts`
+emits `entry.text` for any `never` without asking whether the bank still has that entry.
+
+So a purge does not merely fail to clean up: **it starts suppressions**. §3.6.27 closed exactly this hole for
+the case where the entry survives; this is the case where the entry is gone, and it was open the whole time.
+Measured on the owner's decrypted vault before the fix: **563 entries on disk, 320 live, 242 orphaned** —
+suppressing 514 words where the correct number is 272, with **no row anywhere in the app able to lift any of
+the 242**.
+
+**Measured honestly, because the temptation was to overstate it.** Those orphans refuse **~5% of the live
+bank's explicit lines** (31 of a 300-line sample against 28) and — checked against a dozen ordinary intimate
+sentences — **zero ordinary lines**. This is not §3.6.13 again; ordinary coaching was never affected. It also
+self-heals the moment he opens the take. What makes it worth fixing anyway is that it recurs on every purge
+release, it persists for however long someone goes without opening Tests, and the six fixes below have just
+increased the number of surfaces reading that list.
+
+**The fix is where the rule belongs, not where it was convenient.** Retirement needs only the BANK — "this key
+is not in the code any more" is a fact about the data, not about the person — so it moves into `readLexicon`,
+beside the two migrations already there, and every consumer gets it for free. The orientation half stays on the
+Tests screens, where it belongs. `lexicon.ts` cannot import the instrument (`dirtyTalk.ts` → `spine.ts` →
+`lexicon.ts` closes a cycle), so the assembled bank moved into a LEAF module, `instruments/lexiconBanks.ts`,
+which `dirtyTalk.ts` imports too — one definition, no drift, no cycle. `LEXICON_BANKS` is a list because the
+lexicon is shared across adaptive instruments; `retireCutMarks` is family-scoped, so an instrument only ever
+retires its own entries and a custom write-in is never touched. Verified on the real vault: **242 → 0**.
+
+**Six MORE conditional-suppression gaps, and the two worst are the onboarding interview.**
+
+- **`intakeService.buildIntakeSystem`** took no suppression argument at all — and it feeds BOTH the live
+  interview turn and the per-section reflection. The `intimacy` section is `adult: true, restricted: true` and
+  carries a go-deeper composer, so a person chats live about their sex life, in a stream, with the one list of
+  words they have ruled out absent from the prompt; the reflection is then rendered verbatim on the closing
+  portrait with nobody reviewing it. `synthesizePortrait`, one function over, has carried the list since
+  §5.8a — and its comment gives the reason in so many words, "their hard nos apply to what is written about
+  them as much as to what is asked of them". The comment was right about all three and the code did one. The
+  §3.6.24 two-comments-disagree tell, for the third time.
+- **`coverageService.refreshNextCandidates`** — the strongest instance of a different failure: its own
+  `CANDIDATE_SYSTEM` instructs the model to "NEVER propose anything they've indicated … touches a boundary
+  they'd rather leave", and it was never given the boundaries. An instruction with no data behind it, writing
+  questions rendered verbatim on the Explored tab.
+- **`planService`** writes each thread's `angle`, also rendered on the Explored tab; the recipient's hard-no
+  list is now resolved BEFORE the plan rather than after it, so the pass that chooses the ground has it too.
+- **`askLedgerBackfill.writeBlurbs`**, **`storyMemoryService.maybeGenerateWorkingTitle`** (its three siblings
+  in the same file all route through `buildMemorySystem`; this one built its own system string).
+- **`improveQuestion`** stays excluded, and for a structural reason rather than an oversight: its input carries
+  no recipient id, and the author reads the rewrite in the builder before it is sent.
+
+**Guards.** Four for the dead-key retirement (drops a dead key; MOVES a mark when the bank names a survivor;
+leaves another instrument's family and a custom write-in alone; idempotent on a live mark), four for the
+suppression gaps, and one new bank invariant — **no entry is illustrated with another entry's whole line**,
+which is the class the audit actually found. Its sibling already caught an example restating its OWN entry;
+nothing caught the other shape. Every one **verified to fail when reverted**, with the revert asserted to have
+applied (`count == 1`) before believing the result either way.
+
+**Two fixtures broke, and both were asserting the opposite of their own claim** — the §3.6.33 lesson, from the
+other direction. `adaptiveService.test`'s "leaves ANOTHER instrument's entries alone" built its foreign row by
+spreading a Dirty Talk entry, so it carried `names-rough-heavy` with a key the bank does not have — which is
+precisely the shape of a RETIRED entry, not a foreign one. And `steer.test` invented `taboo:filthy`: a family
+this bank owns with a key it does not. Neither was a behaviour regression; both were fixtures that only looked
+correct while nothing checked liveness. A bare invented key is a dependency on the bank's content just as much
+as a bare word is.
 
 ## 4. Data model
 

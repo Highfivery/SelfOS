@@ -134,10 +134,13 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
       entries: [
         ...lex.entries,
         {
-          key: 'taboo:filthy',
-          text: 'filthy',
+          // 74 §3.6.34 — a REAL bank key. This is the one of the three that round-trips through
+          // `readLexicon`, which now retires a key the bank does not have — and an invented key in a family
+          // the bank DOES own is indistinguishable from a retired entry, so the block went empty.
+          key: 'sensation:breathless',
+          text: 'breathless',
           kind: 'word' as const,
-          family: 'taboo',
+          family: 'sensation',
           tier: 3 as const,
           hear: 0,
           say: 0,
@@ -147,11 +150,11 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
       ],
     });
     const block = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
-    expect(block).toContain('filthy');
+    expect(block).toContain('breathless');
     // Second-tier by construction — a mild yes must never read as a want.
     expect(block).toMatch(/not favourites/i);
     const loved = block.slice(block.indexOf('Loves to hear'), block.indexOf('Fine with'));
-    expect(loved).not.toContain('filthy');
+    expect(loved).not.toContain('breathless');
   });
 
   it('builds a block for someone whose ONLY answers were "It\'s okay"', async () => {

@@ -901,6 +901,7 @@ import {
   bodyFromAnatomyAnswer,
   orientArea,
   pruneUnshownMarks,
+  readLexiconResolved,
   shownSides,
   deckFamilies,
   nameFamilies,
@@ -2354,9 +2355,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     def: AdaptiveTestDefinition;
   }): Promise<{ who: Orientation; lexicon: EroticLexicon }> => {
     const who = await personOrientation(gate);
-    const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
-    const pruned = pruneUnshownMarks(lexicon, gate.def.bank, who, new Date());
-    if (pruned.changed) await writeLexicon(gate.ctx.fs, gate.ctx.key, pruned.lexicon);
+    // 74 §3.6.34 — `readLexiconResolved`, not `readLexicon`: the read-time migrations heal in memory, so
+    // without their `changed` flag an already-healed lexicon looks unchanged to the prune and the stale rows
+    // sit on disk being re-healed on every read forever.
+    const read = await readLexiconResolved(gate.ctx.fs, gate.ctx.key, gate.personId);
+    const pruned = pruneUnshownMarks(read.lexicon, gate.def.bank, who, new Date());
+    if (read.changed || pruned.changed)
+      await writeLexicon(gate.ctx.fs, gate.ctx.key, pruned.lexicon);
     return { who, lexicon: pruned.lexicon };
   };
 

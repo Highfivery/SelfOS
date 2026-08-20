@@ -103,6 +103,8 @@ export function buildPlanUserMessage(input: {
   statuses: readonly TopicStatus[];
   requestedLabels?: readonly string[];
   feedbackGuidance?: string;
+  /** 74 §5.8a — the recipient's hard nos. The plan's `angle` is read by the person on the Explored tab. */
+  suppressed?: readonly string[];
   registerNote?: string;
 }): string {
   const parts: string[] = [
@@ -162,6 +164,13 @@ export function buildPlanUserMessage(input: {
     );
   }
   if (input.feedbackGuidance?.trim()) parts.push(`\n${input.feedbackGuidance.trim()}`);
+  // 74 §5.8a — their hard nos, unconditionally. The planner NAMES the ground and writes the `angle` that is
+  // rendered to them on the Explored tab, so a thread must not be built out of a word they ruled out.
+  if (input.suppressed?.length) {
+    parts.push(
+      `\nNEVER name ground, or write an angle, that uses or is about any of the following — these are their hard limits. Do not explain that you are avoiding anything: ${input.suppressed.join(' · ')}.`,
+    );
+  }
   parts.push(`\nReturn the JSON object with the "threads" array.`);
   return parts.filter((p) => p !== '').join('\n');
 }

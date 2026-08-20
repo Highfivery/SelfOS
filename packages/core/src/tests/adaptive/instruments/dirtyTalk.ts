@@ -1,8 +1,6 @@
 import { DIRTY_TALK_SPINE } from '../spine';
 import type { AdaptiveTestDefinition } from '../types';
-import { DIRTY_TALK_BANK } from './dirtyTalkBank';
-import { DIRTY_TALK_NAMES } from './dirtyTalkNames';
-import { DIRTY_TALK_NAME_RETIREMENTS, DIRTY_TALK_RETIRED_FAMILIES } from './dirtyTalkRetirements';
+import { DIRTY_TALK_FULL_BANK } from './lexiconBanks';
 
 /**
  * 74-adaptive-tests — **Dirty Talk**, the first adaptive instrument: a map of the sexual language a person
@@ -30,16 +28,7 @@ export const DIRTY_TALK: AdaptiveTestDefinition = {
   // One bank, two phases: the pet names are marked first and in their own way (74 §3.6.8), the rest in the
   // deck. Merged here rather than kept apart so suppression, the lexicon, the spine and the ask ledger all
   // read a single set of entries.
-  bank: {
-    families: [...DIRTY_TALK_NAMES.families, ...DIRTY_TALK_BANK.families],
-    entries: [...DIRTY_TALK_NAMES.entries, ...DIRTY_TALK_BANK.entries],
-    // 74 §3.6.25 — where a retired name's marks go. Only the ones with somewhere to GO are listed; a name
-    // cut with no survivor is derived from the family, so the list cannot go stale.
-    retiredInto: DIRTY_TALK_NAME_RETIREMENTS,
-    // 74 §3.6.27 — whole registers the owner cut. A family that has LEFT the bank cannot be derived from the
-    // bank, so it is named here or its marks outlive every control that could change them.
-    retiredFamilies: DIRTY_TALK_RETIRED_FAMILIES,
-  },
+  bank: DIRTY_TALK_FULL_BANK,
   spine: DIRTY_TALK_SPINE,
   // The names and the deck are both marked per direction (74 §3.6.26); the AI
   // phases then chase what the bank left ambiguous (74 §3.2).

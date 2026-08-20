@@ -8,6 +8,7 @@ import {
 } from '../../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import { bankEntry, toLexiconEntry, type Bank, type BankEntry } from './bank';
+import { LEXICON_BANKS } from './instruments/lexiconBanks';
 import { shownSides, type Orientation } from './orientation';
 
 /**
@@ -68,14 +69,95 @@ export async function readLexicon(
     if (!raw) return emptyLexicon(personId, now);
     const parsed = EroticLexiconSchema.safeParse(raw);
     if (!parsed.success) return emptyLexicon(personId, now);
-    // 74 §3.6.26/§3.6.29 — the two legacy shapes are cleared HERE, on the one read every consumer goes
-    // through, so there is exactly one shape in the app and nothing downstream needs a branch for an old
-    // one. Both are idempotent and neither needs a bank, which is what lets them live this low.
-    return dropLegacyWordBoundaries(resetPreDirectionalDeckMarks(parsed.data, now).lexicon, now)
-      .lexicon;
+    return resolveLexicon(parsed.data, now).lexicon;
   } catch {
     return emptyLexicon(personId, now);
   }
+}
+
+/**
+ * Every read-time migration, and whether any of them actually changed something.
+ *
+ * 74 §3.6.26/§3.6.29 — the two legacy shapes are cleared HERE, on the one read every consumer goes through,
+ * so there is exactly one shape in the app and nothing downstream needs a branch for an old one. §3.6.34 adds
+ * the third: a mark whose bank ENTRY has been cut. All three are idempotent.
+ *
+ * `changed` is the part that has to be exposed rather than swallowed. The healing happens in memory, so the
+ * stored file is only ever compacted by a caller that writes the result back — and the ONE caller that does
+ * (`orientationForMarking`) used to detect its work via `pruneUnshownMarks`'s own `changed` flag. Once
+ * retirement moved up here, that flag went false for an already-healed lexicon and the stale rows sat on disk
+ * being re-healed on every read forever. Returning `changed` fixes that for the new migration and for the two
+ * older ones, which were never persisted either.
+ */
+export function resolveLexicon(
+  lexicon: EroticLexicon,
+  now: Date,
+): { lexicon: EroticLexicon; changed: boolean } {
+  const deck = resetPreDirectionalDeckMarks(lexicon, now);
+  const words = dropLegacyWordBoundaries(deck.lexicon, now);
+  const dead = retireDeadKeys(words.lexicon);
+  return {
+    lexicon: dead.lexicon,
+    changed: deck.changed || words.changed || dead.changed,
+  };
+}
+
+/** The same read, plus whether the stored copy is now stale and worth writing back. */
+export async function readLexiconResolved(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date = new Date(),
+): Promise<{ lexicon: EroticLexicon; changed: boolean }> {
+  if (!isSafeSegment(personId)) return { lexicon: emptyLexicon(personId, now), changed: false };
+  try {
+    const raw = await readEncryptedJson(fs, lexiconPath(personId), key);
+    if (!raw) return { lexicon: emptyLexicon(personId, now), changed: false };
+    const parsed = EroticLexiconSchema.safeParse(raw);
+    if (!parsed.success) return { lexicon: emptyLexicon(personId, now), changed: false };
+    return resolveLexicon(parsed.data, now);
+  } catch {
+    return { lexicon: emptyLexicon(personId, now), changed: false };
+  }
+}
+
+/**
+ * 74 §3.6.34 — retire a mark whose bank ENTRY no longer exists, on EVERY read.
+ *
+ * `pruneUnshownMarks` has always done this, but it needs an orientation as well as a bank, so it can only run
+ * on the Tests screens — and it is the only thing that writes the result back. Every other consumer
+ * (`chatService`, `storyGenerationService`, `emailSuggestionService`, `generationService`,
+ * `challengeSuggestService`, the steer) calls `readLexicon` directly and got the raw file.
+ *
+ * That gap is not cosmetic. `suppressedTexts` emits `entry.text` for any `never`, without asking whether the
+ * bank still has that entry — so after a purge, a mark on a removed entry keeps suppressing that word
+ * app-wide while no row anywhere can lift it. §3.6.27 closed exactly this hole for the case where the entry
+ * survives; this closes it for the case where the entry is gone. Measured on the owner's real vault before
+ * the fix: **242 orphaned suppressions**, blocking ~5% of the live bank's explicit lines (and, checked, no
+ * ordinary ones) until he next opened the take.
+ *
+ * Retirement needs only the bank, never the orientation — "this key is not in the code any more" is a fact
+ * about the data, not about the person — which is what lets it live at this level. The orientation half
+ * stays where it is.
+ *
+ * Idempotent, and `retireCutMarks` short-circuits when there is nothing retired, so the common read costs one
+ * pass over the entries. Family-scoped, so another instrument's marks and the person's own write-ins are
+ * never touched.
+ */
+export function retireDeadKeys(lexicon: EroticLexicon): {
+  lexicon: EroticLexicon;
+  changed: boolean;
+} {
+  let entries = lexicon.entries;
+  let changed = false;
+  for (const bank of LEXICON_BANKS) {
+    const out = retireCutMarks(entries, bank);
+    if (out.changed) {
+      entries = out.entries;
+      changed = true;
+    }
+  }
+  return { lexicon: changed ? { ...lexicon, entries } : lexicon, changed };
 }
 
 export async function writeLexicon(
@@ -379,7 +461,7 @@ export function pruneUnshownMarks(
  * intimacy instrument, so another instrument's entries carry families this bank has never heard of and are
  * left alone — as is a custom write-in, which is the person's own word and was never the bank's to retire.
  */
-function retireCutMarks(
+export function retireCutMarks(
   all: readonly LexiconEntry[],
   bank: Bank,
 ): { entries: LexiconEntry[]; changed: boolean } {

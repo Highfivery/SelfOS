@@ -615,6 +615,22 @@ A running log of durable decisions and feedback captured into the project config
   the planner's `angle`; the topic blurbs; and the memory working title. Gate green: typecheck ×4, lint,
   format, **2473 core + 13 relay + 1745 desktop** unit. Every new guard **verified to fail when reverted**,
   with the revert asserted (`count == 1`) before believing the result.
+  **Then the two marking steps were made ONE shape** (owner: _"2 and also be sure to look at the words
+  section since it has similar navigation, i want to make sure thigns are consistant"_). Looking at it, the
+  words step was already the answer — it has had an in-place area picker and Previous/Next-area in the rail
+  since §3.6.22, while the names step made you leave the register, land on a 9-card grid and choose again,
+  nine times. The names step takes the SAME shape rather than a third one: `Register N of 9`, a jump `Select`,
+  and the register verbs in the SHARED rail (the separate "Done with this one" card is gone). Index from the
+  bank's order, never the card sort; scroll + focus reset on change, like `goToArea`. Two more of his calls:
+  the words step's **filling progress bar is gone** — it reached full on the last area whether you had marked
+  everything or nothing, which is the meter §3.6.29's rule names and which that section had already removed
+  from the name cards — while `Area N of M` stays; and **"still unmarked" ships on BOTH steps** in one shared
+  `MarkFilter`, because adding it to names alone would have created a new inconsistency in the change that
+  removed one. **The live-model pass ran green at his real shape** (lines, probe, and a synthesis whose four
+  paragraphs ALL survived the boundary filter — the §3.6.31 regression check), and found one real thing: the
+  scenario phase came back MALFORMED 1 run in 4 (3/3 on re-run, so model variance) because it was the last
+  phase parsing STRICTLY — `SceneSchema` is per-element tolerant, which only helps once the OBJECT parses, so
+  a truncated set lost every complete scene before the cut. It now falls back to the §37 salvage.
   **Lessons: (1) a criterion is scoped to the thing it was written about — "sexual pet names" cannot be
   applied to lines, acts and suppression keys, and transposing it would have cut loved vocabulary for the
   first time; put it back as a NEW decision with the shape measured in front of him. (2) When a read-time

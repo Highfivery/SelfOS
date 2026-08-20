@@ -17261,6 +17261,27 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
         }
         await shot(`${file}-asked`);
       }
+
+      /*
+       * 74 §3.6.37 — the ARMED delete, which is a state of its own and had no picture.
+       *
+       * Two-step by design, so the first tap only arms it; the shot is the confirm, and "Keep it" backs out
+       * so the rest of the walk sees an untouched set. Every generated set has one, which is the point —
+       * a delete on the questions and none on the moments would re-split the three shapes §3.6.35 joined.
+       */
+      const del = w.getByRole('button', { name: /^Delete$/ }).first();
+      if (await del.isVisible().catch(() => false)) {
+        await del.click();
+        await expect(w.getByRole('group', { name: /^Delete this/ })).toBeVisible();
+        // Arming a delete must not disable the rest of the card. It is LOCAL state on one row, so the
+        // answers behind it stay live — measured, because a screenshot of a faded control cannot tell a
+        // disabled button from a light one.
+        const behind = w.getByRole('button', { name: 'The word' }).first();
+        if (await behind.isVisible().catch(() => false)) await expect(behind).toBeEnabled();
+        await shot(`${file}-delete`);
+        await w.getByRole('button', { name: 'Keep it' }).first().click();
+        await expect(w.getByRole('group', { name: /^Delete this/ })).toHaveCount(0);
+      }
     }
 
     // Step 8 — the profile, from a thin take: it must still be reachable and honest.

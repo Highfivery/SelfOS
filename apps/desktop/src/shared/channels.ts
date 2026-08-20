@@ -731,6 +731,7 @@ export const IpcChannels = {
   testsAdaptiveProbe: 'tests:adaptiveProbe',
   testsAdaptiveScenario: 'tests:adaptiveScenario',
   testsAdaptiveTurn: 'tests:adaptiveTurn',
+  testsAdaptiveDeleteTurn: 'tests:adaptiveDeleteTurn',
   testsAdaptiveSynthesize: 'tests:adaptiveSynthesize',
   testsAdaptiveAbandon: 'tests:adaptiveAbandon',
   testsLexicon: 'tests:lexicon',
@@ -2461,6 +2462,16 @@ export interface SelfosBridge {
      */
     options?: string[];
     answer: string | number | string[] | Record<string, number>;
+  }): Promise<void>;
+  /**
+   * 74 §3.6.37 — delete one generated item. A TOMBSTONE, not a removal: the row stays so the phase can never
+   * re-offer it, and the answer goes with the deletion, so it stops feeding the profile immediately.
+   */
+  testsAdaptiveDeleteTurn(input: {
+    testId: string;
+    resultId: string;
+    phase: string;
+    itemId: string;
   }): Promise<void>;
   /**
    * Synthesize + complete the take. Metered `test.adaptive.synthesize`.

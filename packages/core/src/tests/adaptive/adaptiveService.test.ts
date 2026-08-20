@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { memFileSystem } from '../../host/memFileSystem';
-import { probeTurnId, ambiguityOfProbeTurn, PROBE_SKIPPED } from '../../schemas';
+import { probeTurnId, ambiguityOfProbeTurn, isAnsweredTurn, SKIPPED_ANSWER } from '../../schemas';
 import { readLedger } from '../../questionnaires/askLedger';
 import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
 import {
@@ -23,6 +23,7 @@ import {
   listAdaptiveResults,
   getAdaptiveResult,
   openDraft,
+  deleteTurn,
   recordMarkingPass,
   stampOffers,
   stampTurn,
@@ -787,13 +788,100 @@ describe('74 §3.6.35 — a generated item is recorded before anyone responds to
     expect(
       answersDigest([
         { phase: 'lines', item: { text: 'a line nobody reacted to' } },
-        { phase: 'probe', item: { text: 'a question' }, answer: PROBE_SKIPPED },
+        { phase: 'probe', item: { text: 'a question' }, answer: SKIPPED_ANSWER },
         { phase: 'probe', item: { text: 'another question' }, answer: 'what they actually said' },
       ]),
     ).toBe(
       'What they have told us already in this take — build on it, never re-ask it:\n' +
         '- (probe) another question → what they actually said',
     );
+  });
+});
+
+/**
+ * 74 §3.6.37 — deleting is not skipping, and a deleted item must never come back.
+ *
+ * Owner-reported: *"there should be a way to delete questions, not just skip them."* The row is a TOMBSTONE
+ * rather than a removal, because the same `turns` list is what stops a phase re-offering something.
+ */
+describe('74 §3.6.37 — a deleted item is gone from view and never offered again', () => {
+  it('keeps the row so it cannot be re-offered, drops the answer so it stops feeding the profile', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+
+    await stampOffers(
+      fs,
+      key,
+      'p1',
+      draft.id,
+      'probe',
+      [
+        { id: 'a#one', pack: 'probe', text: 'A good question', options: [] },
+        { id: 'a#two', pack: 'probe', text: 'A bad question', options: [] },
+      ],
+      now,
+    );
+    await stampTurn(fs, key, 'p1', draft.id, {
+      phase: 'probe',
+      item: { id: 'a#two', pack: 'probe', text: 'A bad question', options: [] },
+      answer: 'something they typed',
+      at: now.toISOString(),
+    });
+    // Asserted, not assumed — the answer really is on record before the delete.
+    const before = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(before?.turns?.find((t) => t.item.id === 'a#two')?.answer).toBe('something they typed');
+
+    await deleteTurn(fs, key, 'p1', draft.id, 'probe', 'a#two', now);
+    const after = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    const gone = after?.turns?.find((t) => t.item.id === 'a#two');
+
+    // The ROW survives. Erasing it would let the phase write the identical question again, and let the
+    // ambiguity behind it be re-asked at the cost of a billed call.
+    expect(gone).toBeDefined();
+    expect(gone?.deleted).toBe(true);
+    expect(gone?.item.text).toBe('A bad question');
+    // The ANSWER does not. That is what makes every downstream consumer drop it with no new filter.
+    expect(gone?.answer).toBeUndefined();
+    expect(isAnsweredTurn(gone?.answer)).toBe(false);
+    // Its neighbour is untouched.
+    expect(after?.turns?.find((t) => t.item.id === 'a#one')?.deleted).toBeUndefined();
+
+    // The two things that actually make "never asked again" true.
+    expect(answersDigest(after?.turns ?? [])).not.toContain('something they typed');
+    await stampOffers(
+      fs,
+      key,
+      'p1',
+      draft.id,
+      'probe',
+      [{ id: 'a#two', pack: 'probe', text: 'A bad question', options: [] }],
+      now,
+    );
+    const reoffered = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(reoffered?.turns?.filter((t) => t.item.id === 'a#two')).toHaveLength(1);
+    expect(reoffered?.turns?.find((t) => t.item.id === 'a#two')?.deleted).toBe(true);
+  });
+
+  it('leaves a take alone when the item is not there', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+    await stampOffers(
+      fs,
+      key,
+      'p1',
+      draft.id,
+      'lines',
+      [{ id: 'a line', pack: 'lines', text: 'a line', options: [] }],
+      now,
+    );
+    await deleteTurn(fs, key, 'p1', draft.id, 'lines', 'no such line', now);
+    const after = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(after?.turns).toHaveLength(1);
+    expect(after?.turns?.[0]?.deleted).toBeUndefined();
   });
 });
 

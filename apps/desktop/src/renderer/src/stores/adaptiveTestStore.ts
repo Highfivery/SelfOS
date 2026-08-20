@@ -5,7 +5,7 @@ import { create } from 'zustand';
 // `probeTurnId` used to be built here too. The BRIDGE mints a question's id now, at the moment the pass is
 // recorded (74 §3.6.35), so the renderer answers under the id it was given rather than reconstructing one and
 // hoping the two agree.
-import { PROBE_SKIPPED, scenarioTurnId } from '@selfos/core/schemas';
+import { SKIPPED_ANSWER, scenarioTurnId } from '@selfos/core/schemas';
 import type {
   AdaptiveBankView,
   AdaptiveNamesView,
@@ -384,6 +384,18 @@ interface AdaptiveTestState {
   loadLines(testId: string, round: number): Promise<void>;
   reactToLine(testId: string, line: string, reaction: 'love' | 'meh' | 'no'): Promise<void>;
   nextProbe(testId: string): Promise<void>;
+  /**
+   * 74 §3.6.37 — delete one generated item: a line, a question or a moment.
+   *
+   * Distinct from a skip, which keeps it on screen and answerable. This takes it away for good and, because
+   * the record is what stops a phase re-offering something, guarantees it never comes back.
+   */
+  deleteItem(testId: string, phase: 'lines' | 'probe' | 'scenario', itemId: string): Promise<void>;
+  /** Record a MOMENT as passed over — same act as skipping a question, on the step that had no way to. */
+  skipMoment(
+    testId: string,
+    moment: { context: string; scene: string; options: string[] },
+  ): Promise<void>;
   /** Record a question as passed over (74 §3.6.17) — it stays visible, and stays answerable. */
   skipProbeQuestion(
     testId: string,
@@ -875,6 +887,30 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       await get().refreshState(testId);
     },
 
+    deleteItem: async (testId, phase, itemId) => {
+      const resultId = get().state?.draft?.id;
+      if (!resultId) return;
+      await window.selfos?.testsAdaptiveDeleteTurn({ testId, resultId, phase, itemId });
+      await get().refreshState(testId);
+    },
+
+    skipMoment: async (testId, moment) => {
+      const resultId = get().state?.draft?.id;
+      if (!resultId) return;
+      await window.selfos?.testsAdaptiveTurn({
+        testId,
+        resultId,
+        phase: 'scenario',
+        // The shared id format, so the skip lands on the moment's OWN offer rather than appending a second
+        // turn for the same scene (74 §3.6.35).
+        itemId: scenarioTurnId(moment.context, moment.scene),
+        text: moment.scene,
+        options: moment.options,
+        answer: SKIPPED_ANSWER,
+      });
+      await get().refreshState(testId);
+    },
+
     skipProbeQuestion: async (testId, itemId, question, options) => {
       const resultId = get().state?.draft?.id;
       if (!resultId) return;
@@ -887,7 +923,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         // Carried for the same reason a revision carries them: a skipped question stays ANSWERABLE, so it must
         // not lose the taps it would be answered with.
         ...(options ? { options } : {}),
-        answer: PROBE_SKIPPED,
+        answer: SKIPPED_ANSWER,
       });
       await get().refreshState(testId);
     },

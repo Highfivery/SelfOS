@@ -1098,6 +1098,21 @@ export const AdaptiveTurnSchema = z.object({
     ])
     .optional(),
   at: z.string(),
+  /**
+   * 74 §3.6.37 — deleted by the person, and kept as a tombstone.
+   *
+   * Skipping and deleting are different acts: a skip stays on screen and stays answerable, a delete means
+   * "get this off my screen for good". The row cannot simply be dropped from `turns`, because the same list
+   * is what stops a phase re-offering something — the bridge builds each phase's avoid-list from it and
+   * reads back which ambiguities have been put to them. Erasing the row would let the model write the same
+   * question again and let "Ask me more" spend a call re-asking the ambiguity behind it, which is the
+   * opposite of what deleting a bad question is for.
+   *
+   * So the row survives carrying its TEXT, and the ANSWER is dropped with it. That is what makes the rest
+   * fall out with no new filters: `answersDigest`, the report's "what you told it" and `takeCarriesDistress`
+   * all key on there being an answer, so a deleted item stops feeding the profile the moment it is deleted.
+   */
+  deleted: z.boolean().optional(),
 });
 export type AdaptiveTurn = z.infer<typeof AdaptiveTurnSchema>;
 
@@ -1447,18 +1462,22 @@ export function contextOfScenarioTurn(turnId: string): string {
 }
 
 /**
- * What a SKIPPED probe question records (74 §3.6.17).
+ * What a SKIPPED question or moment records (74 §3.6.17, widened §3.6.37).
+ *
+ * Named for the probe when it was the only step that could skip; moments are skippable now, and a constant
+ * called `PROBE_SKIPPED` stamped onto a scenario turn is the kind of name that goes quietly wrong later. The
+ * VALUE is on disk and does not change — this is a rename, not a migration.
  *
  * Skipping has to record the question as asked, or "skip this" hands back the same one forever. It used to
  * record `''` — which is a string, so every consumer that tested `typeof answer === 'string'` counted a skip
  * as an answer: the review list showed skipped questions under an "Answered" label with an empty box. A
  * distinct marker keeps them visible, honestly labelled, and still answerable.
  */
-export const PROBE_SKIPPED = ' skipped';
+export const SKIPPED_ANSWER = ' skipped';
 
 /** Whether a turn's answer is a real answer rather than a recorded skip. */
 export function isAnsweredTurn(answer: unknown): answer is string {
-  return typeof answer === 'string' && answer.trim() !== '' && answer !== PROBE_SKIPPED;
+  return typeof answer === 'string' && answer.trim() !== '' && answer !== SKIPPED_ANSWER;
 }
 
 /**

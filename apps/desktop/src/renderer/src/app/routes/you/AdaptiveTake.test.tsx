@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdaptiveBankView, AdaptiveStateView } from '@shared/schemas';
 import { installMockBridge } from '../../../test-utils/bridge';
-import { PROBE_SKIPPED } from '@selfos/core/schemas';
+import { SKIPPED_ANSWER } from '@selfos/core/schemas';
 import { useAdaptiveTestStore } from '../../../stores/adaptiveTestStore';
 import { AdaptiveTake } from './AdaptiveTake';
 
@@ -150,6 +150,8 @@ function offering(): {
   view: () => AdaptiveStateView;
   offer: (phase: string, items: { id: string; text: string; options?: string[] }[]) => void;
   answer: (phase: string, id: string, answer: string) => void;
+  /** The bridge's tombstone: the row stays so it cannot be re-offered, the answer goes with it. */
+  remove: (phase: string, id: string) => void;
 } {
   let turns: NonNullable<AdaptiveStateView['draft']>['turns'] = [];
   const view = (): AdaptiveStateView => state({ draft: { ...DRAFT, turns: [...(turns ?? [])] } });
@@ -171,6 +173,13 @@ function offering(): {
     answer: (phase, id, given) => {
       turns = (turns ?? []).map((t) =>
         t.phase === phase && t.item.id === id ? { ...t, answer: given } : t,
+      );
+    },
+    remove: (phase, id) => {
+      turns = (turns ?? []).map((t) =>
+        t.phase === phase && t.item.id === id
+          ? { phase: t.phase, item: t.item, at: t.at, deleted: true }
+          : t,
       );
     },
   };
@@ -1516,7 +1525,7 @@ describe('74 §3.6.35 — the generated set is reviewable and changeable', () =>
       { id: 'a#open', text: 'Before, or during?', options: ['before', 'during'] },
     ]);
     take.answer('probe', 'a#answered', 'the word');
-    take.answer('probe', 'a#skipped', PROBE_SKIPPED);
+    take.answer('probe', 'a#skipped', SKIPPED_ANSWER);
     const turn = vi.fn(() => Promise.resolve(undefined));
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
@@ -1570,6 +1579,111 @@ describe('74 §3.6.35 — the generated set is reviewable and changeable', () =>
     // Scoped to the filter's OWN row: page-wide this catches "Step 4 of 7" in the eyebrow, which is a
     // POSITION and stays (74 §3.6.29 — the rule's line is the denominator, not the count).
     expect(count.parentElement?.textContent ?? '').not.toMatch(/\d+ of \d+/);
+  });
+
+  it('deletes a question behind a confirm — and it does not come back', async () => {
+    // OWNER-REPORTED: "there should be a way to delete questions, not just skip them." A skip keeps the
+    // question on screen and answerable; this takes it away for good (74 §3.6.37).
+    const take = offering();
+    take.offer('probe', [
+      { id: 'a#keep', text: 'A question worth keeping', options: ['yes'] },
+      { id: 'a#bad', text: 'A nonsense question', options: ['yes'] },
+    ]);
+    take.answer('probe', 'a#bad', 'something I typed');
+    const del = vi.fn(() => Promise.resolve(undefined));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+      testsAdaptiveDeleteTurn: del as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
+    expect(await screen.findByText('A nonsense question')).toBeInTheDocument();
+
+    // Two-step: the first tap arms, it does not delete.
+    const cards = screen.getAllByRole('button', { name: /^Delete$/ });
+    await userEvent.click(cards[1]!);
+    expect(del).not.toHaveBeenCalled();
+    // …and it says what removing an ANSWERED one costs, rather than doing it silently.
+    expect(screen.getByText(/stops feeding your profile/)).toBeInTheDocument();
+
+    await userEvent.click(
+      within(screen.getByRole('group', { name: /Delete this question/ })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    expect(del).toHaveBeenCalledWith(expect.objectContaining({ phase: 'probe', itemId: 'a#bad' }));
+  });
+
+  it('keeps a deleted item off the screen and out of the rail count', async () => {
+    // The tombstone stays on the record so the phase can never re-offer it — but it must be invisible, and
+    // the rail must agree with the screen (the §3.6.35 disagreement, from the other side).
+    const take = offering();
+    take.offer('probe', [
+      { id: 'a#kept', text: 'Still here', options: [] },
+      { id: 'a#gone', text: 'Deleted question', options: [] },
+    ]);
+    take.remove('probe', 'a#gone');
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
+
+    expect(await screen.findByText('Still here')).toBeInTheDocument();
+    expect(screen.queryByText('Deleted question')).toBeNull();
+    // One asked, not two — on the screen AND in the rail. Both are asserted in their own region: the two
+    // reading the same number is the entire point, so a page-wide matcher finds both and goes ambiguous.
+    const rail = screen.getByRole('complementary', { name: /The steps/i });
+    expect(within(rail).getByRole('button', { name: /questions it still has/i })).toHaveTextContent(
+      '1 asked',
+    );
+    const filter = screen.getByRole('group', { name: 'Show' }).parentElement!;
+    expect(filter).toHaveTextContent('1 asked');
+  });
+
+  it('lets a moment be skipped and deleted, not only answered', async () => {
+    // OWNER-REPORTED: "in the moment options should be skippable and deletable." It had neither.
+    const take = offering();
+    take.offer('scenario', [
+      { id: 'buildUp#A moment.', text: 'A moment.', options: ['say this', 'or this'] },
+    ]);
+    const turn = vi.fn(() => Promise.resolve(undefined));
+    const del = vi.fn(() => Promise.resolve(undefined));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(take.view()),
+      testsAdaptiveTurn: turn as never,
+      testsAdaptiveDeleteTurn: del as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'scenario', marks: ENOUGH_MARKS });
+    await userEvent.click(await screen.findByRole('button', { name: /^Build-up/ }));
+    expect(await screen.findByText('A moment.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }));
+    // Recorded as a skip on the moment's OWN id, so it lands on the offer rather than adding a second turn.
+    expect(turn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: 'scenario',
+        itemId: 'buildUp#A moment.',
+        answer: SKIPPED_ANSWER,
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /^Delete$/ }));
+    await userEvent.click(
+      within(screen.getByRole('group', { name: /Delete this moment/ })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    expect(del).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: 'scenario', itemId: 'buildUp#A moment.' }),
+    );
   });
 
   it('says a line is ruled out once it is, and offers the way back', async () => {

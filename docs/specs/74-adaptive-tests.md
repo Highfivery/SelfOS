@@ -1806,6 +1806,55 @@ difference. (3) Orientation already encodes which body a term belongs to, in `si
 terms of direction inherits that for free, where a rule reaching for `body` would need a bank the lexicon
 does not have.
 
+### 3.6.37 Deleting, not just skipping — APPROVED + **BUILT** (2026-08-20, owner-reported)
+
+Owner: _"there should be a way to delete questions, not just skip them"_, then _"in the moment options should
+be skippable and deletable."_ Neither existed. A question could only be skipped; a line and a moment had no
+way off the screen at all.
+
+**Skipping and deleting are different acts, and the difference is the design.** A skip keeps the item visible
+and answerable (§3.6.17) — passing over it is not being done with it. A delete says the thing itself was no
+good: it goes, and it does not come back.
+
+**The row is a TOMBSTONE, not a removal.** Since §3.6.35 the same `turns` list is both the record and what
+stops a phase re-offering something — the bridge builds each phase's avoid-list from these texts and reads
+back which ambiguities have been put to them. Erase the row and the model is free to write the identical
+question again, and "Ask me more" spends a call re-asking the ambiguity behind it, which is the exact
+opposite of deleting a bad question. So the row survives carrying its text, and the **answer goes with the
+deletion** — which is what makes every consumer drop it with no new filter, because they all already test for
+an answer: `answersDigest` skips it, the report's "what you told it" reads through `isAnsweredTurn`, and
+`takeCarriesDistress` is a `typeof` check. Deleting an answered item stops it feeding the profile at the
+moment it goes, which is what the row says it will do.
+
+**Four owner decisions, taken before any code:** gone-from-view-and-never-asked-again over a hard erase; all
+three sets, not just the questions; an answered item can be deleted, with the row stating what that costs; and
+a two-step inline confirm rather than an Undo — the app's existing guard for deleting a book, a person or a
+send, and an Undo that only survives until you navigate away is a promise the screen cannot keep.
+
+**One deliberate asymmetry, flagged rather than left silent:** the lines step gets delete and **no** skip. Its
+three marks already include "not this one" as a real answer, so what it lacked was a way to _remove_ a line,
+not a second way to pass over one. Questions and moments get both.
+
+`PROBE_SKIPPED` became `SKIPPED_ANSWER` in the same change: moments are skippable now, and a constant named
+for the probe stamped onto a scenario turn is the kind of name that goes quietly wrong later. **The value is
+on disk and did not change** — a rename, not a migration.
+
+Deleted items leave the screen _and_ the counts, in both places: the rail saying "6 asked" over five rendered
+cards is the §3.6.35 disagreement reached from the other side.
+
+**Guarded, each verified to fail when reverted:** the row survives a delete while its answer does not, and a
+re-offer of a deleted id adds nothing; a deleted item is absent from the screen and from the rail's count; and
+a moment can be both skipped and deleted. A fourth measurement went into the audit walk — that arming a
+delete does not disable the answers behind it — because a screenshot cannot tell a disabled control from a
+light one, and reading that off a picture is what nearly filed a non-existent bug.
+
+**Lessons.** (1) When a list is also an avoid-list, "delete" cannot mean "remove the row" — the two jobs pull
+in opposite directions, and the resolution is to keep the row and drop the part that feeds anything. (2) A
+sentinel named for the one phase that could use it will be stamped by the second phase eventually; rename it
+when the second arrives, and keep the persisted value byte-identical so it stays a rename. (3) Verify a visual
+suspicion by measuring it — "all the buttons went grey" was an artifact of reading a screenshot, and the
+assertion that disproved it is worth keeping.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

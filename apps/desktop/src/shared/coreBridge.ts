@@ -899,6 +899,7 @@ import {
   accruePhaseCost,
   stampTurn,
   stampOffers,
+  deleteTurn,
   startAdaptiveTake,
   writeLexicon,
   addressFromAnswer,
@@ -1206,6 +1207,12 @@ const AdaptiveSynthesizeInputSchema = AdaptiveRefSchema.extend({
   /** Finish the take on the deterministic profile alone, after being told the written analysis failed. */
   acceptDegraded: z.boolean().optional(),
 });
+/** 74 §3.6.37 — which generated item to delete. Person-scoped by `adaptiveGate`, like every adaptive op. */
+const AdaptiveDeleteTurnSchema = AdaptiveRefSchema.extend({
+  phase: z.string().min(1),
+  itemId: z.string().min(1),
+});
+
 const AdaptiveTurnInputSchema = AdaptiveRefSchema.extend({
   phase: z.string().min(1),
   itemId: z.string().min(1),
@@ -4769,6 +4776,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         degraded: out.degraded,
         ...(out.message ? { message: out.message } : {}),
       };
+    },
+    testsAdaptiveDeleteTurn: async (input): Promise<void> => {
+      const parsed = AdaptiveDeleteTurnSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return;
+      await deleteTurn(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.personId,
+        parsed.resultId,
+        parsed.phase,
+        parsed.itemId,
+        new Date(),
+      );
     },
     testsAdaptiveTurn: async (input): Promise<void> => {
       const parsed = AdaptiveTurnInputSchema.parse(input);

@@ -10,6 +10,7 @@ import {
   ListChecks,
   Lock,
   Minus,
+  Trash2,
 } from 'lucide-react';
 
 /**
@@ -174,7 +175,12 @@ import {
   Text,
   Textarea,
 } from '../../../design-system/components';
-import { contextOfScenarioTurn, isAnsweredTurn, PROBE_SKIPPED } from '@selfos/core/schemas';
+import {
+  contextOfScenarioTurn,
+  isAnsweredTurn,
+  scenarioTurnId,
+  SKIPPED_ANSWER,
+} from '@selfos/core/schemas';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
 import { PracticeSheet } from './PracticeSheet';
@@ -244,6 +250,60 @@ const CONTEXTS: { id: string; label: string; blurb: string }[] = [
  * opens by default when there is nothing to tap, or when the answer on record isn't one of the options
  * (typed, or given before options existed), since a collapsed box would make that answer look lost.
  */
+/**
+ * 74 §3.6.37 — delete one generated item, behind a two-step inline confirm.
+ *
+ * Owner-reported: *"there should be a way to delete questions, not just skip them."* A skip keeps the item on
+ * screen and answerable (§3.6.17); this takes it away for good. Two-step rather than an Undo, matching how
+ * this app already guards a delete (a book, a person, a send): an Undo that only lives until you navigate
+ * away is a promise the screen cannot keep.
+ *
+ * `answered` is not a reason to refuse — the question you most want gone is the one you answered before
+ * realising it was nonsense — but the row says plainly what removing it costs, because that answer is
+ * feeding the written profile until the moment it goes.
+ */
+function DeleteItem({
+  what,
+  answered,
+  busy,
+  onDelete,
+}: {
+  /** What is being removed, in the step's own words — "question", "line", "moment". */
+  what: string;
+  answered: boolean;
+  busy: boolean;
+  onDelete: () => void;
+}): JSX.Element {
+  const [arming, setArming] = useState(false);
+  if (!arming) {
+    return (
+      <button
+        type="button"
+        className={adaptive.deleteItem}
+        disabled={busy}
+        onClick={() => setArming(true)}
+      >
+        <Trash2 size={13} aria-hidden="true" /> Delete
+      </button>
+    );
+  }
+  return (
+    <span className={adaptive.deleteConfirm} role="group" aria-label={`Delete this ${what}?`}>
+      <Text as="span" size="sm" tone="secondary">
+        Delete this {what}?{' '}
+        {answered ? 'Your answer goes with it, and stops feeding your profile.' : null} It
+        won&rsquo;t be asked again.
+      </Text>
+      <Button variant="secondary" className={adaptive.banUndo} disabled={busy} onClick={onDelete}>
+        Delete
+      </Button>
+      <Button variant="ghost" className={adaptive.banUndo} onClick={() => setArming(false)}>
+        Keep it
+      </Button>
+    </span>
+  );
+}
+
 function SayMore({
   value,
   startOpen,
@@ -582,13 +642,20 @@ export function AdaptiveTake(): JSX.Element {
    */
   const momentsByContext = new Map<
     string,
-    { context: string; scene: string; options: string[]; picked: string | null }[]
+    {
+      context: string;
+      scene: string;
+      options: string[];
+      picked: string | null;
+      skipped: boolean;
+    }[]
   >();
   const addMoment = (m: {
     context: string;
     scene: string;
     options: string[];
     picked: string | null;
+    skipped: boolean;
   }): void => {
     const list = momentsByContext.get(m.context) ?? [];
     if (list.some((prior) => prior.scene === m.scene)) return;
@@ -596,12 +663,15 @@ export function AdaptiveTake(): JSX.Element {
     momentsByContext.set(m.context, list);
   };
   for (const turn of store.state?.draft?.turns ?? []) {
-    if (turn.phase !== 'scenario') continue;
+    // 74 §3.6.37 — a deleted moment is gone from the screen. Its tombstone stays on the record so the phase
+    // can never write it again, which is the whole reason the row is not simply removed.
+    if (turn.phase !== 'scenario' || turn.deleted) continue;
     addMoment({
       context: contextOfScenarioTurn(turn.item.id),
       scene: turn.item.text,
       options: turn.item.options ?? [],
-      picked: typeof turn.answer === 'string' ? turn.answer : null,
+      picked: isAnsweredTurn(turn.answer) ? String(turn.answer) : null,
+      skipped: turn.answer === SKIPPED_ANSWER,
     });
   }
   /*
@@ -636,8 +706,11 @@ export function AdaptiveTake(): JSX.Element {
         nameMarks: Object.keys(store.nameMarks).length,
         bankMarks: marked.length,
         lineReactions: Object.keys(store.lineReactions).length,
-        probesAnswered: (store.state?.draft?.turns ?? []).filter((turn) => turn.phase === 'probe')
-          .length,
+        // Deleted items are off the screen, so they must be off the count too — a rail saying "6 asked"
+        // over five rendered cards is the §3.6.35 disagreement, reached from the other side.
+        probesAnswered: (store.state?.draft?.turns ?? []).filter(
+          (turn) => turn.phase === 'probe' && !turn.deleted,
+        ).length,
         // 74 §3.6.19 — CATEGORIES worked, not raw picks: "8" told a person nothing about how far through
         // the six moments they were, and the rail sat it beside 132 marks as though the two compared.
         scenariosAnswered: CONTEXTS.filter((c) => answeredIn(c.id) > 0).length,
@@ -854,7 +927,7 @@ export function AdaptiveTake(): JSX.Element {
    * — on a reload, and on the next round, which replaced `store.lines` outright. Both halves are turns now.
    */
   const shownLines = (store.state?.draft?.turns ?? [])
-    .filter((turn) => turn.phase === 'lines')
+    .filter((turn) => turn.phase === 'lines' && !turn.deleted)
     .map((turn) => turn.item.text);
   /** A line is answered once it has a reaction — a ban is a second, separate act on top of a `no`. */
   const linesAnswered = (line: string): boolean => store.lineReactions[line] !== undefined;
@@ -880,15 +953,15 @@ export function AdaptiveTake(): JSX.Element {
    * odds — the rail counts every probe turn and says "6 asked" while four cards rendered.
    *
    * A SKIPPED question is still not an ANSWERED one. `answer` is `undefined` for a question nobody has
-   * responded to, and `PROBE_SKIPPED` for one passed over; both stay on screen and both stay answerable.
+   * responded to, and `SKIPPED_ANSWER` for one passed over; both stay on screen and both stay answerable.
    */
   const askedQuestions = (store.state?.draft?.turns ?? [])
-    .filter((turn) => turn.phase === 'probe')
+    .filter((turn) => turn.phase === 'probe' && !turn.deleted)
     .map((turn) => ({
       id: turn.item.id,
       question: turn.item.text,
       answer: isAnsweredTurn(turn.answer) ? String(turn.answer) : '',
-      skipped: turn.answer === PROBE_SKIPPED,
+      skipped: turn.answer === SKIPPED_ANSWER,
       answered: isAnsweredTurn(turn.answer),
       options: turn.item.options ?? [],
     }));
@@ -905,7 +978,9 @@ export function AdaptiveTake(): JSX.Element {
   const visibleQuestions =
     aiShowOnly === 'all' ? askedQuestions : askedQuestions.filter((q) => !q.answered && !q.skipped);
   const visibleMoments =
-    aiShowOnly === 'all' ? openMoments : openMoments.filter((moment) => !moment.picked);
+    aiShowOnly === 'all'
+      ? openMoments
+      : openMoments.filter((moment) => !moment.picked && !moment.skipped);
   /**
    * The one to answer NEXT — the first item in the set with no response yet.
    *
@@ -914,7 +989,7 @@ export function AdaptiveTake(): JSX.Element {
    * "live question" box the step used to render below its review list.
    */
   const nextQuestionId = visibleQuestions.find((q) => !q.answered && !q.skipped)?.id;
-  const nextMomentScene = visibleMoments.find((moment) => !moment.picked)?.scene;
+  const nextMomentScene = visibleMoments.find((moment) => !moment.picked && !moment.skipped)?.scene;
 
   return (
     <div className={styles.page}>
@@ -1781,6 +1856,15 @@ export function AdaptiveTake(): JSX.Element {
                           </button>
                         ) : null}
                       </span>
+                      {/* 74 §3.6.37 — the way OFF the screen. The lines step deliberately has no "skip": its
+                          three marks already include "not this one" as a real answer, so the thing it lacked
+                          was a way to remove a line rather than a second way to pass over one. */}
+                      <DeleteItem
+                        what="line"
+                        answered={reaction !== undefined}
+                        busy={store.busy}
+                        onDelete={() => void store.deleteItem(testId, 'lines', line)}
+                      />
                       {/* A ruled-out line keeps no marks: the row is settled until they undo it, and three
                           live buttons under a "Ruled out" chip would be two answers to one question. */}
                       {banned ? null : (
@@ -1967,8 +2051,11 @@ export function AdaptiveTake(): JSX.Element {
                           />
                           {/* Only a question with no response yet can be passed over — a skip is a way through
                               an unanswered one, not a way to un-answer one you have already answered. */}
-                          {!asked.answered && !asked.skipped ? (
-                            <div className={adaptive.askRow}>
+                          <div className={adaptive.askRow}>
+                            {/* Only an unanswered question can be passed over — a skip is a way THROUGH one,
+                                not a way to un-answer one you have already answered. Deleting is available
+                                whatever state it is in, which is the difference between the two acts. */}
+                            {!asked.answered && !asked.skipped ? (
                               <Button
                                 variant="ghost"
                                 disabled={store.busy}
@@ -1983,8 +2070,14 @@ export function AdaptiveTake(): JSX.Element {
                               >
                                 Skip this one
                               </Button>
-                            </div>
-                          ) : null}
+                            ) : null}
+                            <DeleteItem
+                              what="question"
+                              answered={asked.answered}
+                              busy={store.busy}
+                              onDelete={() => void store.deleteItem(testId, 'probe', asked.id)}
+                            />
+                          </div>
                         </Card>
                       ))}
                     </Stack>
@@ -2155,7 +2248,7 @@ export function AdaptiveTake(): JSX.Element {
                             value={aiShowOnly}
                             onChange={setAiShowOnly}
                             total={openMoments.length}
-                            shown={openMoments.filter((moment) => !moment.picked).length}
+                            shown={openMoments.filter((m) => !m.picked && !m.skipped).length}
                             noun={`${momentLabel(openMoment)} moments`}
                             unansweredLabel="not answered"
                           />
@@ -2181,18 +2274,33 @@ export function AdaptiveTake(): JSX.Element {
                                       same object: something asked, with tappable answers (74 §3.6.35). */}
                                   <span
                                     className={`${adaptive.chip} ${
-                                      moment.picked ? adaptive.chipDone : adaptive.chipOpen
+                                      moment.picked
+                                        ? adaptive.chipDone
+                                        : moment.skipped
+                                          ? adaptive.chipSkipped
+                                          : adaptive.chipOpen
                                     }`}
                                   >
                                     {moment.picked ? (
                                       <>
                                         <Check size={11} aria-hidden="true" /> Answered
                                       </>
+                                    ) : moment.skipped ? (
+                                      <>
+                                        <Minus size={11} aria-hidden="true" /> Skipped
+                                      </>
                                     ) : (
                                       'Not answered yet'
                                     )}
                                   </span>
                                 </div>
+                                {/* A skipped moment stays ANSWERABLE, exactly as a skipped question does —
+                                    passing over it is not the same as being done with it (74 §3.6.17). */}
+                                {moment.skipped ? (
+                                  <Text size="sm" tone="tertiary">
+                                    You passed over this one — answer it any time.
+                                  </Text>
+                                ) : null}
                                 {moment.options.length > 0 ? (
                                   <Stack gap={2}>
                                     {moment.options.map((option) => (
@@ -2224,6 +2332,32 @@ export function AdaptiveTake(): JSX.Element {
                                     Answered — tap another to change it.
                                   </Text>
                                 ) : null}
+                                {/* 74 §3.6.37 — owner-reported: a moment could only be answered. It had
+                                    neither of the two ways out the questions step has, so a scene that did
+                                    nothing for you sat there with the options as the only controls. */}
+                                <div className={adaptive.askRow}>
+                                  {!moment.picked && !moment.skipped ? (
+                                    <Button
+                                      variant="ghost"
+                                      disabled={store.busy}
+                                      onClick={() => void store.skipMoment(testId, moment)}
+                                    >
+                                      Skip this one
+                                    </Button>
+                                  ) : null}
+                                  <DeleteItem
+                                    what="moment"
+                                    answered={Boolean(moment.picked)}
+                                    busy={store.busy}
+                                    onDelete={() =>
+                                      void store.deleteItem(
+                                        testId,
+                                        'scenario',
+                                        scenarioTurnId(moment.context, moment.scene),
+                                      )
+                                    }
+                                  />
+                                </div>
                               </Card>
                             ))}
                           </Stack>

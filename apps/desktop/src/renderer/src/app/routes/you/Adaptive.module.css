@@ -2518,3 +2518,43 @@ details[open] > .foldHead .foldChevron {
     gap: var(--space-2);
   }
 }
+
+/*
+ * 74 §3.6.37 — remove one generated item. Quiet until armed: it sits beside the step's own verbs and must
+ * not compete with them, because deleting is the rarer act and answering is the point of the screen.
+ */
+.deleteItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.deleteItem:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
+}
+
+.deleteItem:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Armed. The consequence is stated where the tap happens, not in a dialog someone reads past. */
+.deleteConfirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-subtle-bg);
+}

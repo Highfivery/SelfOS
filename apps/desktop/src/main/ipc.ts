@@ -350,6 +350,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.testsAdaptiveProbe, bridge.testsAdaptiveProbe);
   handle(IpcChannels.testsAdaptiveScenario, bridge.testsAdaptiveScenario);
   handle(IpcChannels.testsAdaptiveTurn, bridge.testsAdaptiveTurn);
+  handle(IpcChannels.testsAdaptiveDeleteTurn, bridge.testsAdaptiveDeleteTurn);
   handle(IpcChannels.testsAdaptiveSynthesize, bridge.testsAdaptiveSynthesize);
   handle(IpcChannels.testsAdaptiveAbandon, bridge.testsAdaptiveAbandon);
   handle(IpcChannels.testsLexicon, bridge.testsLexicon);

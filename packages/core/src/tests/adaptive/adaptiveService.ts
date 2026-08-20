@@ -341,6 +341,47 @@ export async function stampTurn(
 }
 
 /**
+ * 74 §3.6.37 — delete one generated item: off the screen for good, and never offered again.
+ *
+ * A skip and a delete are different acts. Skipping keeps the item visible and answerable (§3.6.17); deleting
+ * says the thing itself was no good. Owner-reported: *"there should be a way to delete questions, not just
+ * skip them."*
+ *
+ * It is a TOMBSTONE rather than a removal, and that is the whole design. The same `turns` list is what stops
+ * a phase re-offering something: the bridge builds each phase's avoid-list from these texts and reads back
+ * which ambiguities have already been put to them. Drop the row and the model is free to write the identical
+ * question again, and "Ask me more" will spend a call re-asking the ambiguity behind it — the exact opposite
+ * of what deleting a bad question is for.
+ *
+ * So the row stays, carrying its text, and the ANSWER goes with the deletion. Everything downstream then
+ * follows with no new filters, because every consumer of an answer already tests for one:
+ * `answersDigest` skips it, the report's "what you told it" reads through `isAnsweredTurn`, and
+ * `takeCarriesDistress` is a `typeof` check. Deleting an answered item stops it feeding the profile
+ * immediately, which is what the screen promises when it says so.
+ */
+export async function deleteTurn(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  resultId: string,
+  phase: string,
+  itemId: string,
+  now: Date,
+): Promise<void> {
+  const draft = await getAdaptiveResult(fs, key, personId, resultId);
+  if (!draft || draft.status !== 'draft') return;
+  const turns = draft.turns ?? [];
+  const at = turns.findIndex((turn) => turn.phase === phase && turn.item.id === itemId);
+  if (at < 0) return;
+  const next = turns.map((turn, i) =>
+    // `answer` is dropped, not blanked: an empty string is a string, and every consumer that reads one tests
+    // `typeof answer === 'string'` — which is how a skip used to be counted as an answer (§3.6.17).
+    i === at ? { phase: turn.phase, item: turn.item, at: turn.at, deleted: true } : turn,
+  );
+  await saveResult(fs, key, { ...draft, turns: next, updatedAt: now.toISOString() });
+}
+
+/**
  * 74 §3.6.35 — record what a generating phase just PUT IN FRONT OF THEM, before they respond to any of it.
  *
  * The lines, probe and scenario steps used to keep their generated set in renderer state alone, and only a

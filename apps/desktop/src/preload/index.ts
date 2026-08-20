@@ -150,6 +150,8 @@ const bridge: SelfosBridge = {
   testsAdaptiveProbe: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveProbe, input),
   testsAdaptiveScenario: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveScenario, input),
   testsAdaptiveTurn: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveTurn, input),
+  testsAdaptiveDeleteTurn: (input) =>
+    ipcRenderer.invoke(IpcChannels.testsAdaptiveDeleteTurn, input),
   testsAdaptiveSynthesize: (input) =>
     ipcRenderer.invoke(IpcChannels.testsAdaptiveSynthesize, input),
   testsAdaptiveAbandon: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveAbandon, input),

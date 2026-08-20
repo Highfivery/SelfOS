@@ -9,7 +9,7 @@ import {
   tolerantArray,
 } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
-import { PROBE_SKIPPED } from '../../schemas';
+import { SKIPPED_ANSWER } from '../../schemas';
 import type {
   AdaptiveProfile,
   AdaptiveReading,
@@ -128,7 +128,7 @@ export function answersDigest(
         // (§3.6.17) so the question stays reachable, and that marker was reaching the model as though the
         // person had answered "skipped". An OFFER — a generated item they have not responded to at all — has
         // no answer and falls out on the `undefined` check above.
-        turn.answer !== PROBE_SKIPPED,
+        turn.answer !== SKIPPED_ANSWER,
     )
     .slice(-ANSWER_CONTEXT_CAP)
     .map((turn) => {
@@ -520,7 +520,7 @@ export interface ProbeQuestion {
 }
 
 /*
- * `probeTurnId` / `ambiguityOfProbeTurn` / `PROBE_SKIPPED` live in the crypto-free `schemas.ts` and are
+ * `probeTurnId` / `ambiguityOfProbeTurn` / `SKIPPED_ANSWER` live in the crypto-free `schemas.ts` and are
  * re-exported here beside the phase that uses them. The renderer stamps the turn and the bridge reads the
  * ambiguity back off it, so the two halves must be one definition — and the renderer cannot import this
  * module, whose barrel pulls in crypto (the `generationReadiness` precedent).
@@ -530,7 +530,7 @@ export {
   ambiguityOfProbeTurn,
   scenarioTurnId,
   contextOfScenarioTurn,
-  PROBE_SKIPPED,
+  SKIPPED_ANSWER,
 } from '../../schemas';
 
 /**

@@ -55,6 +55,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         { text: 'your curves', ex: 'I love every one of your curves' },
         { text: 'your waist', ex: 'hands on your waist, pulling you back' },
         { text: 'your hips', ex: 'I want to grab your hips and pull' },
+        { text: 'your peach', ex: 'your peach is so juicy' },
       ],
       2: [
         { text: 'pussy', ex: 'your pussy is so wet for me', body: 'vulva' },
@@ -82,7 +83,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
           body: 'vulva',
         },
         { text: 'your tight cunt', ex: 'your tight cunt is barely taking me', body: 'vulva' },
-        { text: 'your little cunt', ex: 'this little cunt was made for my cock', body: 'vulva' },
+        { text: 'your little cunt', ex: 'this little cunt was made for this', body: 'vulva' },
         { text: 'your holes', ex: 'I want to use all your holes tonight' },
       ],
       4: [
@@ -93,7 +94,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
           body: 'vulva',
         },
         { text: 'your slick cunt', ex: "you're so wet I can hear your slick cunt", body: 'vulva' },
-        { text: 'your fuckhole', ex: "you're just my fuckhole tonight" },
+        { text: 'your fuckhole', ex: 'nobody touches your fuckhole but me' },
         { text: 'your dripping hole', ex: 'look at your dripping hole, begging for it' },
         { text: 'your puffy lips', ex: 'your puffy lips are so swollen already', body: 'vulva' },
         {
@@ -162,7 +163,6 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
       ],
       4: [
         { text: 'fat cock', ex: 'that fat cock barely fits', body: 'penis' },
-        { text: 'thick cock', ex: 'your thick cock is splitting me open', body: 'penis' },
         { text: 'every inch', ex: 'I want every inch of you' },
         { text: 'that big fucking cock', ex: 'give me that big fucking cock', body: 'penis' },
         { text: 'your heavy balls', ex: 'your heavy balls slapping against me', body: 'penis' },
@@ -238,7 +238,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         { text: 'sore', ex: "I'm going to be sore tomorrow" },
         { text: 'ruined', ex: "you've ruined me" },
         { text: 'overflowing', ex: "I'm overflowing with you" },
-        { text: 'creaming', ex: "you're creaming all over my cock", body: 'vulva' },
+        { text: 'creaming', ex: "you're creaming all over me", body: 'vulva' },
         { text: 'dripping down my thighs', ex: "it's dripping down my thighs" },
         { text: "so full I can't breathe", ex: "I'm so full I can't breathe" },
         { text: 'stuffed', ex: "I'm completely stuffed" },
@@ -440,7 +440,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
       5: [
         'choke on it',
         'hold your breath',
-        { text: 'count them', ex: 'count them out loud for me' },
+        { text: 'count them', ex: 'count them out loud' },
         "don't spill a drop",
         {
           text: 'present yourself',
@@ -853,7 +853,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         "you don't even know my name (stranger roleplay)",
         {
           text: 'boss / employee roleplay',
-          ex: 'pre-agreed roleplay: "shut the door \u00e2\u0080\u0094 we need to talk about your review"',
+          ex: 'pre-agreed roleplay: "shut the door — we need to talk about your review"',
         },
         {
           text: 'teacher / student roleplay (adults)',
@@ -861,7 +861,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         },
         {
           text: 'doctor / patient roleplay',
-          ex: 'pre-agreed roleplay: "lie back \u00e2\u0080\u0094 I need to examine you properly"',
+          ex: 'pre-agreed roleplay: "lie back — I need to examine you properly"',
         },
         "does he know you're here (cheating roleplay)",
         "we shouldn't be doing this (cheating roleplay)",
@@ -910,10 +910,10 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         { text: 'laughing', ex: 'said grinning, halfway to a joke' },
       ],
       3: [
-        { text: 'loud', ex: 'said loud enough that it stops being private' },
+        { text: 'loud', ex: 'said at a volume you could not take back' },
         {
           text: 'silent, just sounds',
-          ex: 'no words at all \u00e2\u0080\u0094 only breath and noise',
+          ex: 'no words at all — only breath and noise',
         },
         { text: 'narrating the whole time', ex: 'a running commentary, start to finish' },
         {
@@ -923,7 +923,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         { text: 'right against my ear', ex: 'lips touching your ear as they say it' },
         {
           text: 'telling me what you’re about to do before you do it',
-          ex: '"I\u2019m going to\u00e2\u0080\u00a6" \u00e2\u0080\u0094 the warning as the thrill',
+          ex: '"I\u2019m going to…" — the warning as the thrill',
         },
         { text: 'through gritted teeth', ex: 'forced out like they can barely hold on' },
         { text: 'begging under your breath', ex: 'half-whispered, not meant to be heard' },
@@ -990,7 +990,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         'slowly',
         'work it in',
         'spread my ass',
-        'breathe and let me',
+        { text: 'breathe and let me', ex: 'breathe — and let me in' },
         'I want your ass',
         'relax and let me in',
         'let me in',

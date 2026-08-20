@@ -576,6 +576,50 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-20 — **Production audit of Dirty Talk (the duplicate question answered, 61 broken examples fixed, six
+  more suppression gaps closed; owner-directed from measured lists; SPEC 74 §3.6.33; on
+  `chore/pet-name-purge-two`).** A full pre-release pass over the whole bank. **The duplicate question has an
+  answer and it is "almost none":** a mechanical scan found 46 normalized-collision groups, two semantic
+  reviewers proposed **75 cuts**, and a skeptic **saved 73**. The dominant pattern — 27 of the 46 — is
+  `names-body` against `anatomy-her`/`anatomy-him`, and it is a REAL register split rather than a duplicate:
+  `names-body:my cock` is a vocative (`look at you, my cock`, being addressed AS the part) while
+  `anatomy-him:cock` is descriptive (`I want your cock right now`). The two family notes claim the same job in
+  words, which is what made it look like §3.6.29 at scale; the examples settle it, and §3.6.31's loved-mask
+  already prevents the cross-register contradiction that would make it one. **Four genuine collisions**
+  (`my majesty`, `my third`, `thick cock`, `my terrible tease`), each owner-decided, and each verified before
+  cutting that the surviving sibling carries the same suppression he had expressed. **2,224 → 2,221.**
+  **What the audit actually found was broken English:** **61 names carried an ungrammatical example** — a
+  bare-noun template applied to a name that already owns a possessive (`"you're such a my cock queen"`,
+  `"you filthy my greedy slut"`, `"you pathetic my imbecile"`) — 4.7% of the names, on the one screen a person
+  reads several hundred rows of. Plus **four lines of double-encoded mojibake stored ESCAPED**, so it read as
+  plain ASCII in the source and only became the corrupt codepoints at runtime, which is why it survived every
+  prior pass. Plus three examples contradicting their own entry, incl. `your fuckhole` illustrated with
+  "you're just MY fuckhole tonight" — a direction flip on the screen whose whole job is hear-vs-say. **Targeting
+  verified rather than re-derived:** 0 self-contradicting `body` pairs, 0 `addresses` misses against §3.6.23's
+  actual rule; the owner tagged the six female-coded names (`minx`/`siren`/`jezebel` …) that sat untagged beside
+  a tagged `temptress`. **Saved data verified on the real vault through the app's own resolver** (Ben 717 → 715,
+  Angel 16 → 0 — all legacy deck marks, cleared by §3.6.26's decision; 0 retired-family, 0 unknown keys, 0 dead
+  migration targets). **Live model re-run**: all four phases green, and the §3.6.31 regression check passes — 4
+  paragraphs written, **4 kept, zero eaten by the filter**. **Six MORE conditional-suppression gaps closed**
+  (§5.8a's class): `distillContextOnly` (writes an `approved:true` Insight and its own comment claimed to mirror
+  `analyzeAssignment`, which DOES carry the list), three books passes (title/essence, manuscript, structure),
+  `guided.suggest`, and the onboarding portrait. **And a fix that had shipped unguarded** — nothing asserted
+  that Together emits the hard-no list for an UN-acked pair, which is that fix's entire point. Gate green:
+  typecheck ×4, lint, format, **2466 core + 13 relay + 1745 desktop** unit. Every new guard **verified to fail
+  when reverted**.
+  **Lessons: (1) my first vault measurement was WRONG in the most convincing way — a hand-built `Orientation`
+  missing `selfAddress`/`partnerAddress` made `addressMatches` false for every tagged entry, so I measured "135
+  of Ben's marks dropped" and "ALL of Angel's dropped" and both were artifacts of my own harness. Identical
+  numbers for two opposite orientations was the tell. Build the fixture from the app's OWN resolver, never by
+  hand. (2) A 97% skeptic save-rate is a finding, not a failure: within-family synonym pairs in families whose
+  entire design IS a fine-grained synonym ladder are the weakest possible cut category, and the saves
+  (`handmaid` vs `handmaiden` post-Handmaid's-Tale; a nine-verb transaction ladder; a systematic slut/whore
+  mirror) are exactly what a keyword pass destroys. Ask "what axis does this family run" before proposing a
+  cut. (3) Corruption stored as an ESCAPE is invisible to every scan of the decoded file — `â`
+  greps as ASCII and only becomes mojibake at runtime, so scan the BUILT artifact, not just the source. (4) Two
+  independent detection methods agreeing on a count (61) is worth the second method: my first regex said 29 and
+  was too narrow, and the categorised scan's 94 included 33 grammatical false positives ("I can't stop looking
+  at my perfect cock"). Neither number alone was right.**
 - 2026-08-19 — **The last two animal-sex leftovers cut (`my tomcat`, `broodmare`); SPEC 74 §3.6.32.** Owner's
   call, on §3.6.24's line: that purge REMOVED the animal-sex names rather than tagging them, and these two
   survived it — `tom` is the male-cat morpheme, a mare is a female horse, and in both the animal's sex is the

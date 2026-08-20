@@ -19,6 +19,7 @@ import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { gatherGenerationContext } from '../questionnaires/contextProviders';
 import { runClaude, type AiDeps } from '../questionnaires/generationService';
 import { GUIDED_CATALOG, type GuidedExercise } from './guidedCatalog';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * The "Suggested for you" recommender + its per-person cache + the 18+ acknowledgement (16-guided-sessions
@@ -122,9 +123,14 @@ export async function suggestGuidedSessions(
     includeRelationship: false,
   });
 
+  // 74 §5.8a — each suggestion carries a `reason` the person reads, and `adultAllowed` admits the intimacy
+  // group into the catalog, so their hard nos apply here as they do on every other prose path. Unconditional:
+  // suppression can only ever PREVENT, so no gate makes withholding it correct. (`steer.ts` does not import
+  // this module, so there is no cycle — the one at goalSuggestService runs the other way.)
+  const suppression = await buildOwnSuppressionBlock(deps.fs, deps.key, deps.personId);
   const call = await runClaude(
     deps,
-    buildSuggestSystem(candidates),
+    [buildSuggestSystem(candidates), suppression].filter(Boolean).join('\n\n'),
     buildSuggestUser(context),
     'guided.suggest',
     700,

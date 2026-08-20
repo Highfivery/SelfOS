@@ -231,6 +231,38 @@ describe('74 §3.6.8 — the pet-name bank', () => {
     expect(new Set(texts).size).toBe(texts.length);
   });
 
+  it('renders every example as grammatical English (74 §3.6.33)', () => {
+    /*
+     * 61 names carried an example built from a BARE-NOUN template applied to a name that already owns a
+     * possessive: "you're such a my cock queen", "someone's been a my sassy girl", "you filthy my greedy
+     * slut", "you pathetic my imbecile". Broken English, on the one screen a person reads several hundred
+     * rows of. The tell is an article or a bare modifier sitting immediately before `my`/`your`/`our`.
+     */
+    const broken = DIRTY_TALK.bank.entries.filter((e) =>
+      /\b(a|an|little|filthy|pretty|pathetic|good)\s+(my|your|our)\b/i.test(e.example ?? ''),
+    );
+    expect(broken.map((e) => `${e.family}:${e.text} — ${e.example}`)).toEqual([]);
+  });
+
+  it('never ships a double-encoded dash or ellipsis (74 §3.6.33)', () => {
+    // Four examples stored the mojibake ESCAPED (`\u00e2\u0080\u0094`), so it read as ASCII in the source
+    // and only became U+00E2 + a C1 control at runtime — invisible to a decoded-text scan of the file.
+    const mojibake = DIRTY_TALK.bank.entries.filter((e) =>
+      /[\u00e2][\u0080-\u009f]/.test(`${e.text}${e.example ?? ''}`),
+    );
+    expect(mojibake.map((e) => `${e.family}:${e.text}`)).toEqual([]);
+  });
+
+  it('never lets an example flip the direction its own text names (74 §3.6.33)', () => {
+    // `anatomy-her: your fuckhole` illustrated itself with "you're just MY fuckhole tonight" — the opposite
+    // person's body from the one the entry names, on a screen whose whole job is hear-vs-say.
+    const flipped = DIRTY_TALK.bank.entries.filter((e) => {
+      const m = /^your\s+(.+)$/i.exec(e.text.trim());
+      return m ? new RegExp(`\\bmy\\s+${m[1]}\\b`, 'i').test(e.example ?? '') : false;
+    });
+    expect(flipped.map((e) => `${e.family}:${e.text} — ${e.example}`)).toEqual([]);
+  });
+
   it('never carries a name and its bare form as two rows', () => {
     // "my love" beside "love" is one name asked twice: the possessive changes nothing about what is
     // being decided, so it doubled the taps for nothing (owner, 2026-08-19). 184 pairs were cut.

@@ -10,6 +10,7 @@ import {
   type UsageEvent,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { subjectLexiconBlocks } from './storyGenerationService';
 import { resolvePersonOptionNames } from './castRegister';
 import { recordAuthorDrift } from './storyMaterial';
 import { chapterShell, syncPartChapterOrder } from './storyOutline';
@@ -205,6 +206,7 @@ export async function generateStructuralProposals(
     corpus.personName,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   // The chronology is grounding for ORDERING (§16.2) — the pass still only ever PROPOSES; a corrected date
   // never silently rearranges a drafted outline.

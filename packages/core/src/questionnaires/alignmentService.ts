@@ -342,9 +342,17 @@ export async function distillContextOnly(
 
     // Register-aware system prompt (08 §22.7): mirrors `analyzeAssignment` — an intimacy/scenario questionnaire
     // at an explicit tier gets the explicit register so the distill isn't valid-but-EMPTY for frank answers.
+    //
+    // 74 §5.8a — …and it mirrors it for SUPPRESSION too. This writes an `approved: true` Insight straight into
+    // this participant's own context (below), which is the exact reason `analyzeAssignment` carries the list:
+    // the insight is read back by the person whose answers it summarizes, so their hard nos apply here as much
+    // as they do to the questions. The comment above claimed the mirror; the code only did half of it.
+    const suppression = await buildOwnSuppressionBlock(deps.fs, deps.key, subjectPersonId);
     const call = await runClaude(
       deps,
-      buildAnalysisSystem(snapshot.type, snapshot.sensitivity),
+      [buildAnalysisSystem(snapshot.type, snapshot.sensitivity), suppression]
+        .filter(Boolean)
+        .join('\n\n'),
       buildAnalysisUserMessage({ title: snapshot.title, qa }),
       'questionnaire.analyze',
       800,

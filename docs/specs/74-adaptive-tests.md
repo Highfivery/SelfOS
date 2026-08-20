@@ -1227,6 +1227,106 @@ orphaned when §3.6.30 retired that register whole. `retireCutMarks` resolves a 
 with no row on any screen — the un-gettable-rid-of preference §3.2 abolished. Correct, and now pinned:
 the guard fails (the mark migrates instead) the moment `broodmare` is put back in the bank.
 
+### 3.6.33 The production audit — the bank says each thing once, and the examples are English — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+A full pre-release pass: duplicates, gender/body targeting, saved data, and whether the analysis reaches
+the whole app. Measured against the shipped bank and the owner's decrypted vault throughout.
+
+**The duplicate question has an answer, and it is "almost none."** A mechanical scan found 46
+normalized-collision groups; two semantic reviewers proposed **75 cuts**; a skeptic **saved 73**. That 97%
+save rate is not softness — it is what the list was made of. The dominant pattern, 27 of the 46 groups, is
+`names-body` against `anatomy-her`/`anatomy-him`, and it is **a real register split, not a duplicate**:
+`names-body:my cock` is a VOCATIVE (`look at you, my cock` — being addressed AS the part) while
+`anatomy-him:cock` is DESCRIPTIVE (`I want your cock right now`). Both family notes claim the same job in
+words ("what to call her body" vs "the bank had no anatomy names at all"), which is what made it look like
+the §3.6.29 defect at scale; the examples settle it. The cross-register suppression contradiction that
+WOULD make it one is already prevented by §3.6.31's loved-mask: ruling out the deck's `cock` while loving
+the name `my cock` leaves the name usable, because a loved phrase containing the needle is blanked before
+the match. Checked, not assumed.
+
+**Four genuine collisions, all owner-decided.** `names-hard-power:my majesty` (beside `your majesty`, same
+tier), `names-sharing:my third` (beside `our third`, same tier), `anatomy-him:thick cock` (the same word at
+two tiers), and `names-rough-mild:my terrible tease`. Verified before cutting that the surviving sibling
+carries the same suppression the owner had expressed — `my awful tease` is `never`/`never` for him too, so
+the cut costs him nothing. **2,224 to 2,221.**
+
+**The skeptic's saves are the substance of this section**, because they are what a keyword pass would have
+destroyed: `handmaid` post-_Handmaid's Tale_ means coerced reproductive slavery where `handmaiden` means
+biblical attendance; `femboy` and `my femme boy` are not homophones but a bare internet identity term
+against a queer term of art under a possessive; `names-sharing` is a nine-verb transaction ladder (loaned /
+offered / traded / shared / borrowed / swapped / passed-around / gifted / given) where cutting one member
+breaks the axis; `names-rough-heavy` runs a systematic slut/whore mirror where `stupid slut` is half a
+matched pair. And the seven `+ for me` deck pairs are ONE decision, not seven — kept, because the bank
+already tiers them coherently in **both** directions (`touch yourself` t2 to `+for me` t3, but
+`spread that ass for me` t3 to bare t4) and about a dozen `for me` lines have no bare twin at all.
+
+**What the audit actually found was not duplicates — it was broken English.** **61 names carried an
+ungrammatical example**: a bare-noun template applied to a name that already owns a possessive —
+`"you're such a my cock queen"`, `"someone's been a my sassy girl"`, `"you filthy my greedy slut"`,
+`"you pathetic my imbecile"`. 4.7% of the names, on the one screen a person reads several hundred rows of.
+Two independent detections agreed on the count; the owner chose `you're {name}` for all 61. Plus **four
+lines of double-encoded mojibake stored ESCAPED** (as `â` rather than an em dash), so it
+read as plain ASCII in the source and only became U+00E2 plus a C1 control at runtime — invisible to a
+decoded-text scan of the file, which is why it survived every prior pass. And three examples that
+contradicted their own entry: `your fuckhole` illustrated with **"you're just MY fuckhole tonight"** (a
+direction flip on the screen whose whole job is hear-vs-say), and `your little cunt` / `creaming` both
+presupposing the SPEAKER has a cock, which the term never requires — so a same-anatomy couple was shown a
+term with an example they cannot use. All three classes guarded, each **verified to fail when reverted**.
+
+**Targeting verified rather than re-derived.** Zero self-contradicting `body` pairs — the §3.6.30 sweep
+held. Zero `addresses` misses against §3.6.23's ACTUAL rule (grammatical gender only), and all 88
+reverse-check hits correct, including the foreign terms that carry gender in their own language
+(`bella`/`bello`, `mi reina`/`mi rey`). The one live inconsistency was six female-coded names sitting
+untagged beside a tagged `temptress`/`seductress`; the owner tagged `minx` · `my little minx` ·
+`naughty little minx` · `saucy minx` · `siren` · `jezebel` as `girl`. **Consequence, stated because it is
+user-visible:** the owner holds a hear-side `never` on all six, and a man is not asked to be called a minx,
+so the prune clears those six hear-side nos — they remain suppressed on `say`. The two both-genital deck
+lines stay untagged and fail open (the handoff said three; there are exactly **two**).
+
+**`peach` restored on the owner's own line** — not as a names-body vocative but as anatomy vocabulary used
+OF them: `anatomy-her:your peach`, tier 1, `your peach is so juicy`. Body-untagged, because he named it as
+"their ass or pussy" and one field cannot say both — the §3.6.5 fail-open posture.
+
+**Saved data, verified on the real vault through the app's own resolver.** Ben 717 to 715 (one empty row
+with no answer on either side, plus the `my terrible tease` mark that goes with its entry), 0 boundaries.
+Angel 16 to 0 — every one of her marks is a legacy DECK mark with no per-direction state, cleared by
+§3.6.26's owner decision, and her four `kind:'word'` boundaries correctly dropped. Zero retired-family
+entries, zero unknown keys, zero marks migrating to a dead `retiredInto` target.
+
+**The live-model pass, re-run because the content changed.** All four phases green against real Claude at
+the owner's real shape (717 entries, 666 suppressed): explicit lines carrying both voices, six tappable
+probe questions, five distinct scenario moments each with a non-verbal option, and a synthesis whose
+readings were specific — it found the hear/say gap on `I'm close` and read it positionally ("saying it puts
+you in the narrated seat rather than the narrating one"). **The §3.6.31 regression check passes: 4
+paragraphs written, 4 kept, zero eaten by the boundary filter.**
+
+**Six MORE conditional-suppression gaps, in the class §5.8a exists to close.** A consumer map re-verified
+all six prior fixes still hold, then found six paths that write prose a person reads and carried no hard-no
+list at all:
+
+- **`alignmentService.distillContextOnly`** — the strongest. It writes an `approved: true` Insight straight
+  into that participant's own context, and its own comment says it "mirrors `analyzeAssignment`" — which
+  DOES carry the list, for exactly that stated reason. The comment claimed the mirror; the code did half of
+  it. The §3.6.24 two-comments-disagree tell, again.
+- **`storyTitleService`** (the title and essence printed on the book), **`storyManuscript`** (findings
+  quoted back to the author) and **`storyStructureService`** — all three omitted the 6th argument to
+  `buildBiographerSystem`, whose own docstring says an absent block leaves the prompt byte-unchanged.
+- **`guidanceService`** (`guided.suggest`) — writes a `reason` per suggestion that the person reads, with
+  `adultAllowed` admitting the intimacy group into the catalog.
+- **`intakeService.synthesizePortrait`** — reads the whole `adult`/`restricted` intimacy section and writes
+  the portrait back to them.
+
+**And a fix that had shipped unguarded:** nothing anywhere asserted that `togetherPromptBuilder` emits the
+hard-no list for an un-acked pair — the §3.6.30 couples fix, the one whose whole point is that it is not
+inside the ack. Now pinned, together with the de-dup invariant it rides on (the standalone block is emitted
+only when the merged block is absent, which is safe only because the merged builder returns `''` when there
+is nothing to suppress either).
+
+**Deliberately NOT wired, recorded so the next audit does not re-tread it:** classifiers, the semantic
+dedup, the ask-ledger backfill, structural planners, image-prompt distillations, `coverageService` /
+`gapFinderService` (the drafting pass that consumes them carries the list), and `improveQuestion` (its
+`deps.personId` is the AUTHOR, not the recipient, and the rewrite is author-reviewed in the editor).
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

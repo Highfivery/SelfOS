@@ -49,6 +49,7 @@ import {
   type IntakeSectionDef,
 } from './intakeCatalog';
 import { intakeAnswerHashes } from './portraitFreshness';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * Personal-onboarding intake service (18-personal-onboarding §5/§14). A hybrid, resumable self-onboarding:
@@ -1346,12 +1347,18 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   const at = now.toISOString();
   const session = await ensureIntakeSession(fs, key, personId, now);
   const context = await buildContext(fs, key, personId);
+  // 74 §5.8a — the portrait is written back to the person and its facts feed their own context, and the
+  // material it reads includes the whole `adult`/`restricted` intimacy section. Their hard nos apply to what
+  // is written about them as much as to what is asked of them. Unconditional: suppression only ever prevents,
+  // and a person with no lexicon yet simply gets ''.
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
   const system = [
     PERSONA,
     SAFETY,
     context,
     `You are completing a warm "getting to know you" onboarding for ${person.displayName}. This is ` +
       `reflective self-knowledge, NOT a clinical assessment, diagnosis, or treatment.`,
+    suppression,
   ]
     .filter(Boolean)
     .join('\n\n');

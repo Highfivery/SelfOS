@@ -9,6 +9,7 @@ import {
   type StoryContinuityResult,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { subjectLexiconBlocks } from './storyGenerationService';
 import { resolvePersonOptionNames } from './castRegister';
 import { findingSignature } from './storyContinuity';
 import { manuscriptMetrics } from './manuscriptMetrics';
@@ -108,6 +109,7 @@ export async function readManuscript(deps: AiDeps, bookId: string): Promise<Stor
     book.title,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = [
     `You are reading ${book.title} straight through, as a whole book, the way an editor reads a manuscript before it goes out. You are NOT rewriting it and NOT proofreading it — you are naming the few things that are wrong at the level of the WHOLE, which no one can see one chapter at a time.`,

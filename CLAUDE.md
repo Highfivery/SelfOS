@@ -1229,8 +1229,6 @@ life` was dropped). **Nobody loses a mark**: every consumer reads the person's o
   fields, so cost computed to NaN, JSON wrote it as `null`, and the poisoned event made every budget check for
   that person throw — taking AI down app-wide until the shard was repaired.**
 
-<<<<<<< Updated upstream
-
 - 2026-08-18 — **Fix (an emailed question got the same three buttons every time; owner-reported a SECOND
   time; SPEC 67 §3.3a; on `fix/suggestion-email-answerable`).** The screenshot: a reflective question — _"When
   did you first learn that holding it alone was the safer thing to do?"_ — under **I'm game · Maybe later ·
@@ -1302,8 +1300,6 @@ really']` stapled onto an arbitrary AI-written body. **Owner's rule:** _"it shou
   could only ever fail. Grep for the rule, not the symptom. (3) Offline fakes return clean short JSON forever —
   they cannot show unescaped quotes, a refusal, or a sentence long enough to break a layout, which is three of
   the four found here in one live run.**
-
-  > > > > > > > Stashed changes
 
 - 2026-08-18 — **LIVE-MODEL verification (the owner supplied a key; the model was never the problem — my TESTS
   were; SPEC 74 §3.6.14).** Ran the §3.6.9 audit walk against **real Claude** end to end. All three AI phases

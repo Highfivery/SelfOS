@@ -260,6 +260,39 @@ describe('NamesPhase (74 §3.6.8)', () => {
    * land on a grid and choose again. The index comes from the bank's own order, never the card sort — an
    * index that moves when you re-sort is worse than no index at all.
    */
+  /*
+   * 74 §3.6.34 — "still unmarked", the same control the words step has, in the same place.
+   *
+   * The hard thing on a second visit is not choosing a register, it is finding the rows inside it you have
+   * not answered — 123 names in `names-body`. The count beside it is a COUNT and never a fraction (§3.6.29):
+   * "3 still unmarked" says how much is outstanding, "3 of 18" would make the completion claim.
+   */
+  it('filters to what is still unmarked, and counts it without a denominator', async () => {
+    await load();
+    renderPhase();
+    await userEvent.click(screen.getByRole('button', { name: /praise/i }));
+    const before = screen.getAllByRole('button', { name: /love it$/ }).length;
+
+    // Mark one name, both ways, so it drops out of "still unmarked".
+    const hearAll = screen.getAllByRole('button', { name: /→ .* — love it$/ });
+    // The first row's two columns are the first two matches: hear then say.
+    await userEvent.click(hearAll[0]!);
+    await userEvent.click(hearAll[1]!);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Still unmarked' }));
+    const after = screen.getAllByRole('button', { name: /love it$/ }).length;
+    expect(after).toBeLessThan(before);
+    // A COUNT of what is outstanding — never "3 of 18", which would pair it with a total (§3.6.29).
+    // Scoped to the filter's own row: "Register 1 of 2" in the header IS a position and stays (owner,
+    // 2026-08-20), so a page-wide assertion would catch the wrong thing.
+    const filterRow = screen.getByRole('group', { name: 'Show' }).parentElement!;
+    expect(within(filterRow).getByText(/\d+ still unmarked/)).toBeInTheDocument();
+    expect(within(filterRow).queryByText(/of/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Everything' }));
+    expect(screen.getAllByRole('button', { name: /love it$/ })).toHaveLength(before);
+  });
+
   it('moves register-to-register in place, in a stable order, without going back to the grid', async () => {
     await load();
     renderPhase();

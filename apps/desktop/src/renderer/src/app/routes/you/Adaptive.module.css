@@ -2350,3 +2350,12 @@ details[open] > .foldHead .foldChevron {
     transition: none;
   }
 }
+
+/* 74 §3.6.34 — the shared "still unmarked" filter, identical on the words step and the names step. */
+.markFilter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-1);
+}

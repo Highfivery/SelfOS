@@ -149,6 +149,7 @@ import { isAnsweredTurn } from '@selfos/core/schemas';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
 import { PracticeSheet } from './PracticeSheet';
+import { MarkFilter } from './MarkFilter';
 import { NamesPhase } from './NamesPhase';
 import { TakeMap } from './TakeMap';
 import { StepActions, StepEyebrow, TakeRail, Tally } from './TakeRail';
@@ -492,6 +493,19 @@ export function AdaptiveTake(): JSX.Element {
     () => (bank && area ? bank.entries.filter((entry) => entry.family === area.id) : []),
     [bank, area],
   );
+  /*
+   * 74 §3.6.34 — "still unmarked", on BOTH marking steps.
+   *
+   * The hard thing on a second visit is not choosing an area, it is finding the rows inside it you have not
+   * answered — 36 areas of up to 47 rows here, a 123-row register there. The filter is per-step state rather
+   * than a store field: it is a way of LOOKING at the current screen, and it should not follow you to the
+   * next area or survive a reload as a half-hidden list.
+   */
+  const [showOnly, setShowOnly] = useState<'all' | 'new'>('all');
+  const visibleAreaEntries = useMemo(
+    () => (showOnly === 'all' ? areaEntries : areaEntries.filter((e) => !store.marks[e.key])),
+    [areaEntries, showOnly, store.marks],
+  );
   const withheld = area ? (bank?.withheldByFamily[area.id] ?? 0) : 0;
   /**
    * The direction this area is actually being rated in. Orientation resolves it per entry, and in practice an
@@ -702,6 +716,7 @@ export function AdaptiveTake(): JSX.Element {
     const last = (bank?.families.length ?? 1) - 1;
     const index = next < 0 ? 0 : next > last ? last : next;
     setAreaIndex(index);
+    setShowOnly('all');
     void store.rememberArea(index);
     // A new area starts at the top; otherwise you land mid-list on a screen you have never seen. Scoped to
     // the app's own scroll container rather than every element in the document.
@@ -1227,20 +1242,15 @@ export function AdaptiveTake(): JSX.Element {
                     })}
                   </Select>
                 </div>
-                {/* One slim bar, not 36 dashes. */}
-                <div
-                  className={adaptive.track}
-                  role="progressbar"
-                  aria-valuenow={areaIndex + 1}
-                  aria-valuemin={1}
-                  aria-valuemax={bank.families.length}
-                  aria-label={`Area ${areaIndex + 1} of ${bank.families.length}`}
-                >
-                  <i
-                    style={{ width: `${((areaIndex + 1) / bank.families.length) * 100}%` }}
-                    aria-hidden="true"
-                  />
-                </div>
+                {/*
+                 * 74 §3.6.34 — the bar is gone; "Area N of M" stays.
+                 *
+                 * It filled toward 100% as you moved through the areas, which is a meter filling toward a
+                 * full width — the thing §3.6.29's durable rule names — and it reached full on the last area
+                 * whether you had marked everything or nothing. §3.6.29 removed exactly this from the name
+                 * register cards and left it here, which is also why the two steps read differently. The
+                 * COUNT survives: the rule's line is the denominator paired with a meter, not the count.
+                 */}
                 {area.note ? (
                   <Text tone="secondary" className={adaptive.areaNote}>
                     {area.note}
@@ -1272,6 +1282,15 @@ export function AdaptiveTake(): JSX.Element {
 
               <div className={adaptive.deckBody}>
                 <div className={adaptive.rows}>
+                  {areaEntries.length > 0 ? (
+                    <MarkFilter
+                      value={showOnly}
+                      onChange={setShowOnly}
+                      total={areaEntries.length}
+                      shown={visibleAreaEntries.length}
+                      noun="here"
+                    />
+                  ) : null}
                   {areaEntries.length === 0 ? (
                     /* Every term here is aimed at a body or a role that is neither of theirs (common on a
                        same-sex configuration, where whole areas resolve to one side). */
@@ -1279,8 +1298,12 @@ export function AdaptiveTake(): JSX.Element {
                       Nothing in this area is aimed at either of you, so there&rsquo;s nothing to
                       mark here.
                     </Text>
+                  ) : visibleAreaEntries.length === 0 ? (
+                    <Text tone="secondary">
+                      Every line in this area is marked. Switch to <b>Everything</b> to change one.
+                    </Text>
                   ) : (
-                    areaEntries.map((entry) => {
+                    visibleAreaEntries.map((entry) => {
                       // Nothing is settled: a no is a preference, changeable in any sitting
                       // (74 §3.2, amended 2026-08-19). A row used to freeze once the take that set it
                       // closed, which stranded a mis-tap noticed the next day.

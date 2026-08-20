@@ -1582,6 +1582,17 @@ when you re-sort is worse than no index), and a register change **resets the scr
 new register's name, exactly as `goToArea` does — otherwise a keyboard or screen-reader user gets nine silent
 screen changes.
 
+**Two more consistency calls, both the owner's.** The words step carried a **filling progress bar** —
+`(areaIndex + 1) / 36 * 100%` — that reached full on the last area whether you had marked everything or
+nothing. That is a meter filling toward a full width, which is the thing §3.6.29's durable rule names, and
+§3.6.29 had removed exactly it from the name register cards while leaving it here. **The bar goes; "Area N of
+M" stays** — the rule's line is a denominator paired with a meter, not a count. And **"still unmarked" ships
+on BOTH steps**, in one shared `MarkFilter`, because adding it to the names step alone would have created a
+new inconsistency in the same change that removed one. Its own label is a COUNT ("12 still unmarked"), never
+"12 of 47"; it is per-screen state rather than a store field (a way of looking at the current screen, not
+something that should follow you to the next area or survive a reload as a half-hidden list); and it **resets
+on every area and register change**, because arriving on a filtered empty list reads as a broken area.
+
 **One live-model finding, fixed.** All four phases were re-run against real Claude at the owner's real shape.
 Lines, probe and synthesis were green — the synthesis wrote four paragraphs and **all four survived the
 boundary filter**, which is the §3.6.31 regression check — and its readings were specific and positional

@@ -898,8 +898,49 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(
       within(rail).getByRole('button', { name: /Done with the words for now/ }),
     ).toBeInTheDocument();
-    // Progress is one bar, not 36 dashes.
-    expect(screen.getByRole('progressbar', { name: /Area 1 of 2/ })).toBeInTheDocument();
+    /*
+     * 74 §3.6.34 — where you ARE, never how far along you are.
+     *
+     * This used to assert a progressbar. It filled toward 100% as you moved through the areas and reached
+     * full on the last one whether you had marked everything or nothing — a meter filling toward a full
+     * width, which is the thing the durable no-completion rule names, and which §3.6.29 had already removed
+     * from the name register cards while leaving it here. The COUNT survives: the rule's line is a
+     * denominator paired with a meter, not a count.
+     */
+    expect(screen.getByText(/Area 1 of 2/)).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  /*
+   * 74 §3.6.34 — the SAME "still unmarked" the names step has, in the same place, in the same words.
+   *
+   * Both marking screens have the same second-visit problem — 36 areas of up to 47 lines here, a 123-name
+   * register there — and they were drifting into different shapes, which is what this section exists to stop.
+   */
+  it('filters an area to what is still unmarked, and resets on the next area', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    await screen.findByRole('complementary', { name: /The steps/i });
+    const before = screen.getAllByRole('button', { name: /— love it$/ }).length;
+    expect(before).toBeGreaterThan(1);
+
+    const [firstMark] = screen.getAllByRole('button', { name: /— love it$/ });
+    await userEvent.click(firstMark!);
+    await userEvent.click(screen.getByRole('button', { name: 'Still unmarked' }));
+    expect(screen.getAllByRole('button', { name: /— love it$/ }).length).toBeLessThan(before);
+
+    // A new area starts unfiltered — arriving on a filtered empty list reads as a broken area.
+    const rail = await screen.findByRole('complementary', { name: /The steps/i });
+    await userEvent.click(within(rail).getByRole('button', { name: /Next area/ }));
+    expect(screen.getByRole('button', { name: 'Everything' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
   it('turns a rejected LINE into a boundary only on a second, deliberate tap', async () => {

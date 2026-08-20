@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ban, Contrast, Flame } from 'lucide-react';
 import type { AdaptiveNameEntryView, AdaptiveNameRegisterView } from '@shared/schemas';
 import { Heading, Select, Text } from '../../../design-system/components';
@@ -13,6 +13,7 @@ import {
   type RegisterSort,
   type RegisterStats,
 } from './registerStats';
+import { MarkFilter, type MarkFilterValue } from './MarkFilter';
 import adaptive from './Adaptive.module.css';
 
 /**
@@ -154,11 +155,16 @@ export function NamesPhase({
   const names = store.names;
   const openId = store.openRegister;
   const [sort, setSort] = useState<RegisterSort>('state');
+  /* 74 §3.6.34 — the same "still unmarked" the words step has, in the same place, in the same words. */
+  const [showOnly, setShowOnly] = useState<MarkFilterValue>('all');
 
   const open = useMemo(
     () => names?.registers.find((register) => register.id === openId) ?? null,
     [names, openId],
   );
+  useEffect(() => {
+    setShowOnly('all');
+  }, [openId]);
   const rows = useMemo(
     () =>
       openId
@@ -184,6 +190,13 @@ export function NamesPhase({
   const me = names.selfName ?? 'you';
   const them = names.partnerName ?? 'them';
   const openIndex = names.registers.findIndex((register) => register.id === open?.id);
+  const visibleRows =
+    showOnly === 'all'
+      ? rows
+      : rows.filter((entry) => {
+          const mark = store.nameMarks[entry.key];
+          return mark?.hear === undefined && mark?.say === undefined;
+        });
   const markedHere = rows.filter((entry) => {
     const mark = store.nameMarks[entry.key];
     return mark?.hear !== undefined || mark?.say !== undefined;
@@ -310,14 +323,26 @@ export function NamesPhase({
       </div>
       <div className={adaptive.deckBody}>
         <div className={adaptive.rows}>
-          {rows.map((entry, index) => (
+          <MarkFilter
+            value={showOnly}
+            onChange={setShowOnly}
+            total={rows.length}
+            shown={visibleRows.length}
+            noun="names"
+          />
+          {visibleRows.length === 0 ? (
+            <Text tone="secondary">
+              Every name in here is marked. Switch to <b>Everything</b> to change one.
+            </Text>
+          ) : null}
+          {visibleRows.map((entry, index) => (
             <NameRow
               key={entry.key}
               entry={entry}
               me={me}
               them={them}
               /** A tier line whenever the intensity steps up — a signpost, never a gate. */
-              tierBreak={index === 0 || rows[index - 1]?.tier !== entry.tier}
+              tierBreak={index === 0 || visibleRows[index - 1]?.tier !== entry.tier}
               mark={store.nameMarks[entry.key] ?? {}}
               onMark={(side, value) => store.markName(entry.key, side, value)}
             />

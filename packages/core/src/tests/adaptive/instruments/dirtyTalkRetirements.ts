@@ -234,4 +234,13 @@ export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = [
    * retires the mark outright, which is the right answer once the whole register has gone.
    */
   'names-masculine',
+  /*
+   * 74 §3.6.33 — retired whole at the owner's request, 2026-08-20.
+   *
+   * The breeding register (36 entries, tiers 4-5). Its one migration row
+   * (`names-breeding:my-broodmare → names-breeding:broodmare`) was already inert after §3.6.32 cut the
+   * target, and stays, per the frozen rule: a target that is no longer a live entry resolves to `undefined`
+   * and the mark is retired outright rather than moved somewhere no screen can reach.
+   */
+  'names-breeding',
 ];

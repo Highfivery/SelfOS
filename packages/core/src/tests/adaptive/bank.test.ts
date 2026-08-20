@@ -196,9 +196,11 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   it('splits every family into exactly one phase — never both, never neither', () => {
     expect(names.length + deck.length).toBe(DIRTY_TALK.bank.families.length);
     expect(names.some((f) => deck.some((d) => d.id === f.id))).toBe(false);
-    // 20 since §3.6.30 retired `names-masculine`. A floor, not a target — the phase has to stay
-    // substantial, and a retirement that halved it should fail here rather than pass quietly.
-    expect(names.length).toBeGreaterThanOrEqual(20);
+    // 19 since §3.6.33 retired `names-breeding` (20 after §3.6.30's `names-masculine`). A floor, not a
+    // target — the phase has to stay substantial, and a retirement that halved it should fail here rather
+    // than pass quietly. It did exactly that on the breeding retirement, which is the point: each step down
+    // is a deliberate, owner-approved edit, never a quiet drift.
+    expect(names.length).toBeGreaterThanOrEqual(19);
   });
 
   it('gives every name a line showing it in use — a bare word is never the whole row', () => {

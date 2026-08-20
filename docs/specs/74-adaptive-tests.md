@@ -1322,6 +1322,19 @@ inside the ack. Now pinned, together with the de-dup invariant it rides on (the 
 only when the merged block is absent, which is safe only because the merged builder returns `''` when there
 is nothing to suppress either).
 
+**`names-breeding` retired whole** at the owner's request (2026-08-20) — 36 entries, tiers 4-5, 19 name
+registers left. Listed on the bank rather than derived, per §3.6.27: a family that has left cannot be
+derived FROM the bank, and its marks would otherwise outlive every screen that could change them. Verified
+on the real vault: the owner's 3 marks in it retire cleanly (717 to 712 across this whole section), with
+zero retired-family entries, zero unknown keys and zero marks migrating to a dead target.
+
+**Two tripwires fired on it, and both were right to.** The name-register FLOOR (`>= 20`) failed, which is
+exactly what a floor is for — it is lowered to 19 deliberately rather than drifting quietly. And the
+§3.6.32 dead-target guard went partly VACUOUS: it used `names-breeding:my-broodmare`, so retiring the
+register whole made it pass through the FAMILY branch of `isRetired` instead of the dead-target branch it
+documents. Re-pointed to `names-warm:my-angel` (one of 21 rows with a live source family and a dead
+target), and re-verified to fail for the reason it claims.
+
 **Two phone-width fixes, both owner-approved.** Inside an open register the exit — "Done with this one" —
 sat in `.railWrap`, which §3.6.30 never gave the fixed-bar treatment it gave `.rail`. It was
 `position: sticky` in a column that stacks at 900px, which that section's own comment already explains

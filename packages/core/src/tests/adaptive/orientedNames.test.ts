@@ -446,15 +446,18 @@ describe('a mark on a name the bank retired', () => {
 
   it('retires the mark outright when the name it was retired INTO has since been cut', () => {
     /*
-     * 74 §3.6.32 — the frozen `retiredInto` map now holds rows whose TARGET no longer exists: the
-     * `names-masculine:my-X → names-masculine:X` rows (the register was retired whole in §3.6.30), and
-     * `my-broodmare → broodmare` (cut here as an animal-sex leftover). The map is frozen by design, so those
-     * rows stay — and this pins what they do: `bankEntry` cannot resolve the target, so the mark is retired
-     * outright rather than migrating to a key with no row on any screen, which is the un-gettable-rid-of
-     * preference §3.2 abolished.
+     * 74 §3.6.32 — the frozen `retiredInto` map holds rows whose TARGET no longer exists. The map is frozen
+     * by design, so those rows stay — and this pins what they do: `bankEntry` cannot resolve the target, so
+     * the mark is retired outright rather than migrating to a key with no row on any screen, which is the
+     * un-gettable-rid-of preference §3.2 abolished.
+     *
+     * 74 §3.6.33 — this used to use `names-breeding:my-broodmare`, and retiring that register whole made the
+     * test pass through the FAMILY branch of `isRetired` instead, leaving the dead-target path it documents
+     * unexercised. `names-warm:my-angel → names-warm:angel` is the same shape with a LIVE source family
+     * (21 such rows exist), so the assertion once again fails for the reason it claims.
      */
     const after = pruneUnshownMarks(
-      lex([mark('names-breeding:my-broodmare', 'names-breeding', { hearState: 'love', hear: 3 })]),
+      lex([mark('names-warm:my-angel', 'names-warm', { hearState: 'love', hear: 3 })]),
       DIRTY_TALK.bank,
       OPEN_ORIENTATION,
       new Date(),

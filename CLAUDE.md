@@ -612,6 +612,11 @@ A running log of durable decisions and feedback captured into the project config
   the names bank **1,297 → 709, 20 registers → 10**. The measurement that made it coherent rather than merely
   large: of his 162 marks across the nine, **295 sides are `never`, 5 `okay`, and not one is a `love`** — he
   had already ruled out essentially everything in them. Verified mark by mark on the real vault: **717 → 547**.
+  **A third pass took `names-aftercare` too** (29 of its 34 named, so retired whole on the §3.6.29
+  `names-playful` precedent) plus 23 in `names-body` and one in `names-worship`. **The names bank ends at 651
+  across 9 registers, from 1,297 across 20.** Vault 547 → 524, every retired mark a `never`, and zero marks in
+  aftercare. Three typos in the list were CONFIRMED with the owner rather than guessed — they mattered because
+  all three were among that register's survivors.
   **Lessons: (1) my first vault measurement was WRONG in the most convincing way — a hand-built `Orientation`
   missing `selfAddress`/`partnerAddress` made `addressMatches` false for every tagged entry, so I measured "135
   of Ben's marks dropped" and "ALL of Angel's dropped" and both were artifacts of my own harness. Identical

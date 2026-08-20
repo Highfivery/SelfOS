@@ -258,4 +258,11 @@ export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = [
   'names-service',
   'names-sharing',
   'names-other-tongues',
+  /*
+   * 74 §3.6.33 — retired whole rather than left as a stub. The owner's removal list named 29 of its 34
+   * entries, which is the §3.6.29 `names-playful` situation exactly: a register worn down to a handful is
+   * a worse answer than a register that has gone, because the survivors no longer represent the thing the
+   * register was for.
+   */
+  'names-aftercare',
 ];

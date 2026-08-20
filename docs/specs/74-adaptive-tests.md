@@ -1344,6 +1344,22 @@ loved vocabulary is lost anywhere. Verified end to end on the real vault: **717 
 by mark (112 roleplay, 50 object, 5 rough-mild, 3 breeding, and the one legacy empty row that the migration
 step drops before the prune ever sees it).
 
+**A third pass, and `names-aftercare` with it.** 54 more names, of which 50 matched. Four did not, and the
+three that were typos mattered more than usual because all three were among that register's survivors:
+`my help girl` / `my storng one` / `my sweet wreak` were confirmed by the owner as `my held girl` /
+`my strong one` / `my sweet wreck` rather than guessed. (The fourth, `my divine one`, matched nothing
+because the previous pass had already removed it.) With those confirmed the list named **29 of the
+register's 34**, which is the §3.6.29 `names-playful` situation exactly — a register worn to a handful is a
+worse answer than one that has gone, because the survivors no longer represent what it was for — so it was
+retired whole. Plus 23 in `names-body` and `my deity` in `names-worship`. **The names bank ends at 651
+across 9 registers, from 1,297 across 20 at the start of this section.** On the vault: 547 to 524, all 23
+from `names-body`, all `never`, and **zero marks in `names-aftercare`** — retiring it whole cost nothing.
+
+Two references to the retired register were left deliberately, both matching precedent: the FIXED spine
+(which already carries `names-playful` and others, where a stale id is inert and removing one would change
+a dimension's identity across retakes), and `EVERYDAY_NAME_FAMILIES` — a RELAXATION scope that already
+lists five retired families, where a stale id contributes no entries and so can loosen nothing.
+
 **Five tripwires fired, and each got a different answer — none of them "delete the assertion."** The
 register FLOOR failed twice and was lowered twice, deliberately. The roleplay-framing rule named two dead
 ids, so it is now DERIVED — any surviving register that presents itself as a roleplay must say so in its

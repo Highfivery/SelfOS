@@ -202,7 +202,10 @@ describe('74 §3.6.8 — the pet-name bank', () => {
     // is a deliberate, owner-approved edit, never a quiet drift.
     // 74 §3.6.33 — 10 after the owner retired nine more registers. Each step down is a deliberate,
     // owner-approved edit that had to come here and change this number, never a quiet drift.
-    expect(names.length).toBeGreaterThanOrEqual(10);
+    // 74 §3.6.33 — 9 after `names-aftercare` was retired too. The floor has now caught three separate
+    // retirements in one pass, which is exactly its job: each is a deliberate, owner-approved edit that had
+    // to come here and change this number, never a quiet drift.
+    expect(names.length).toBeGreaterThanOrEqual(9);
   });
 
   it('gives every name a line showing it in use — a bare word is never the whole row', () => {

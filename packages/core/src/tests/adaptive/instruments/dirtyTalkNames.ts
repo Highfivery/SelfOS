@@ -186,7 +186,7 @@ export const DIRTY_TALK_NAMES: Bank = buildBank([
         { text: 'boy', ex: 'up here, boy', addresses: 'man' },
         { text: 'baby boy', ex: 'on your knees, baby boy', addresses: 'man' },
         { text: 'girl', ex: 'easy, girl', addresses: 'girl' },
-        { text: 'little miss', ex: 'stay there, little miss' },
+        { text: 'little miss', ex: 'stay there, little miss', addresses: 'girl' },
         { text: 'little sir', ex: 'sweet little thing — little sir', addresses: 'man' },
         { text: 'kitten', ex: 'come here, kitten' },
         { text: 'kitty', ex: "that's it, kitty" },
@@ -267,7 +267,7 @@ export const DIRTY_TALK_NAMES: Bank = buildBank([
       3: [
         { text: 'sir', ex: 'yes, sir', addresses: 'man' },
         { text: "ma'am", ex: "please, ma'am", addresses: 'girl' },
-        { text: 'miss', ex: 'thank you, miss' },
+        { text: 'miss', ex: 'thank you, miss', addresses: 'girl' },
         { text: 'mistress', ex: "I'm yours, mistress", addresses: 'girl' },
         { text: 'daddy', ex: 'of course, daddy', addresses: 'man' },
         { text: 'mommy', ex: 'please, mommy', addresses: 'girl' },
@@ -415,20 +415,6 @@ export const DIRTY_TALK_NAMES: Bank = buildBank([
         { text: 'my barbarian', ex: "you're my barbarian" },
       ],
       5: [{ text: 'my warlord', ex: 'there he is — my warlord' }],
-    },
-  ),
-  bankFamily(
-    nameFamily(
-      'names-playful',
-      'Names — playful',
-      "The register a lot of couples actually live in, and the bank has none of it. Worth marking because a name that makes you laugh mid-scene is as much a signal as one that doesn't.",
-    ),
-    {
-      2: [
-        { text: 'my little freak', ex: 'behave, my little freak' },
-        { text: 'freak', ex: 'get over here, freak' },
-      ],
-      3: [],
     },
   ),
   bankFamily(
@@ -663,6 +649,8 @@ export const DIRTY_TALK_NAMES: Bank = buildBank([
     ),
     {
       2: [
+        { text: 'my little freak', ex: 'behave, my little freak' },
+        { text: 'freak', ex: 'get over here, freak' },
         { text: 'flirt', ex: "you're such a flirt" },
         { text: 'cheeky thing', ex: 'come here, cheeky thing' },
         { text: 'cheeky girl', ex: "you're such a cheeky girl", addresses: 'girl' },

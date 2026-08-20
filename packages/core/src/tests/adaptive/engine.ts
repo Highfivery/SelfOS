@@ -107,12 +107,30 @@ export function lexiconDigest(lexicon: EroticLexicon): string {
           .slice(0, CONTEXT_CAP)
           .map((e) => e.text)
           .join(' · ')}`;
-  const loved = lexicon.entries.filter((e) => Math.max(e.hear, e.say) >= 3);
+  /*
+   * 74 §3.6.29 — split by DIRECTION, because a flat list destroys the one thing the take exists to find.
+   *
+   * This used to be `Math.max(hear, say) >= 3` in a single line labelled "they marked these as landing", so
+   * "I want to be called this" and "I want to call them this" arrived indistinguishable — and for a name they
+   * are opposite answers (§3.6.8: "good girl" is wrong as something he is called and exactly right as
+   * something he calls her). The synthesis prompt then asks for "the role they take, what they want to BE to
+   * the other person" and for the hear/say gap, neither of which is answerable from the flattened list. The
+   * coach's own block (`buildOwnLexiconBlock`) has always split them; this is the same split, one file over.
+   */
+  const lovedToHear = lexicon.entries.filter((e) => e.hear >= 3);
+  const lovedToSay = lexicon.entries.filter((e) => e.say >= 3);
+  // The middle mark is a MILD YES (§3.6.2) — usable, never a favourite. Left out entirely, every one of those
+  // taps was write-only for the synthesis, which is the defect §3.6.2 fixed for the coach and missed here.
+  const okay = lexicon.entries.filter(
+    (e) => (e.hearState === 'okay' || e.sayState === 'okay') && e.hear < 3 && e.say < 3,
+  );
   // Re-sourced from the GAP, not the middle mark: `okay` is a mild yes now, so the old `notYet` filter would
   // be permanently empty and this context line would silently stop existing (74 §3.6.2).
   const stuck = lexicon.entries.filter(hasSayGap);
   return [
-    line('They marked these as landing', loved),
+    line('They want to HEAR these — said to them', lovedToHear),
+    line('They want to SAY these — in their own mouth', lovedToSay),
+    line('Fine with, not favourites — usable, never lead with them', okay),
     line('They love hearing these but rate themselves low on saying them', stuck),
     lexicon.themes.length > 0 ? `In their words: ${lexicon.themes.join(' · ')}` : '',
   ]

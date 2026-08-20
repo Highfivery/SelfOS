@@ -1010,6 +1010,83 @@ external ones (`come on my face`) where a vulva-owner can plausibly be the subje
 (`cum in me`, `cum in my ass`, `breed me`) is treated as needing a penis. **Three lines name BOTH bodies**
 (`your cunt was built for my cock`) and one `body` field cannot say so — left open rather than tagged wrong.
 
+### 3.6.29 The production audit — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+A full audit of the bank and the code around it before release. Measured against the shipped bank and the
+owner's decrypted vault throughout; every number below is printed, not estimated.
+
+**The one that mattered most was not content.** The vault held **999 legacy `kind:'word'` boundary records,
+382 of them orphaned** by the four name purges. A word record was how a hard no was stored before §3.6.11 made
+suppression DERIVE from the live mark, and nothing has written one since — the only live writer is the probe's
+"don't ask me that again", which writes a `theme`. `suppressedTexts` ignores a word record only while an entry
+with that text exists, so a purge that removed the entry turned its record into a suppression with no row on
+any screen to lift it; and `violatesBoundary`'s everyday-word relaxation is derived from the person's live
+ENTRIES, so an orphan also lost the relaxation and degraded to a plain substring match on a word like `love`.
+Measured: **27% of ordinary intimate lines rejected app-wide** — `I love the way you look at me`, `kiss me`,
+`stay right there`. Every word record is now dropped in `readLexicon`, `addBoundary` and the bridge take themes
+only, and the two reap passes and the ignore-filter that existed to manage the legacy shape are gone with it.
+**7% after, and every remaining refusal is a live mark they can change.**
+
+**Suppression is unconditional, as its own docstrings always said.** `chatService` had both hard-no lists inside
+`if (adultAcked)`, and the person's OWN inside the topic gate as well (they ride along in
+`buildOwnLexiconBlock`). So a grief or money session carried no hard-no list at all, and REVOKING the 18+ ack
+silently re-opened every word either partner had ruled out. The positive halves stay gated on both; suppression
+can only ever PREVENT, so no state makes withholding it correct (§5.8a).
+
+**The content, decided by the owner from measured lists rather than proposed and applied.**
+
+1. **92 duplicate rows cut.** 82 lines appeared in two or three families (`taste me` in demands-receiving, oral
+   AND taste) — 9.7% of the deck, 184 wasted taps, and a latent contradiction: `suppressedTexts` keys on TEXT,
+   so a `never` on one copy suppressed the word everywhere including where another copy was loved. The keeper
+   is **spine-aware**: the family that feeds a dimension wins, because dropping the other copy would starve
+   the profile. Receiving-voice, claiming, taboo and degradation lose nothing; command goes 102 → 84.
+2. **"cum" for both senses** (owner's call, overriding the proposed split). 32 lines renamed; the ARRIVAL sense
+   stays English (`come here`, `come home`, `come back to me`, `don't stop, someone's coming`). Renaming
+   changes the stored key, so it orphans marks — done now because the §3.6.26 reset means nobody has deck marks,
+   making the cost exactly zero.
+3. **80 lines added: the doer's voice.** The owner's list (`gush on my dick`, `i want you to squirt`) pointed at
+   a structural hole, not a few gaps: the act families are almost entirely the RECEIVING voice — anal 21 self /
+   0 other, cum 27/1, squirt 11/0, impact 22/0. The person being done to had plenty to say and the person doing
+   it had almost nothing. **My own collision check caught 14 duplicates in my own proposal** before they landed,
+   which is the same defect this audit exists to remove.
+4. **24 orientation tags.** 22 deck lines named anatomy decisively and carried no `body`, so a straight man was
+   asked whether he wanted to HEAR "your cunt is soaking"; `miss` and `little miss` were untagged beside a
+   tagged `madam`/`ma'am`/`mistress`. Three lines name BOTH bodies and stay open, per §3.6.28.
+5. **11 sensation tags RELAXED.** `wet`, `tight`, `clenching`, `slick` and the rest describe a mouth or an ass
+   too, so tagging them to one body withheld rows for no reason — a man was never asked about `tight`. Only the
+   decisive six keep a tag.
+6. **`names-playful` retired** (2 entries after the purges — an almost-empty register card). Its survivors moved
+   into `names-rough-mild` via `retiredInto`, so a mark migrates rather than dying. This is the first use of
+   `retiredFamilies` and `retiredInto` TOGETHER and it is now pinned by a test.
+7. **5 within-family near-dupes cut** (`that ass`, `that cock`, `you're big`, `I'm all yours`, `I'm your slut`).
+   Intensity variants (`fuck my ass` / `fuck my ass raw`) stay — those are real distinctions.
+
+**The bank now holds every line exactly once**, guarded by a test: 2,429 entries, unique keys, no duplicated
+text anywhere.
+
+**Five spine dimensions added** — Acts / Body & sensation / Impact & restraint / Anticipation / Care &
+check-ins — with `delivery` folded into Narration. **14 of the 33 deck families fed no dimension at all**, so
+395 entries (~790 taps) were marked and reached no score, no trend and no `Insight.metrics`: the §3.6.8 defect
+("44 of 78 names were marked and then reached nothing") an order of magnitude larger. Adding to a fixed spine is
+the safe direction — an older take simply has no score there.
+
+**The synthesis digest keeps the two directions apart.** `lexiconDigest` was one line built from
+`Math.max(hear, say) >= 3`, so "call me this" and "I want to call them this" — opposite answers on a pet name —
+arrived as the same fact, while the prompt asks for "the role they take, what they want to BE to the other
+person" and for the hear/say gap. Neither was answerable from what it was given. It now splits by direction and
+carries the middle mark, which had been write-only for the synthesis exactly as §3.6.2 found it was for the coach.
+
+**The bank is bottomless, and the register cards now say so** (owner's call). A complete take is 2,446 rows ×
+2 marks = **4,892 taps**; nobody finishes it and nothing said so. Worse, the cards carried a percentage, a
+filling bar, "N of M names marked", "all marked ✓" and "N left" — five ways of saying a register is finishable,
+against the durable no-completion rule. It is not academic: **`names-rough-mild` went 130 → 132 in this very
+change**, so anyone who had marked all 130 would open the app to "98% · 2 left" having done nothing. Counts up,
+no denominators, and one line saying there is no finishing it.
+
+**Verified on the real vault, with the new bank:** 865 → 758 entries, 1,071 boundaries → 0, suppression
+1,140 → 709 (all live and liftable), and **zero leftovers** — no entry in a retired family, no key missing from
+the bank, no word record.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

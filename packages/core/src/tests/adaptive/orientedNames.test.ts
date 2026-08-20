@@ -40,7 +40,7 @@ describe('74 §3.6.28 — the WORDS are oriented by body too', () => {
     // The reported bug. "cum in me" names no organ of the SPEAKER's — it needs the LISTENER to have a penis
     // — so it is an ordinary listener-bodied line that simply had no tag, and was offered both ways to
     // everyone. He can want to HEAR it; he cannot say it to a partner with no penis.
-    const sides = shownSides(deck('cum:cum-in-me'), STRAIGHT_MAN);
+    const sides = shownSides(deck('demands-receiving:cum-in-me'), STRAIGHT_MAN);
     expect(sides).toContain('hear');
     expect(sides).not.toContain('say');
   });
@@ -69,7 +69,7 @@ describe('74 §3.6.28 — the WORDS are oriented by body too', () => {
   it('leaves a line whose anatomy decides nothing open to everyone', () => {
     // The resolver fails OPEN by design (§3.6.5). "make me come" and "come with me" name nobody's anatomy,
     // so tagging them would give someone a quietly thinner test for no reason.
-    for (const key of ['cum:make-me-come', 'cum:come-with-me']) {
+    for (const key of ['cum:make-me-cum', 'cum:cum-with-me']) {
       expect(shownSides(deck(key), STRAIGHT_MAN)).toEqual(['hear', 'say']);
     }
   });
@@ -336,18 +336,24 @@ describe('a gendered role noun is tagged wherever its family already tags its si
 });
 
 /**
- * The `addresses`/`body` axes are checked against the person RECEIVING the line, and a self-label inverts
- * that — "I'm your good girl" is said BY the girl. Tagging one would hide it from a straight man on the side
- * where it fits him and keep it on the side where it doesn't. There is a comment saying so; this is the part
- * that fails if someone "completes" the tagging anyway.
+ * `addresses` is checked against the person RECEIVING the line, and a self-label inverts that — "I'm your
+ * good girl" is said BY the girl. Tagging one would hide it from a straight man on the side where it fits him
+ * and keep it on the side where it doesn't. This is the part that fails if someone "completes" it anyway.
+ *
+ * 74 §3.6.29 narrowed this to `addresses`, which is the axis the inversion is actually about. `body` names
+ * whose ANATOMY a line mentions, and a self-label can perfectly well name the other person's: "I exist for
+ * your cock" is a self-label whose anatomy is the LISTENER's, so the ordinary mapping applies and leaving it
+ * untagged asks a woman whether she wants to hear a line about her own cock. If a self-label ever names the
+ * SPEAKER's anatomy, `bodyOf: 'speaker'` (which did not exist when this guard was written) is how it says so.
  */
 describe('the self-label family stays un-oriented', () => {
-  it('carries no orientation on any entry', () => {
+  it('carries no ADDRESS on any entry, and body only where it names the other person', () => {
     const selfLabels = DIRTY_TALK_BANK.entries.filter((e) => e.family === 'self-labelling');
     expect(selfLabels.length).toBeGreaterThan(0);
     for (const entry of selfLabels) {
       expect(entry.addresses).toBeUndefined();
-      expect(entry.body).toBeUndefined();
+      // A body tag here must be about the LISTENER; a speaker-bodied self-label would need `bodyOf`.
+      if (entry.body) expect(entry.bodyOf).toBeUndefined();
     }
     // ...so it reaches everyone both ways, which is the point: for a straight man "I'm your good girl" is
     // right to hear from her AND is the feminising register to say.

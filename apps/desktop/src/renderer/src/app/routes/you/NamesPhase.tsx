@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Ban, Check, Contrast, Flame } from 'lucide-react';
+import { Ban, Contrast, Flame } from 'lucide-react';
 import type { AdaptiveNameEntryView, AdaptiveNameRegisterView } from '@shared/schemas';
 import { Button, Card, Heading, Select, Text } from '../../../design-system/components';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
@@ -75,15 +75,23 @@ function RegisterCard({
   stats: RegisterStats;
   onOpen: () => void;
 }): JSX.Element {
-  const pct = register.count > 0 ? Math.round((stats.marked / register.count) * 100) : 0;
-  const done = stats.marked > 0 && stats.marked >= register.count;
-  const started = stats.marked > 0 && !done;
+  /*
+   * 74 §3.6.29 — counts up, never a fraction of a whole (the durable no-completion rule, narrowed
+   * 2026-08-18: "the line is the DENOMINATOR").
+   *
+   * This card used to carry a percentage, a filling bar, "N of M names marked", "all marked ✓" and "N left"
+   * — four ways of saying the register is finishable. It is not: the bank GROWS. `names-rough-mild` went
+   * 130 → 132 in this very change, so anyone who had marked all 130 would open the app to "98% · 2 left"
+   * having done nothing, which is precisely the lie the rule exists to prevent. What the card shows now is
+   * what HAPPENED — how many they marked, and how those marks fell.
+   */
+  const started = stats.marked > 0;
   const name = register.label.replace(/^Names — /, '');
   const range = intensityRange(register.minTier, register.maxTier);
   return (
     <button
       type="button"
-      className={`${adaptive.regCard} ${started ? adaptive.regStarted : ''} ${done ? adaptive.regDone : ''}`}
+      className={`${adaptive.regCard} ${started ? adaptive.regStarted : ''}`}
       /*
        * One coherent label, led by the register's own name. Without it the accessible name is every visible
        * string run together — so it began with the intensity eyebrow, and every `^name` locator for this card
@@ -91,7 +99,7 @@ function RegisterCard({
        */
       aria-label={
         stats.marked > 0
-          ? `${name} — ${range}. ${stats.marked} of ${register.count} names marked.`
+          ? `${name} — ${range}. ${stats.marked} marked, of ${register.count} names in it.`
           : `${name} — ${range}. ${register.count} names, none marked yet.`
       }
       onClick={onOpen}
@@ -107,30 +115,20 @@ function RegisterCard({
       </span>
       <span className={adaptive.regName}>{name}</span>
       <span className={adaptive.regEg}>{register.samples.join(' · ')}</span>
-      <span className={adaptive.regBar}>
-        <span style={{ width: `${pct}%` }} />
-      </span>
       <span className={adaptive.regMeta}>
-        <span className={adaptive.regPct}>{pct}%</span>
+        {/* The register's SIZE is inventory, not a denominator — it says how much is in here, and the
+            marked count beside it says what they did. Neither is a fraction of the other. */}
         <span className={adaptive.regOf}>
           {stats.marked > 0
-            ? `${stats.marked.toLocaleString()} of ${register.count.toLocaleString()} names marked`
+            ? `${stats.marked.toLocaleString()} marked · ${register.count.toLocaleString()} names`
             : `${register.count.toLocaleString()} names, none marked yet`}
         </span>
-        {done ? (
-          <span className={adaptive.regDoneTick}>
-            <Check size={13} aria-hidden="true" /> all marked
-          </span>
-        ) : null}
       </span>
       {stats.marked > 0 ? (
         <span className={adaptive.regCounts}>
           <CountChip kind="love" n={stats.love} label="you love" />
           <CountChip kind="okay" n={stats.okay} label="okay with" />
           <CountChip kind="never" n={stats.never} label="not for you" />
-          <span className={adaptive.regLeft}>
-            {(register.count - stats.marked).toLocaleString()} left
-          </span>
         </span>
       ) : null}
     </button>
@@ -193,8 +191,18 @@ export function NamesPhase({
         <div className={adaptive.deckHead}>
           <Heading level={2}>What do you call each other?</Heading>
           <Text tone="secondary" className={adaptive.areaNote}>
-            Two answers per name — whether you like being called it, and whether you like calling{' '}
-            {them} it. Open the ones that mean something; the rest stay unasked.
+            Whether you like being called it, and whether you like calling {them} it. Open the ones
+            that mean something; the rest stay unasked.
+          </Text>
+          {/*
+            74 §3.6.29 — say it plainly, because the shape of this is not obvious and the old card design
+            implied the opposite. There are ~2,400 lines across the whole test; nobody marks them all, the
+            bank keeps growing, and there is no finishing it. Every mark makes the read sharper, and that is
+            the whole contract — so the cards count UP and never show a fraction of a whole.
+          */}
+          <Text size="sm" tone="tertiary" className={adaptive.areaNote}>
+            There is no finishing this — it is a bank you dip into, and it grows. Mark what you have
+            an opinion about; the more you mark, the sharper the read.
           </Text>
         </div>
         <div className={adaptive.deckBody}>
@@ -256,7 +264,7 @@ export function NamesPhase({
             <Heading level={2}>{open.label.replace(/^Names — /, '')}</Heading>
           </div>
           <Text size="sm" tone="tertiary">
-            {markedHere} of {open.count} marked
+            {markedHere} marked · {open.count} names
           </Text>
         </div>
         {open.note ? (

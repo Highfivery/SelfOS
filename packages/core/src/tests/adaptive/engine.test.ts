@@ -652,3 +652,36 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
     expect(dropped.ok).toBe(false);
   });
 });
+
+describe('74 §3.6.29 — the digest keeps the two directions apart', () => {
+  /*
+   * The synthesis prompt asks for "the role they take, what they want to BE to the other person" and for the
+   * hear/say gap. Neither is answerable from a flat list, and a flat list is what it used to get: one line
+   * built from `Math.max(hear, say) >= 3`, so "call me this" and "I want to call them this" — opposite
+   * answers on a pet name (§3.6.8) — arrived as the same fact.
+   */
+  it('says which direction each loved term runs in, and carries the middle mark', () => {
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', new Date('2026-08-19T00:00:00.000Z')),
+      DIRTY_TALK.bank,
+      {
+        // Loved to be CALLED it, never to say it.
+        'names-praise:good-girl': { hear: 'love', say: 'never' },
+        // The mirror: loved to SAY, never to hear.
+        'names-masculine:big-boy': { hear: 'never', say: 'love' },
+        // The middle mark, which reached the synthesis nowhere at all.
+        'anatomy-her:cunt': { hear: 'okay', say: 'okay' },
+      },
+      'take:1',
+      new Date('2026-08-19T00:00:00.000Z'),
+    );
+    const digest = lexiconDigest(lex);
+    const hearLine = digest.split('\n').find((l) => l.startsWith('They want to HEAR')) ?? '';
+    const sayLine = digest.split('\n').find((l) => l.startsWith('They want to SAY')) ?? '';
+    expect(hearLine).toContain('good girl');
+    expect(hearLine).not.toContain('big boy');
+    expect(sayLine).toContain('big boy');
+    expect(sayLine).not.toContain('good girl');
+    expect(digest).toMatch(/Fine with, not favourites.*cunt/);
+  });
+});

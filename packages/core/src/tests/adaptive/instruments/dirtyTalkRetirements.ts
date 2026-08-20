@@ -17,6 +17,11 @@ import type { BankRetirements } from '../bank';
  * again to somewhere its owner never chose.
  */
 export const DIRTY_TALK_NAME_RETIREMENTS: BankRetirements = {
+  // 74 §3.6.29 — `names-playful` was down to these two after the four purges, which renders as an almost
+  // empty register card. They move into `names-rough-mild`, where the register actually reads, and their
+  // marks move with them rather than dying with the family.
+  'names-playful:freak': 'names-rough-mild:freak',
+  'names-playful:my-little-freak': 'names-rough-mild:my-little-freak',
   'names-breeding:my-broodmare': 'names-breeding:broodmare',
   'names-feminising:my-beauty-queen': 'names-feminising:beauty-queen',
   'names-feminising:my-little-lady': 'names-feminising:little-lady',
@@ -207,4 +212,10 @@ export const DIRTY_TALK_NAME_RETIREMENTS: BankRetirements = {
  * §3.6.25 rule ("family still here, key gone") stops matching the moment the family goes, and the marks would
  * then outlive every screen that could change them.
  */
-export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = ['names-kinship', 'names-agegap'];
+export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = [
+  'names-kinship',
+  'names-agegap',
+  // 74 §3.6.29 — down to two entries after the four purges. Its survivors moved into `names-rough-mild`
+  // (see the mapping above), so a mark on either one migrates rather than being retired outright.
+  'names-playful',
+];

@@ -560,6 +560,50 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **Production audit of Dirty Talk (the bank deduped, oriented and grown; a hard no stops being
+  permanent; the spine stops throwing away 42% of the deck; owner-directed from measured lists; SPEC 74 §3.6.29;
+  on `chore/pet-name-purge-two`).** A full pass before release, measured against the shipped bank and the
+  owner's decrypted vault throughout. **The biggest finding was not content.** His vault held **999 legacy
+  `kind:'word'` boundary records, 382 orphaned** by the four name purges — a word record is the pre-§3.6.11
+  storage for a hard no, nothing has written one since (the only live writer emits a `theme`), and
+  `suppressedTexts` ignores one only while an entry with that text exists. So a purge that removed the entry
+  turned its record into a suppression with no row anywhere to lift it, AND cost it the everyday-word
+  relaxation (derived from live ENTRIES), degrading it to a plain substring match on words like `love`.
+  Measured: **27% of ordinary intimate lines rejected app-wide** — "I love the way you look at me", "kiss me",
+  "stay right there". Dropped wholesale in `readLexicon`; `addBoundary` + the bridge narrowed to themes; the two
+  reap passes and the ignore-filter that managed the legacy shape deleted with it. **7% after, all of it live
+  marks he can change.** Its sibling: **suppression was conditional despite its own docstrings** — `chatService`
+  had both hard-no lists inside `if (adultAcked)` and his OWN inside the topic gate too, so a grief session
+  carried no hard-no list and REVOKING the 18+ ack silently re-opened every ruled-out word, in his coach and his
+  partner's. **The content, every list shown before anything was cut:** 92 duplicate rows (82 lines in 2–3
+  families — 9.7% of the deck, 184 taps, and a latent contradiction since `suppressedTexts` keys on TEXT, so a
+  `never` on one copy suppressed a word the other copy loved), keeper chosen **spine-aware** so no dimension
+  starves; **"cum" for both senses** (his call, overriding my proposed split — the arrival sense stays English),
+  32 renames done NOW because §3.6.26 means nobody has deck marks so the key churn costs exactly zero; **80
+  lines of the doer's voice** (his list pointed at a structural hole — anal 21 self/0 other, cum 27/1, squirt
+  11/0, impact 22/0); 24 orientation tags + **11 sensation tags RELAXED** (`wet`/`tight`/`clenching` describe a
+  mouth or an ass, so tagging them withheld rows for nothing); `names-playful` retired into `names-rough-mild`;
+  5 within-family near-dupes. **The bank now holds every line exactly once, guarded by a test.** Plus **five new
+  spine dimensions**: 14 of 33 deck families fed NO dimension, so **395 entries (~790 taps) were marked and
+  reached no score, no trend, no `Insight.metrics`** — the §3.6.8 defect an order of magnitude larger. And
+  `lexiconDigest` was one line built from `Math.max(hear, say)`, so "call me this" and "I want to call them
+  this" reached the synthesis as the same fact while its prompt asked for exactly that distinction. **The bank
+  is bottomless and the cards now say so:** a complete take is **4,892 taps**, and the register cards carried a
+  %, a filling bar, "N of M", "all marked ✓" and "N left" — five completion claims against the durable rule, and
+  not academic: **`names-rough-mild` went 130 → 132 in this very change**, so anyone who had marked all 130
+  would open the app to "98% · 2 left" having done nothing. Verified on the real vault with the new bank: 865 →
+  758 entries, 1,071 boundaries → 0, suppression 1,140 → 709, **zero leftovers**. Gate: typecheck ×4, lint,
+  format, **2444 core + 13 relay + 1742 desktop** unit. Every new guard **verified to fail when reverted**.
+  **Lessons: (1) a legacy record that is IGNORED while its owner exists is a landmine, not dead weight — the
+  ignore-condition made it invisible right up to the moment a purge removed the owner, and then it silently
+  became the strictest thing in the app. When a field stops being the source of truth, delete it; do not teach
+  every reader to skip it. (2) My own 94-line addition proposal contained 14 duplicates — the exact defect I was
+  auditing for — and only a collision check against the bank caught them. Run the audit against your own work
+  before shipping it. (3) "42% of the deck scores nothing" is invisible from any screen and obvious in one
+  join of the spine's family lists against the bank's; when a config maps by NAME, diff the two sets. (4) A
+  denominator is a promise the bank cannot keep, because the bank grows — and the release that adds words is
+  exactly the release that turns someone's 100% into 98%.**
+
 - 2026-08-19 — **Cleanup ×4 (two registers retired, a fourth purge, the grey-out fixed, and the WORDS get
   oriented; owner-reported/directed; SPEC 74 §3.6.27–§3.6.28; on `chore/pet-name-purge-two`).** Four asks in one
   pass, each measured before anything was deleted. **(1) Kinship + age gap, gone.** Scope confirmed rather than

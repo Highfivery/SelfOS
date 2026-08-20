@@ -62,7 +62,9 @@ export const DIRTY_TALK_SPINE: readonly SpineDimension[] = [
     key: 'dirtytalk.narration',
     label: 'Narration',
     description: 'Being told what is happening, out loud, as it happens.',
-    families: ['narration', 'size-fit', 'squirt'],
+    // 74 §3.6.29 — `delivery` folded in here rather than given its own axis: it is about HOW a line is said
+    // (whisper, growl, slow), which is a property of narration rather than a separate appetite.
+    families: ['narration', 'size-fit', 'squirt', 'delivery'],
   },
   {
     key: 'dirtytalk.degradation',
@@ -108,6 +110,47 @@ export const DIRTY_TALK_SPINE: readonly SpineDimension[] = [
       'names-sharing',
       'names-breeding',
     ],
+  },
+  /*
+   * 74 §3.6.29 — the five dimensions below close a gap measured on the shipped bank: **14 of the 33 deck
+   * families fed no dimension at all**, so 395 entries — roughly 790 taps — were marked and then reached no
+   * score, no trend and no `Insight.metrics`. That is the §3.6.8 defect ("44 of 78 names were marked and then
+   * reached nothing") an order of magnitude larger, and it looked like an oversight rather than a decision.
+   *
+   * The spine is FIXED so retakes stay comparable, and adding to it is the safe direction: an older take
+   * simply has no score here and the report lists it as "nothing yet" rather than plotting a false zero.
+   * Removing one would not be safe, which is why these are grouped by what they measure rather than split as
+   * finely as the families are.
+   */
+  {
+    key: 'dirtytalk.acts',
+    label: 'Acts, named out loud',
+    description: 'Wanting the act itself said — mouth, ass, finishing — rather than implied.',
+    families: ['oral', 'anal', 'cum', 'taste', 'toys'],
+  },
+  {
+    key: 'dirtytalk.body',
+    label: 'Body & sensation',
+    description: 'Being described: their body, and what it is doing.',
+    families: ['anatomy-her', 'anatomy-him', 'sensation'],
+  },
+  {
+    key: 'dirtytalk.impact',
+    label: 'Impact & restraint',
+    description: 'The language of being held, pinned, hit — not the act, the words for it.',
+    families: ['impact'],
+  },
+  {
+    key: 'dirtytalk.anticipation',
+    label: 'Anticipation',
+    description: 'Before anything happens — text, tease, the build-up.',
+    families: ['sexting'],
+  },
+  {
+    key: 'dirtytalk.aftercare',
+    label: 'Care & check-ins',
+    description: 'Coming down, checking in, and the day after.',
+    families: ['aftercare', 'consent', 'morning-after'],
   },
   {
     key: 'dirtytalk.begging',

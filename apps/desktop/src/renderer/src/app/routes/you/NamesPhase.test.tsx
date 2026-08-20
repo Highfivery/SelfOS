@@ -77,7 +77,7 @@ describe('NamesPhase (74 §3.6.8)', () => {
     await useAdaptiveTestStore.getState().loadNames('dirty-talk');
   }
 
-  it('opens on the registers, not on 2,000 rows — real names, the range in words, and progress', async () => {
+  it('opens on the registers, not on 2,000 rows — real names, the range in words, and counts', async () => {
     await load();
     renderPhase();
     const card = screen.getByRole('button', { name: /praise/i });
@@ -88,9 +88,10 @@ describe('NamesPhase (74 §3.6.8)', () => {
     expect(card).toHaveTextContent('2 names, none marked yet');
     // A register whose names carry a mark from an earlier sitting reads as started, from the SEEDED marks.
     const rough = screen.getByRole('button', { name: /rough, heavy/i });
-    expect(rough).toHaveTextContent('100%');
-    expect(rough).toHaveTextContent('1 of 1 names marked');
-    expect(rough).toHaveTextContent(/all marked/i);
+    expect(rough).toHaveTextContent('1 marked · 1 names');
+    expect(rough).not.toHaveTextContent('%');
+    expect(rough).not.toHaveTextContent(/all marked/i);
+    expect(rough).not.toHaveTextContent(/left/i);
     expect(rough).toHaveTextContent(/strong to intense/i);
   });
 
@@ -108,8 +109,8 @@ describe('NamesPhase (74 §3.6.8)', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
     const card = screen.getByRole('button', { name: /praise/i });
-    expect(card).toHaveTextContent('1 of 2 names marked');
-    expect(card).toHaveTextContent('50%');
+    expect(card).toHaveTextContent('1 marked · 2 names');
+    expect(card).not.toHaveTextContent('%');
     expect(card).not.toHaveTextContent('none marked yet');
   });
 
@@ -123,7 +124,7 @@ describe('NamesPhase (74 §3.6.8)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'good boy — Angel → Ben — never' }));
     await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
     const card = screen.getByRole('button', { name: /praise/i });
-    expect(card).toHaveTextContent('2 of 2 names marked');
+    expect(card).toHaveTextContent('2 marked · 2 names');
     // One loved, one ruled out — mutually exclusive, so they sum to the marked total.
     expect(card).toHaveTextContent(/you love/i);
     expect(card).toHaveTextContent(/not for you/i);
@@ -228,5 +229,38 @@ describe('NamesPhase (74 §3.6.8)', () => {
     // Inside a register the primary closes the REGISTER — walking out of the step from here would step past
     // the registers they have not opened (the §3.6.9 walk, finding 3).
     expect(screen.getByRole('button', { name: /Done with this one/i })).toBeInTheDocument();
+  });
+
+  /*
+   * 74 §3.6.29 — the durable no-completion rule, narrowed 2026-08-18: a COUNT is fine, a fraction of a whole
+   * is not — "the line is the DENOMINATOR". These cards carried a percentage, a filling bar, "N of M names
+   * marked", "all marked ✓" and "N left": five ways of saying a register is finishable.
+   *
+   * It is not, and this is not academic. The bank GROWS — `names-rough-mild` went 130 → 132 in the same
+   * change that removed these — so anyone who had marked all 130 would open the app to "98% · 2 left" having
+   * done nothing at all.
+   */
+  it('shows no percentage, no meter and no done-state, even on a fully marked register', async () => {
+    await load();
+    renderPhase();
+    await userEvent.click(screen.getByRole('button', { name: /praise/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'good girl — Angel → Ben — love it' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'good boy — Angel → Ben — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
+    const card = screen.getByRole('button', { name: /praise/i });
+    // Every name in the register is marked — the case that used to read "100% · all marked".
+    expect(card).toHaveTextContent('2 marked · 2 names');
+    for (const claim of [/%/, /all marked/i, /\bleft\b/i, /of 2 names marked/i]) {
+      expect(card).not.toHaveTextContent(claim);
+    }
+    expect(card.querySelector('[style*="width"]')).toBeNull();
+  });
+
+  it('says out loud that there is no finishing it', async () => {
+    await load();
+    renderPhase();
+    expect(screen.getByText(/no finishing this/i)).toBeInTheDocument();
   });
 });

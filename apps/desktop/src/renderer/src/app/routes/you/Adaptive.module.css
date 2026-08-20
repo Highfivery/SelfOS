@@ -1206,14 +1206,6 @@
   background: var(--color-accent);
 }
 
-.regDone::before {
-  background: var(--color-success);
-}
-
-.regDone {
-  background: var(--color-surface-alt);
-}
-
 /* 12 — the range is an eyebrow, so the title never shares a line with a tag and neither loses width. */
 .regEyebrow {
   font-size: 0.625rem;
@@ -1257,47 +1249,11 @@
   white-space: nowrap;
 }
 
-.regBar {
-  height: 5px;
-  margin-top: var(--space-1);
-  border-radius: var(--radius-pill);
-  /* The EMPTY track has to read on its own -- `surface-alt` on a white card is a four-unit difference, so a
-     register with nothing marked showed no bar at all rather than an empty one. */
-  background: var(--color-border);
-  overflow: hidden;
-  /* The card is a <button>, whose flex box does NOT stretch its items the way a <div> does. Without this the
-     track sized to its content -- an empty fill span -- and measured 0px wide, so no bar ever drew. */
-  align-self: stretch;
-}
-
-.regBar > span {
-  display: block;
-  height: 100%;
-  background: var(--color-accent);
-}
-
-.regDone .regBar > span {
-  background: var(--color-success);
-}
-
 .regMeta {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   min-width: 0;
-}
-
-.regPct {
-  flex: none;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-heading);
-  font-variant-numeric: tabular-nums;
-}
-
-.regCard:not(.regStarted):not(.regDone) .regPct {
-  font-weight: 500;
-  color: var(--color-text-tertiary);
 }
 
 .regOf {
@@ -1308,16 +1264,6 @@
   font-size: 0.75rem;
   color: var(--color-text-tertiary);
   font-variant-numeric: tabular-nums;
-}
-
-.regDoneTick {
-  flex: none;
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
-  color: var(--color-success);
 }
 
 .regCounts {
@@ -1340,10 +1286,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.regDone .regChip {
-  background: var(--color-surface);
-}
-
 .chip_love {
   color: var(--color-warning-subtle-text);
   border-color: color-mix(in srgb, var(--color-warning) 32%, transparent);
@@ -1360,13 +1302,6 @@
 
 .chipZero {
   opacity: 0.45;
-}
-
-.regLeft {
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
 }
 
 .bandNames {

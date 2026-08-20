@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bankByFamily,
   bankEntry,
+  bankFamily,
   bankSlug,
   deckFamilies,
   nameFamilies,
@@ -10,6 +11,9 @@ import {
 } from './bank';
 import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
+
+/** A throwaway family for testing the key scheme itself. */
+const FAM = { label: 'x', kind: 'phrase', directions: ['hear', 'say'] } as const;
 
 describe('the dirty-talk bank (74 §13)', () => {
   it('is comprehensive — hundreds of entries across every family', () => {
@@ -30,13 +34,39 @@ describe('the dirty-talk bank (74 §13)', () => {
     expect(bankSlug("don't stop")).toBe('don-t-stop');
   });
 
-  it('scopes keys by family, so the same phrase can appear in two families', () => {
-    // "taste me" is both a demand and a taste-family entry; they must not collide.
-    const demand = bankEntry(DIRTY_TALK_BANK, 'demands-receiving:taste-me');
-    const taste = bankEntry(DIRTY_TALK_BANK, 'taste:taste-me');
-    expect(demand?.text).toBe('taste me');
-    expect(taste?.text).toBe('taste me');
-    expect(demand?.family).not.toBe(taste?.family);
+  it('scopes keys by family, so two families CAN hold the same phrase without colliding', () => {
+    // The property is the key scheme's, not the content's — `bankFamily` prefixes every key with its family.
+    // It used to be demonstrated with "taste me", which lived in three families until 74 §3.6.29 deduped
+    // them; the mechanism still has to hold, because a future family may legitimately reuse a phrase.
+    const [a, b] = [
+      bankFamily({ ...FAM, id: 'fam-a' }, { 3: ['taste me'] }),
+      bankFamily({ ...FAM, id: 'fam-b' }, { 3: ['taste me'] }),
+    ];
+    expect(a.entries[0]?.key).toBe('fam-a:taste-me');
+    expect(b.entries[0]?.key).toBe('fam-b:taste-me');
+    expect(a.entries[0]?.key).not.toBe(b.entries[0]?.key);
+  });
+
+  it('holds each line exactly once — no duplicates and no near-duplicates (74 §3.6.29)', () => {
+    /*
+     * 82 lines used to appear in two or three families ("taste me" in demands-receiving, oral AND taste), so
+     * a person marked the same words up to three times — 92 redundant rows, 184 taps — and, worse, the copies
+     * could disagree: `suppressedTexts` keys on TEXT, so a `never` on one copy suppressed the word everywhere,
+     * including where another copy was loved.
+     */
+    const seen = new Map<string, string>();
+    const clashes: string[] = [];
+    for (const entry of DIRTY_TALK.bank.entries) {
+      const text = entry.text.trim().toLowerCase();
+      const prior = seen.get(text);
+      if (prior) clashes.push(`"${entry.text}" in ${prior} and ${entry.family}`);
+      else seen.set(text, entry.family);
+    }
+    expect(clashes).toEqual([]);
+    // …and the keys stay unique, which is what a rating is actually stored against (46 §4.2).
+    expect(new Set(DIRTY_TALK.bank.entries.map((e) => e.key)).size).toBe(
+      DIRTY_TALK.bank.entries.length,
+    );
   });
 
   it('tiers every entry 1..5 and carries both directions', () => {

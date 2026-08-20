@@ -426,6 +426,37 @@ describe('74 §3.6.27 — a whole register the bank retired', () => {
     expect(suppressedTexts(dropLegacyWordBoundaries(lexicon, LATER).lexicon)).toEqual([]);
   });
 
+  it('MIGRATES a mark when the retired family names a survivor (74 §3.6.29)', () => {
+    /*
+     * `names-playful` was cut with somewhere to GO — its two survivors moved into `names-rough-mild` — which
+     * is a combination neither mechanism had been exercised on: `retiredFamilies` (the family is gone) AND
+     * `retiredInto` (this key has an heir). Retiring it outright would throw away a real answer.
+     */
+    expect(DIRTY_TALK.bank.retiredFamilies).toContain('names-playful');
+    expect(DIRTY_TALK.bank.retiredInto?.['names-playful:freak']).toBe('names-rough-mild:freak');
+    const marked: EroticLexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: 'names-playful:freak',
+          text: 'freak',
+          kind: 'word',
+          family: 'names-playful',
+          tier: 2,
+          hear: 4,
+          say: 0,
+          hearState: 'love',
+        },
+      ],
+    };
+    const { lexicon } = pruneUnshownMarks(marked, DIRTY_TALK.bank, OPEN_ORIENTATION, LATER);
+    const moved = lexicon.entries.find((e) => e.key === 'names-rough-mild:freak');
+    expect(moved?.hearState).toBe('love');
+    // …under the SURVIVOR's key, text and family, or the report shows a name the bank no longer has.
+    expect(moved?.family).toBe('names-rough-mild');
+    expect(lexicon.entries.some((e) => e.family === 'names-playful')).toBe(false);
+  });
+
   it('is derived from the bank, so a register still in it is untouched', () => {
     expect(DIRTY_TALK.bank.retiredFamilies).toContain('names-kinship');
     expect(DIRTY_TALK.bank.retiredFamilies).toContain('names-agegap');

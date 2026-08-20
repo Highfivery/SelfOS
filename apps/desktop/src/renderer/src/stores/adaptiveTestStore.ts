@@ -563,11 +563,36 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
           priorReactions[turn.item.text] = turn.answer as 'love' | 'meh' | 'no';
         }
       }
-      // Seed from the per-direction marks, exactly as the names phase does (74 §3.6.26). Pre-Option-B deck
-      // answers were 0–4 ratings with no mark behind them; those are cleared on read by
-      // `resetPreDirectionalDeckMarks` rather than guessed at here, so an unmarked row means unmarked.
+      /*
+       * Seed from the per-direction marks, exactly as the names phase does (74 §3.6.26). Pre-Option-B deck
+       * answers were 0–4 ratings with no mark behind them; those are cleared on read by
+       * `resetPreDirectionalDeckMarks` rather than guessed at here, so an unmarked row means unmarked.
+       *
+       * 74 §3.6.34 — scoped to THIS STEP'S OWN ROWS, which is the whole of the fix below.
+       *
+       * There is ONE lexicon per person: `applyDirectionalMarks` writes the deck's marks and the pet names'
+       * marks into the same `entries`, which is why `steer.ts` and the report both have to filter names back
+       * out. Seeding from all of them made `marks` a superset of `nameMarks` rather than its sibling, and
+       * four numbers downstream read it as "the words step's marks":
+       *
+       *   - the rail's tally said "320 of 924 shown here" on a vault with 22 marked WORDS (measured), with a
+       *     numerator and a denominator drawn from different populations — so it could exceed 100%
+       *   - the rail's trailing "N words" on the words step said 320 for the same reason
+       *   - `bankTally`'s love/okay/never counted every pet name as a word
+       *   - `stepStatuses` does `nameMarks + bankMarks`, so every marked name was counted TWICE, against a
+       *     bridge that counts each entry once (`lexiconReadyForGeneration`). That one is not cosmetic: the
+       *     renderer greys an AI step on `generationReadiness(marked, loved)` and the bridge REFUSES on the
+       *     same helper, and the bridge's own comment says the two "can never disagree". With 8 marked names
+       *     and no words the renderer sees 16, offers the step, and the bridge answers "mark a few more".
+       *
+       * `bank` here is the deck view (`deckFamilies`, coreBridge `testsBank`), so its keys ARE this step's
+       * rows. Deck marks + name marks now partition the lexicon exactly, which is what makes the renderer's
+       * total agree with the bridge's again.
+       */
+      const deckKeys = new Set((bank?.entries ?? []).map((entry) => entry.key));
       const marks: DirectionalMarks = {};
       for (const entry of state?.lexicon.entries ?? []) {
+        if (!deckKeys.has(entry.key)) continue;
         if (entry.hearState || entry.sayState) {
           marks[entry.key] = {
             ...(entry.hearState ? { hear: entry.hearState } : {}),

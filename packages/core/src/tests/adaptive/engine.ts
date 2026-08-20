@@ -181,12 +181,28 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
    */
   for (const [family, entries] of byFamily) {
     const loved = entries.filter((e) => Math.max(e.hear, e.say) >= 3);
-    const lukewarm = entries.filter((e) => e.hearState === 'okay' || e.sayState === 'okay');
-    if (loved.length > 0 && lukewarm.length > 0) {
+    /*
+     * 74 §3.6.34 — the contrast needs TWO DIFFERENT words, which is the whole question.
+     *
+     * Both lists are direction-blind over the same rows, so a single row marked love-to-hear + okay-to-say
+     * — the commonest gap there is — landed in BOTH: `Math.max(hear, say) >= 3` from the love, `sayState
+     * === 'okay'` from the okay. When it was the first such row in its family the question came out
+     * `They loved "good girl" but were only lukewarm on "good girl"`, with that word listed twice in
+     * `terms`, and the probe is told it may quote only the terms it is given — so a billed pass was spent
+     * on a premise that contradicts itself and gives the model nothing to work with.
+     *
+     * A per-DIRECTION difference on ONE row is not a split in the register; it is the say-gap, which the
+     * `frozen` ambiguity below already asks about properly.
+     */
+    const pick = loved[0];
+    const contrast = pick
+      ? entries.find((e) => e.key !== pick.key && (e.hearState === 'okay' || e.sayState === 'okay'))
+      : undefined;
+    if (pick && contrast) {
       out.push({
         id: `split:${family}`,
-        question: `They loved "${loved[0]!.text}" but were only lukewarm on "${lukewarm[0]!.text}" — is it that word specifically, or the register behind it?`,
-        terms: [loved[0]!.text, lukewarm[0]!.text],
+        question: `They loved "${pick.text}" but were only lukewarm on "${contrast.text}" — is it that word specifically, or the register behind it?`,
+        terms: [pick.text, contrast.text],
       });
     }
   }
@@ -207,18 +223,22 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
     });
   }
 
-  // 3) Loves to hear it, can't say it — the most coachable signal in the take. Sourced from the gap since
-  // the middle mark stopped meaning "cringe" (74 §3.6.2); an empty probe pack is invisible, so a filter that
-  // can never match again would have removed this silently.
-  const cringe = lexicon.entries.filter(hasSayGap);
-  if (cringe.length > 0) {
-    out.push({
-      id: 'cringe',
-      question: `They love hearing "${cringe[0]!.text}" but rate themselves near zero on saying it — what stops them?`,
-      terms: [cringe[0]!.text],
-    });
-  }
-
+  /*
+   * 74 §3.6.34 — there used to be a third ambiguity here, `cringe`, and it was TWO defects in one.
+   *
+   * It was `lexicon.entries.filter(hasSayGap)` — byte-identical to `frozen` above, taking the same `[0]` —
+   * so it was not a second signal at all. Both fired together, on the same entry, with the same term; the
+   * probe consumes one ambiguity per pass and keys `asked` on the id, so the take spent a SECOND billed
+   * round re-asking about the identical word, and `ambiguitiesLeft` reported one open gap as two.
+   *
+   * Its question was also false. It said they "rate themselves near zero on saying it" while `hasSayGap`
+   * requires `sayState === 'okay'` — the MIDDLE mark, an explicit mild yes (rating 2, not 0). `frozen`'s own
+   * comment six lines up records that it was rewritten away from exactly that phrasing, for exactly that
+   * reason; the sibling was fixed and this one was left, which is the §3.6.24 two-comments-disagree tell.
+   *
+   * One signal, one ambiguity, and the surviving wording is the true one. Measured before the fix: a single
+   * row marked love-to-hear / okay-to-say produced THREE ambiguities about that one word.
+   */
   return out;
 }
 

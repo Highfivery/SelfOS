@@ -1604,6 +1604,54 @@ to fail against the original predicate. **Lesson: four definitions of "answered"
 core already separates two concepts by name, the view layer's job is to mirror one of them, not invent a
 third.**
 
+**And a fan-out audit of the class, which found a bigger one underneath.** Rather than fix the reported
+filter and stop, four independent lenses were run over the marks model — the renderer's counts, the core
+derivations, the readiness gates, and the bridge's view assembly — each finding adversarially verified by a
+skeptic whose default was "not a bug". 17 candidates, **7 confirmed**, and they reduce to three causes.
+
+**Cause 1: `store.marks` was seeded from the WHOLE lexicon.** There is one lexicon per person —
+`applyDirectionalMarks` writes the deck's marks and the pet names' marks into the same `entries`, which is why
+`steer.ts` and the report both filter names back out — and the store's `load` seeded from all of them with no
+family filter, while the denominator (`testsBank` → `deckFamilies`) is deck-only. So `marks` was a SUPERSET of
+`nameMarks` rather than its sibling, and four numbers read it as "the words step's marks":
+
+- the rail's tally, whose numerator and denominator were then drawn from different populations — **measured on
+  the owner's vault: "320 of 924 shown here" on a step where he had marked 22 words**, and capable of
+  exceeding 100%
+- the rail's trailing "N words" on the words step, same 320
+- `bankTally`'s love/okay/never, counting every pet name as a word
+- and the one that is not cosmetic: `stepStatuses` does `nameMarks + bankMarks`, so **every marked name was
+  counted twice** against a bridge that counts each entry once. The renderer greys an AI step on
+  `generationReadiness(marked, loved)` and the bridge REFUSES on the same helper — whose own comment says the
+  two "can never disagree". With 8 marked names and no words the renderer sees 16, offers the step, and the
+  bridge answers "mark a few more names or words first."
+
+One fix — seed from the step's own rows — corrects all four, and makes the two populations partition the
+lexicon so the renderer's total equals the bridge's again.
+
+**Cause 2: the probe asked about one word three times, and twice wrongly.** `openAmbiguities` had a third
+ambiguity, `cringe`, which was `lexicon.entries.filter(hasSayGap)` — **byte-identical to `frozen` above,
+taking the same `[0]`**. Not a second signal: both fired together on the same entry, the probe consumes one
+ambiguity per pass and keys `asked` on the id, so the take spent a **second billed round re-asking about the
+identical word**, and `ambiguitiesLeft` reported one open gap as two. Its question was also false — "rate
+themselves near zero on saying it", when `hasSayGap` requires `sayState === 'okay'`, the MIDDLE mark and an
+explicit mild yes. `frozen`'s own comment six lines above records that it was rewritten away from exactly that
+phrasing for exactly that reason; the sibling was fixed and this one was left, which is the §3.6.24
+two-comments-disagree tell for the fourth time in this spec. And the family `split` ambiguity drew its
+contrast from two direction-blind lists over the same rows, so a single row marked love-to-hear + okay-to-say
+landed in both and the question came out **`They loved "good girl" but were only lukewarm on "good girl"`**,
+with that word listed twice in `terms` — which is the say-gap `frozen` already asks about properly, not a
+split in the register. Reproduced against the shipped bank before either was touched: **one marked row
+produced three ambiguities about that one word.** Now one.
+
+**Cause 3: the map's total added five different things.** `TakeMap` summed every counted step and rendered it
+as "N marks so far" and, on the retake screen, "You have N marks on record from last time" — the number
+someone weighs when deciding whether to keep them or start from an empty sheet. Three of the five addends are
+not marks, and this same file's `doneLabel` docstring already said why they cannot be added ("132 marks beside
+6 answered questions beside 8 moment picks is three different things wearing one bare number"), which is what
+`StepStatus.unit` was added for. The rule now lives beside the units as `markCount`, and the map was **entirely
+untested**, which is how it drifted.
+
 **Two more consistency calls, both the owner's.** The words step carried a **filling progress bar** —
 `(areaIndex + 1) / 36 * 100%` — that reached full on the last area whether you had marked everything or
 nothing. That is a meter filling toward a full width, which is the thing §3.6.29's durable rule names, and

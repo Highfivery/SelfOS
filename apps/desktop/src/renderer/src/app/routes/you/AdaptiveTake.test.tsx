@@ -917,6 +917,65 @@ describe('AdaptiveTake (74 §3.2)', () => {
    * Both marking screens have the same second-visit problem — 36 areas of up to 47 lines here, a 123-name
    * register there — and they were drifting into different shapes, which is what this section exists to stop.
    */
+  /*
+   * 74 §3.6.34 — the words step counts the words step's OWN rows.
+   *
+   * There is ONE lexicon per person: the deck's marks and the pet names' marks are written into the same
+   * `entries`. Seeding `store.marks` from all of them made it a SUPERSET of `nameMarks` rather than its
+   * sibling, and four numbers read it as "the words step's marks" — the rail's "N of M shown here" (whose
+   * denominator is deck-only, so it could exceed 100%), the rail's trailing "N words", `bankTally`, and
+   * `stepStatuses`' `nameMarks + bankMarks`, which counted every marked name twice against a bridge that
+   * counts each entry once. Measured on the owner's real vault before the fix: the words step said
+   * "320 of 924 shown here" when he had marked 22 words.
+   */
+  it('does not count a pet name as a marked WORD', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () =>
+        Promise.resolve(
+          state({
+            lexicon: {
+              ...state().lexicon,
+              entries: [
+                // One real deck row from this step…
+                {
+                  key: 'taboo:run-primal',
+                  text: 'run (primal)',
+                  family: 'taboo',
+                  kind: 'phrase',
+                  tier: 5,
+                  hear: 3,
+                  say: 0,
+                  hearState: 'love',
+                },
+                // …and a pet name, which lives in the same lexicon but is NOT a row of this step.
+                {
+                  key: 'names-warm:babydoll',
+                  text: 'babydoll',
+                  family: 'names-warm',
+                  kind: 'word',
+                  tier: 2,
+                  hear: 3,
+                  say: 3,
+                  hearState: 'love',
+                  sayState: 'love',
+                },
+              ],
+            },
+          }),
+        ),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    await screen.findByRole('complementary', { name: /The steps/i });
+
+    // ONE marked word, not two. The denominator is this step's own rows, so the two must be comparable.
+    expect(screen.getByText(/1 of 2 shown here/)).toBeInTheDocument();
+    // And the name's two loves are not counted as words: the deck row contributes exactly one.
+    expect(screen.getByTestId('tally-love')).toHaveTextContent('1');
+  });
+
   it('filters an area to what is still unmarked, and resets on the next area', async () => {
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),

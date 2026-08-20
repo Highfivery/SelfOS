@@ -643,6 +643,21 @@ A running log of durable decisions and feedback captured into the project config
   had added (he had flagged that risk himself when they were offered). `names-soft-power` 46 → 36, **364
   names**, not one of the twelve carrying a mark from either person and none with a same-name survivor, so all
   twelve retire outright with no migration row.
+  **Rather than fix the reported filter and stop, a four-lens fan-out audited the CLASS** (renderer counts /
+  core derivations / readiness gates / bridge views, every candidate adversarially verified by a skeptic whose
+  default was "not a bug": 17 candidates, **7 confirmed**, reducing to three causes). **(1)** `store.marks` was
+  seeded from the WHOLE lexicon while its denominator is deck-only — so it was a SUPERSET of `nameMarks`, not
+  its sibling. Measured: the words step said **"320 of 924 shown here" on a vault with 22 marked words**, and
+  `stepStatuses`' `nameMarks + bankMarks` counted every name TWICE against a bridge counting each entry once —
+  whose own comment says the two "can never disagree". **(2)** The probe's `cringe` ambiguity was
+  byte-identical to `frozen` (same filter, same `[0]`), so a second billed round re-asked the same word and
+  `ambiguitiesLeft` reported one gap as two; its question also said "rate themselves near zero on saying it"
+  for the MIDDLE mark, the exact phrasing `frozen`'s comment records being rewritten away from. And the family
+  `split` drew its contrast from two direction-blind lists over the same rows, so one row produced
+  **`They loved "good girl" but were only lukewarm on "good girl"`**. Reproduced first: one marked row → three
+  ambiguities about one word. **(3)** The map's "N marks so far" — and the retake screen's "N marks on record
+  from last time" — summed marks + line reactions + probe answers + moment picks, which that file's own
+  docstring says cannot be added; it was **entirely untested**.
   **Lessons: (1) a criterion is scoped to the thing it was written about — "sexual pet names" cannot be
   applied to lines, acts and suppression keys, and transposing it would have cut loved vocabulary for the
   first time; put it back as a NEW decision with the shape measured in front of him. (2) When a read-time
@@ -654,7 +669,7 @@ A running log of durable decisions and feedback captured into the project config
   (4) Two fixtures broke and both were asserting the opposite of their own claim: "another instrument's entry"
   built by spreading a Dirty Talk row carries a family this bank OWNS with a key it does not, which is
   precisely a retired entry. **A bare invented KEY is a dependency on the bank's content exactly as much as a
-  bare word is.** (5) four definitions of "answered" is three too many — when core already separates two concepts by name, the view layer's job is to mirror one of them, not invent a third. (6) I built a redesign mockup from a partial read of one component and dropped the shared
+  bare word is.** (5) when a reported bug is an instance of a class, audit the class — the filter he reported was the smallest of four wrong numbers, and the biggest (a renderer/bridge readiness disagreement the code's own comment called impossible) was invisible from the report. (6) four definitions of "answered" is three too many — when core already separates two concepts by name, the view layer's job is to mirror one of them, not invent a third. (7) I built a redesign mockup from a partial read of one component and dropped the shared
   step rail entirely; the owner's correction was "you're going off old designs, look at what's currently in
   place". Rebuild a mockup from the SHIPPED CSS, not from a component read.**
 

@@ -92,11 +92,48 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     // ruled out `manwhore` no longer produces one: a hard no is settled, and a question that names it both asks
     // them to justify a boundary and is then rejected for containing it.
     expect(ids).not.toContain('split:names-rough-heavy');
-    // Loves hearing "good girl", rated 0 to say → preference or goal?
+    // Loves hearing "good girl", only okay saying it → preference or goal?
     expect(ids).toContain('frozen');
-    expect(ids).toContain('cringe');
+    /*
+     * 74 §3.6.34 — ONE ambiguity per signal.
+     *
+     * This used to also assert `cringe`, which was `lexicon.entries.filter(hasSayGap)` — byte-identical to
+     * `frozen`, taking the same `[0]`. Pinning both pinned the duplicate: the probe consumes one ambiguity
+     * per pass and keys `asked` on the id, so a second billed round re-asked about the identical word, and
+     * `ambiguitiesLeft` reported one open gap as two. Its wording was also false ("rate themselves near zero
+     * on saying it" for a MIDDLE mark, an explicit mild yes) — the exact phrasing `frozen` had already been
+     * rewritten to remove.
+     */
+    expect(ids).not.toContain('cringe');
+    expect(ids.filter((id) => id === 'frozen')).toHaveLength(1);
     // Nothing marked → nothing to probe. The loop ends rather than inventing work.
     expect(openAmbiguities(emptyLexicon('angel', NOW))).toEqual([]);
+  });
+
+  /*
+   * 74 §3.6.34 — a contrast needs two DIFFERENT words, and one row is not a split.
+   *
+   * `loved` and `lukewarm` are both direction-blind over the same rows, so a single row marked
+   * love-to-hear + okay-to-say landed in both and the question came out `They loved "good girl" but were
+   * only lukewarm on "good girl"` — the same word twice, in a premise the probe is told it may quote from.
+   * That is the say-gap, which `frozen` already asks about properly, not a split in the register.
+   */
+  it('never contrasts a word with itself, and asks about a single say-gap exactly once', () => {
+    const one = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': { hear: 'love', say: 'okay' } },
+      'take:1',
+      NOW,
+    );
+    const ambiguities = openAmbiguities(one);
+    for (const a of ambiguities) {
+      expect(new Set(a.terms).size).toBe(a.terms.length);
+      expect(a.question).not.toMatch(/"([^"]+)"[^"]*"\1"/);
+    }
+    // One marked row, one open question about it — not three.
+    expect(ambiguities).toHaveLength(1);
+    expect(ambiguities[0]?.id).toBe('frozen');
   });
 
   it('puts the hard nos in the prompt as a negative constraint', async () => {

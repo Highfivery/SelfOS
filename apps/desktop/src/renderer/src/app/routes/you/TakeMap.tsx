@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, Minus, Sparkles } from 'lucide-react';
 import { Button, Card, Heading, Text } from '../../../design-system/components';
+import { markCount } from './takeSteps';
 import type { StepId, StepStatus } from './takeSteps';
 import adaptive from './Adaptive.module.css';
 
@@ -54,7 +55,8 @@ export function TakeMap({
     statuses.find((status) => status.state === 'now') ??
     statuses.find((status) => status.state === 'open') ??
     statuses[0];
-  const marked = statuses.reduce((sum, status) => sum + status.count, 0);
+  // 74 §3.6.34 — MARKS, not everything countable (`markCount`, beside the units that define it).
+  const marked = markCount(statuses);
 
   if (retake) return <RetakeChoice marked={marked} busy={busy} {...retake} />;
 

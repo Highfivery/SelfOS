@@ -167,6 +167,28 @@ function shortfall(readiness: GenerationReadiness): string {
  * The state of every step, in order. Pure, so the rail/map/frames read one answer and the tests can pin the
  * awkward cases (arriving early, coming back after adding marks, skipping) without a DOM.
  */
+/**
+ * 74 §3.6.34 — how many MARKS this person has, from the step statuses.
+ *
+ * The map summed every counted step and called the total "N marks so far" — and, on the retake screen, "You
+ * have N marks on record from last time", which is the number someone weighs when deciding whether to keep
+ * them or start from an empty sheet. Three of the five counted steps are not marks: line reactions, answered
+ * probe questions and worked moment categories. `TakeMap`'s own `doneLabel` docstring already said why they
+ * cannot be added — "132 marks beside 6 answered questions beside 8 moment picks is three different things
+ * wearing one bare number" — which is exactly what `unit` was added for.
+ *
+ * So the unit decides, and it lives here beside `unitOf` rather than as a set of magic strings at the call
+ * site. The two marking steps partition the lexicon between them, so their sum is the real count.
+ */
+const MARK_UNITS: ReadonlySet<string> = new Set(['names', 'words']);
+
+export function markCount(statuses: readonly StepStatus[]): number {
+  return statuses.reduce(
+    (sum, status) => (status.unit && MARK_UNITS.has(status.unit) ? sum + status.count : sum),
+    0,
+  );
+}
+
 export function stepStatuses(input: StepInput): StepStatus[] {
   const marked = input.nameMarks + input.bankMarks;
   // 74 §3.6.9 — enough to work FROM, not merely something. Two or three marks leave a generating step falling

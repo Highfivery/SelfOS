@@ -1855,6 +1855,41 @@ when the second arrives, and keep the persisted value byte-identical so it stays
 suspicion by measuring it — "all the buttons went grey" was an artifact of reading a screenshot, and the
 assertion that disproved it is worth keeping.
 
+### 3.6.38 The skip marker carried a NUL — APPROVED + **BUILT** (2026-08-20, owner-directed)
+
+Found while renaming the marker in §3.6.37, pre-existing on `main`, and fixed on the owner's instruction.
+
+`SKIPPED_ANSWER` was `'\0skipped'` where its own docstring said `' skipped'` — a literal NUL had replaced the
+space. Self-consistent, because every reader compares against the constant rather than the text, and a
+landmine three ways: it was **the single NUL byte in a 330KB file**, which is why `grep` treated `schemas.ts`
+as binary and silently printed nothing (a trap this project had already written down rather than fixed); any
+comparison written literally instead of against the constant would fail with no visible cause; and the value
+is persisted, so it sits in every skipped turn on disk.
+
+**Fixing the constant alone would have been worse than leaving it.** `String.trim` does not strip NUL (it is
+not whitespace), so an unhealed row satisfies `isAnsweredTurn` — every question anyone had ever SKIPPED would
+read back as ANSWERED, render under an "Answered" chip, and reach the model as `\u0000skipped`. That is the
+§3.6.17 defect, reintroduced by a one-character change. Measured before writing anything.
+
+So: the value is a real space, the old one is kept as `LEGACY_NUL_SKIPPED_ANSWER` **written as an escape** (the
+byte is gone from the source), and `healSkippedAnswers` rewrites any row still carrying it — at **both** points
+a result is read. `getAdaptiveResult` is the obvious one; `listAdaptiveResults` is the door a COMPLETED take
+comes through, and nothing fetches a finished result by id again, so healing only the first would leave the
+report's "what you told it" and the trends reading a historical skip as an answer for good. Both write back,
+because a heal that only fixes memory hides the write that should persist it (§3.6.34).
+
+**Two vacuous guards caught by the revert-check, both worth recording.** Removing the write-back did not fail
+the first version of the on-disk assertion, because the test built its fixture with `stampTurn` — which reads
+through `getAdaptiveResult` and then saves, persisting the heal as a side effect. The fixture is seeded
+straight onto disk now, which is also the honest shape: a take sitting since before this change has had
+nothing written to it. And removing the heal from `listAdaptiveResults` failed nothing at all until a
+completed-take guard was added.
+
+**Lesson.** A sentinel whose value is persisted cannot be corrected in place — the correction is a migration,
+and its risk is inverted from the usual: the safest-looking change (fix the constant, it is only a
+whitespace character) is the one that silently rewrites the meaning of every historical row. Check what the
+old value does against the NEW predicate before touching either.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

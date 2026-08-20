@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { memFileSystem } from '../../host/memFileSystem';
-import { probeTurnId, ambiguityOfProbeTurn, isAnsweredTurn, SKIPPED_ANSWER } from '../../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../../vault';
+import {
+  probeTurnId,
+  ambiguityOfProbeTurn,
+  healSkippedAnswers,
+  isAnsweredTurn,
+  LEGACY_NUL_SKIPPED_ANSWER,
+  SKIPPED_ANSWER,
+} from '../../schemas';
 import { readLedger } from '../../questionnaires/askLedger';
 import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
 import {
@@ -795,6 +803,140 @@ describe('74 §3.6.35 — a generated item is recorded before anyone responds to
       'What they have told us already in this take — build on it, never re-ask it:\n' +
         '- (probe) another question → what they actually said',
     );
+  });
+});
+
+/**
+ * 74 §3.6.38 — the skip marker carried a NUL, and the rows that already have it are healed on read.
+ *
+ * The value was `'\0skipped'` where its own docstring said `' skipped'` — the single NUL byte in a 330KB file,
+ * which is why `grep` treated `schemas.ts` as binary. It is persisted, so fixing the constant without a
+ * migration would be worse than leaving it: `String.trim` does not strip NUL, so every question anyone had
+ * ever SKIPPED would come back as ANSWERED.
+ */
+describe('74 §3.6.38 — the NUL-bearing skip marker is migrated on read', () => {
+  it('would read an unhealed row as an ANSWER — which is why the migration exists', () => {
+    // The failure mode, pinned. If this ever stops being true the migration can go; while it is true,
+    // removing the migration silently turns every historical skip into an answer.
+    expect(LEGACY_NUL_SKIPPED_ANSWER.trim()).not.toBe('');
+    expect(isAnsweredTurn(LEGACY_NUL_SKIPPED_ANSWER)).toBe(true);
+    // …and the value that replaced it is correctly read as a skip.
+    expect(isAnsweredTurn(SKIPPED_ANSWER)).toBe(false);
+    expect(SKIPPED_ANSWER).toBe(' skipped');
+  });
+
+  it('heals a legacy skip on read, writes it back, and leaves everything else alone', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+
+    /*
+     * Seeded straight onto disk, NOT through `stampTurn`.
+     *
+     * `stampTurn` reads via `getAdaptiveResult` and then saves, so it persists the heal as a side effect —
+     * which made the first version of the on-disk assertion below pass even with the write-back removed. A
+     * take that has been sitting since before this change has had nothing written to it, and that is the
+     * state the migration exists for.
+     */
+    const path = `people/p1/tests/${draft.id}.enc`;
+    await writeEncryptedJson(
+      fs,
+      path,
+      {
+        ...draft,
+        turns: [
+          {
+            phase: 'probe',
+            item: { id: 'a#skipped', pack: 'probe', text: 'Passed over', options: [] },
+            answer: LEGACY_NUL_SKIPPED_ANSWER,
+            at: now.toISOString(),
+          },
+          {
+            phase: 'probe',
+            item: { id: 'a#answered', pack: 'probe', text: 'Answered', options: [] },
+            answer: 'what they said',
+            at: now.toISOString(),
+          },
+        ],
+      },
+      key,
+    );
+
+    const healed = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    const skipped = healed?.turns?.find((t) => t.item.id === 'a#skipped');
+    expect(skipped?.answer).toBe(SKIPPED_ANSWER);
+    // Still a SKIP — which is the whole point. Unhealed it would read as an answer.
+    expect(isAnsweredTurn(skipped?.answer)).toBe(false);
+    // The real answer is untouched.
+    expect(healed?.turns?.find((t) => t.item.id === 'a#answered')?.answer).toBe('what they said');
+
+    // WRITTEN BACK, not just healed in memory (§3.6.34): read it again through a path that does not heal and
+    // the old value must be gone from disk, or every read re-heals a row nothing ever persisted.
+    const onDisk = (await readEncryptedJson(fs, path, key)) as {
+      turns?: { answer?: unknown }[];
+    } | null;
+    expect(onDisk?.turns?.some((t) => t.answer === LEGACY_NUL_SKIPPED_ANSWER)).toBe(false);
+    expect(onDisk?.turns?.some((t) => t.answer === SKIPPED_ANSWER)).toBe(true);
+  });
+
+  it('heals a COMPLETED take too — the door the report and trends come through', async () => {
+    /*
+     * `listAdaptiveResults` is the other reader, and the one a finished take is served by: nothing fetches a
+     * completed result by id again, so healing only in `getAdaptiveResult` would leave the report's "what you
+     * told it" and the trends reading a historical skip as an answer for good.
+     */
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const path = 'people/p1/tests/done-1.enc';
+    await writeEncryptedJson(
+      fs,
+      path,
+      {
+        schemaVersion: 1,
+        id: 'done-1',
+        testId: DIRTY_TALK.id,
+        testVersion: 1,
+        subjectPersonId: 'p1',
+        kind: 'adaptive',
+        status: 'complete',
+        answers: [],
+        scores: [],
+        takenAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        turns: [
+          {
+            phase: 'probe',
+            item: { id: 'a#skipped', pack: 'probe', text: 'Passed over', options: [] },
+            answer: LEGACY_NUL_SKIPPED_ANSWER,
+            at: now.toISOString(),
+          },
+        ],
+      },
+      key,
+    );
+
+    const [listed] = await listAdaptiveResults(fs, key, 'p1', DIRTY_TALK.id);
+    expect(listed?.turns?.[0]?.answer).toBe(SKIPPED_ANSWER);
+    expect(isAnsweredTurn(listed?.turns?.[0]?.answer)).toBe(false);
+    // …and persisted, so the next read is not a re-heal of a row nothing ever fixed.
+    const onDisk = (await readEncryptedJson(fs, path, key)) as {
+      turns?: { answer?: unknown }[];
+    } | null;
+    expect(onDisk?.turns?.[0]?.answer).toBe(SKIPPED_ANSWER);
+  });
+
+  it('is a no-op for a take that never had one', async () => {
+    const clean = { turns: [{ answer: 'a real answer' }] } as unknown as Parameters<
+      typeof healSkippedAnswers
+    >[0];
+    const out = healSkippedAnswers(clean);
+    // Reports no change, so the caller does not write — an unconditional write would touch every result on
+    // every read, and `changed` is what tells the two readers apart from a heal that did nothing.
+    expect(out.changed).toBe(false);
+    expect(out.result).toBe(clean);
   });
 });
 

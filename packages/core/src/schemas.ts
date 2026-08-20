@@ -1473,7 +1473,54 @@ export function contextOfScenarioTurn(turnId: string): string {
  * as an answer: the review list showed skipped questions under an "Answered" label with an empty box. A
  * distinct marker keeps them visible, honestly labelled, and still answerable.
  */
-export const SKIPPED_ANSWER = ' skipped';
+export const SKIPPED_ANSWER = ' skipped';
+
+/**
+ * What a skip was recorded as before 2026-08-20 (74 §3.6.38), and why it had to change.
+ *
+ * The value carried a literal NUL where its own docstring said a space — `'\0skipped'`, not `' skipped'`.
+ * Self-consistent, because every reader compares against the constant rather than the text, and a landmine
+ * for three reasons: it was the single NUL byte in a 330KB file, which is why `grep` treated `schemas.ts` as
+ * binary and printed nothing (a trap this project had written down rather than fixed); any comparison
+ * written literally instead of against the constant would fail with no visible cause; and the value is
+ * persisted, so it sits in every skipped turn already on disk.
+ *
+ * Written as an ESCAPE, so the byte itself is gone from the source. `healSkippedAnswers` rewrites any row
+ * still carrying it, at the two points a result is read — nothing else may reference this, because after
+ * that a skip is one value again.
+ */
+export const LEGACY_NUL_SKIPPED_ANSWER = '\u0000skipped';
+
+/**
+ * 74 §3.6.38 — rewrite any turn still recorded with the old NUL-bearing skip marker.
+ *
+ * Pure, idempotent, and it reports whether it changed anything, because a read-time migration that only heals
+ * IN MEMORY hides the write that should persist it — the §3.6.34 lesson, where a heal-on-read silently stopped
+ * anything writing back and the stale rows sat on disk being re-healed forever.
+ *
+ * This is not optional politeness. `String.trim` does not strip NUL (it is not whitespace), so once the
+ * constant changed, an unhealed row would satisfy `isAnsweredTurn` — every question anyone had ever SKIPPED
+ * would read back as ANSWERED, render under an "Answered" chip, and reach the model as `\u0000skipped`. That
+ * is exactly the defect §3.6.17 fixed, reintroduced by a one-character change.
+ */
+export function healSkippedAnswers(result: TestResult): {
+  result: TestResult;
+  changed: boolean;
+} {
+  const turns = result.turns;
+  if (!turns?.some((turn) => turn.answer === LEGACY_NUL_SKIPPED_ANSWER)) {
+    return { result, changed: false };
+  }
+  return {
+    result: {
+      ...result,
+      turns: turns.map((turn) =>
+        turn.answer === LEGACY_NUL_SKIPPED_ANSWER ? { ...turn, answer: SKIPPED_ANSWER } : turn,
+      ),
+    },
+    changed: true,
+  };
+}
 
 /** Whether a turn's answer is a real answer rather than a recorded skip. */
 export function isAnsweredTurn(answer: unknown): answer is string {

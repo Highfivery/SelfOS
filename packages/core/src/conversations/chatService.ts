@@ -22,6 +22,7 @@ import { readLexicon } from '../tests/adaptive/lexicon';
 import { profileReadBlock } from '../tests/adaptive/adaptiveService';
 import {
   buildOwnLexiconBlock,
+  buildOwnSuppressionBlock,
   buildPartnerSteer,
   buildSuppressionBlock,
   livePartnerOf,
@@ -304,6 +305,7 @@ async function generateCoachReply(
   let lexiconBlocks:
     | {
         own?: string;
+        ownSuppression?: string;
         partnerSteer?: string;
         partnerSuppression?: string;
       }
@@ -328,10 +330,11 @@ async function generateCoachReply(
       ? INTIMACY_GUIDE_GROUPS.has(getExercise(conversation.guideId)?.group ?? '') ||
         conversation.guideId === CHALLENGE_COACH_ID
       : (topicOverride?.lifeAreas ?? []).includes('Intimacy');
-  if (adultAcked) {
-    // Their words AND the reading of them (74 §3.3a). The vocabulary tells the coach WHICH words; the
-    // reading tells it what they are actually after — it was written once and read by nothing.
-    const own = intimateTopic
+  // The POSITIVE halves — their own vocabulary and the silent partner steer — are gated on the ack AND on
+  // the topic. Their words AND the reading of them (74 §3.3a): the vocabulary tells the coach WHICH words,
+  // the reading tells it what they are actually after.
+  const own =
+    adultAcked && intimateTopic
       ? [
           buildOwnLexiconBlock(await readLexicon(fs, key, personId)),
           await profileReadBlock(fs, key, personId),
@@ -339,24 +342,40 @@ async function generateCoachReply(
           .filter(Boolean)
           .join('\n\n')
       : '';
-    const partnerId = await livePartnerOf(fs, key, personId);
-    let partnerSteer = '';
-    let partnerSuppression = '';
-    if (partnerId) {
-      const partnerAcked = (await getGuidancePrefs(fs, key, partnerId)).adultAcknowledged === true;
-      partnerSteer = intimateTopic
-        ? await buildPartnerSteer(fs, key, personId, partnerId, partnerAcked)
-        : '';
-      // Always.
-      partnerSuppression = await buildSuppressionBlock(fs, key, personId, partnerId);
-    }
-    if (own || partnerSteer || partnerSuppression) {
-      lexiconBlocks = {
-        ...(own ? { own } : {}),
-        ...(partnerSteer ? { partnerSteer } : {}),
-        ...(partnerSuppression ? { partnerSuppression } : {}),
-      };
-    }
+  const partnerId = await livePartnerOf(fs, key, personId);
+  const partnerSteer =
+    adultAcked && intimateTopic && partnerId
+      ? await buildPartnerSteer(
+          fs,
+          key,
+          personId,
+          partnerId,
+          (await getGuidancePrefs(fs, key, partnerId)).adultAcknowledged === true,
+        )
+      : '';
+  /*
+   * The SUPPRESSION halves are unconditional (74 §5.8a) — neither ack-gated nor topic-gated.
+   *
+   * Both used to sit inside `if (adultAcked)`, and the person's OWN hard nos additionally inside the topic
+   * gate (they ride along inside `buildOwnLexiconBlock`). Two consequences, both contradicting the rule the
+   * helpers' own docstrings state: a grief or money session never carried their hard-no list at all, and
+   * REVOKING the 18+ ack silently re-opened every word they had ruled out — in their own coach, and in
+   * their partner's. Suppression can only ever PREVENT a suggestion, so no state makes withholding it right.
+   *
+   * `own` already ends with the hard-no list when it is present, so the separate block is emitted only when
+   * it is not — otherwise an intimate session would carry the same list twice.
+   */
+  const ownSuppression = own ? '' : await buildOwnSuppressionBlock(fs, key, personId);
+  const partnerSuppression = partnerId
+    ? await buildSuppressionBlock(fs, key, personId, partnerId)
+    : '';
+  if (own || ownSuppression || partnerSteer || partnerSuppression) {
+    lexiconBlocks = {
+      ...(own ? { own } : {}),
+      ...(ownSuppression ? { ownSuppression } : {}),
+      ...(partnerSteer ? { partnerSteer } : {}),
+      ...(partnerSuppression ? { partnerSuppression } : {}),
+    };
   }
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).

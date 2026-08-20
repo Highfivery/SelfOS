@@ -1257,7 +1257,10 @@ const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('addBoundary'),
     text: z.string().min(1).max(200),
-    boundaryKind: z.enum(['word', 'theme']),
+    // Themes only (74 §3.6.29). A `kind:'word'` record is the pre-§3.6.11 storage for a hard no — suppression
+    // derives from the entry's live mark now, and a word record with no entry behind it is a suppression with
+    // no row anywhere to lift it. The renderer only ever sends `theme`; this makes that the contract.
+    boundaryKind: z.literal('theme'),
   }),
 ]);
 

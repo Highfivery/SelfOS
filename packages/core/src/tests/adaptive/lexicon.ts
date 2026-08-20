@@ -68,10 +68,11 @@ export async function readLexicon(
     if (!raw) return emptyLexicon(personId, now);
     const parsed = EroticLexiconSchema.safeParse(raw);
     if (!parsed.success) return emptyLexicon(personId, now);
-    // 74 §3.6.26 — the deck's pre-Option-B answers are cleared HERE, on the one read every consumer goes
-    // through, so there is exactly one shape in the app and nothing downstream needs a branch for the old
-    // one. It is idempotent and it needs no bank, which is what lets it live this low.
-    return resetPreDirectionalDeckMarks(parsed.data, now).lexicon;
+    // 74 §3.6.26/§3.6.29 — the two legacy shapes are cleared HERE, on the one read every consumer goes
+    // through, so there is exactly one shape in the app and nothing downstream needs a branch for an old
+    // one. Both are idempotent and neither needs a bank, which is what lets them live this low.
+    return dropLegacyWordBoundaries(resetPreDirectionalDeckMarks(parsed.data, now).lexicon, now)
+      .lexicon;
   } catch {
     return emptyLexicon(personId, now);
   }
@@ -348,22 +349,11 @@ export function pruneUnshownMarks(
     }
     entries.push(next);
   }
-  // A retired entry's word record goes with it (74 §3.6.27). Kept, it would start suppressing a word whose
-  // row no longer exists anywhere — `suppressedTexts` ignores such a record only while an entry backs it.
-  const boundaries =
-    retired.dropped.length === 0
-      ? lexicon.boundaries
-      : lexicon.boundaries.filter(
-          (boundary) =>
-            boundary.kind !== 'word' ||
-            !retired.dropped.includes(boundary.text.trim().toLowerCase()),
-        );
-  if (boundaries.length !== lexicon.boundaries.length) changed = true;
+  // No boundary pass here any more (74 §3.6.29). A retired entry used to strand its `kind:'word'` record,
+  // which then suppressed a word with no row left to lift it; those records are now dropped wholesale in
+  // `readLexicon`, so there is nothing left for a retirement to strand. A `theme` was never entry-backed.
   if (!changed) return { lexicon, changed: false };
-  return {
-    lexicon: { ...lexicon, entries, boundaries, updatedAt: now.toISOString() },
-    changed: true,
-  };
+  return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
 }
 
 /**
@@ -392,7 +382,7 @@ export function pruneUnshownMarks(
 function retireCutMarks(
   all: readonly LexiconEntry[],
   bank: Bank,
-): { entries: LexiconEntry[]; changed: boolean; dropped: string[] } {
+): { entries: LexiconEntry[]; changed: boolean } {
   const ourFamily = new Set(bank.families.map((family) => family.id));
   // 74 §3.6.27 — a family the bank RETIRED. Derivation cannot see one (it stops being `ourFamily` the moment
   // it goes), so a removed register is named on the bank and every mark in it is retired outright.
@@ -401,7 +391,7 @@ function retireCutMarks(
     !entry.custom &&
     (retiredFamily.has(entry.family) ||
       (ourFamily.has(entry.family) && bankEntry(bank, entry.key) === undefined));
-  if (!all.some(isRetired)) return { entries: [...all], changed: false, dropped: [] };
+  if (!all.some(isRetired)) return { entries: [...all], changed: false };
 
   const kept = new Map(all.filter((entry) => !isRetired(entry)).map((entry) => [entry.key, entry]));
   for (const entry of all) {
@@ -427,16 +417,7 @@ function retireCutMarks(
       say: survivor.sayState === undefined && survivor.say === 0 ? entry.say : survivor.say,
     });
   }
-  // The texts whose entry is GONE. Their `kind:'word'` records must go with them: `suppressedTexts` ignores
-  // such a record only while an entry with that text exists, so leaving one behind turns a retired word into
-  // a suppression with no row anywhere to lift it (§3.2, and the same trap `resetPreDirectionalDeckMarks`
-  // handles for the deck).
-  const surviving = new Set([...kept.values()].map((entry) => entry.text.trim().toLowerCase()));
-  const dropped = all
-    .filter(isRetired)
-    .map((entry) => entry.text.trim().toLowerCase())
-    .filter((text) => !surviving.has(text));
-  return { entries: [...kept.values()], changed: true, dropped: [...new Set(dropped)] };
+  return { entries: [...kept.values()], changed: true };
 }
 
 /**
@@ -452,20 +433,20 @@ function retireCutMarks(
  * and reading it as a hard no would invent ~20 app-wide suppressions nobody declared. Asked, and the answer
  * was to clear the deck and start it fresh.
  *
- * So a deck entry with no per-direction state is pre-B and its answer goes. Three things make that safe:
+ * So an entry with no per-direction state carries no answer, and it goes. Two things make that safe:
  *
- * - **Scoped to THIS bank's deck families** (`phase !== 'names'`), so the pet names — the bulk of the real
- *   marking, and answered in the new model already — are untouched, and so is any other instrument sharing
- *   the lexicon.
+ * - **It is scoped by SHAPE, not by family** (74 §3.6.29 — an earlier version of this comment claimed a
+ *   family scope the code has never had, which is exactly the two-comments-disagree trap §3.6.24 found).
+ *   Scoping by family is impossible here: this runs inside `readLexicon`, which has no bank, and that is
+ *   precisely what lets it run low enough that no consumer ever sees the old shape. It is safe anyway,
+ *   because every marking phase writes a per-direction mark — the names since §3.6.8, the deck since
+ *   §3.6.26 — so an entry with neither is either pre-Option-B deck data or an entry whose only answer was
+ *   already cleared by `pruneUnshownMarks`, which is empty either way. A future instrument sharing this
+ *   lexicon inherits the same contract: write a per-direction mark, or your entry carries no answer.
  * - **A custom write-in keeps its word.** The owner asked to remove the deck's DATA; a word the person typed
  *   themselves was never the bank's to delete, so its ratings clear and the entry stays. (Without this the
  *   migration would eat a word the moment `addCustomEntry` created it — a fresh custom entry is 0/0 with no
  *   state, which is exactly the shape being purged.)
- * - **A word boundary left behind is removed with it.** This is the one that bites: `suppressedTexts`
- *   ignores a legacy `kind:'word'` record only while an entry with that text still exists, so dropping the
- *   entry and keeping the record would silently REACTIVATE that suppression app-wide with nothing on any
- *   screen left to lift it — the un-gettable-rid-of preference §3.2 abolished, arrived at through a cleanup.
- *   Measured: 0 such records for the owner, 4 for the other member, so it is small and it is real.
  *
  * Idempotent: the second run finds nothing to do and reports `changed: false`, so it never writes on a read.
  */
@@ -483,8 +464,6 @@ export function resetPreDirectionalDeckMarks(
   const isPreDirectional = (entry: LexiconEntry): boolean =>
     entry.hearState === undefined && entry.sayState === undefined;
 
-  const norm = (text: string): string => text.trim().toLowerCase();
-  const cleared = new Set<string>();
   const entries: LexiconEntry[] = [];
   let changed = false;
   for (const entry of lexicon.entries) {
@@ -492,7 +471,6 @@ export function resetPreDirectionalDeckMarks(
       entries.push(entry);
       continue;
     }
-    cleared.add(norm(entry.text));
     if (!entry.custom) {
       // A bank word: the row comes back from the bank, so the entry itself can just go.
       changed = true;
@@ -505,21 +483,42 @@ export function resetPreDirectionalDeckMarks(
       changed = true;
     }
   }
-  // Only a record with nothing left behind it. A text that survives on another entry (a name that shares a
-  // word with a deck line) is still governed by that entry's own mark, so its record stays ignored either way.
-  const surviving = new Set(entries.map((entry) => norm(entry.text)));
-  const boundaries = lexicon.boundaries.filter(
-    (boundary) =>
-      boundary.kind !== 'word' ||
-      !cleared.has(norm(boundary.text)) ||
-      surviving.has(norm(boundary.text)),
-  );
-  if (boundaries.length !== lexicon.boundaries.length) changed = true;
+  // No boundary pass here any more (74 §3.6.29): `dropLegacyWordBoundaries` removes every `kind:'word'`
+  // record on the same read, so a cleared entry can no longer strand one.
   if (!changed) return { lexicon, changed: false };
-  return {
-    lexicon: { ...lexicon, entries, boundaries, updatedAt: now.toISOString() },
-    changed: true,
-  };
+  return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
+}
+
+/**
+ * 74 §3.6.29 — the legacy `kind:'word'` boundary records, removed (owner decision, 2026-08-19).
+ *
+ * A word record was how a hard no was stored before §3.6.11 made suppression DERIVE from the live mark.
+ * Nothing has written one since: the only live writer is the probe's "don't ask me that again", which
+ * writes a `theme`. So every word record in every vault is legacy, and every one of them is one of two
+ * things:
+ *
+ * - **backed by an entry** — the entry's own `hearState`/`sayState` already says the same thing, and
+ *   `suppressedTexts` was already ignoring the record. Removing it changes nothing.
+ * - **orphaned** — its entry was purged from the bank in one of the four name purges, so the record became
+ *   a suppression with no row on any screen to lift it. That is the un-gettable-rid-of preference §3.2
+ *   abolished, and it is not theoretical: measured on the real vault, 382 of 999 records were orphaned, and
+ *   they rejected **27% of ordinary intimate lines** app-wide — `I love the way you look at me`, `kiss me`,
+ *   `stay right there`. An orphan also loses the everyday-word relaxation `violatesBoundary` applies (that
+ *   is derived from the person's live entries), so it degrades to a plain substring match on a word like
+ *   `love`. After this it is 7%, and every remaining refusal is a live mark they can change.
+ *
+ * So the record is not the source of truth for anything, and keeping it can only ever be wrong. Dropped on
+ * read, and `addBoundary` no longer accepts the kind, so a vault heals once and cannot re-acquire one.
+ *
+ * Idempotent: the second run finds nothing to do, so this never writes on a read.
+ */
+export function dropLegacyWordBoundaries(
+  lexicon: EroticLexicon,
+  now: Date,
+): { lexicon: EroticLexicon; changed: boolean } {
+  const boundaries = lexicon.boundaries.filter((boundary) => boundary.kind !== 'word');
+  if (boundaries.length === lexicon.boundaries.length) return { lexicon, changed: false };
+  return { lexicon: { ...lexicon, boundaries, updatedAt: now.toISOString() }, changed: true };
 }
 
 /** Add one of their own words. Custom entries carry `custom: true` and a `custom:` key namespace. */
@@ -547,10 +546,17 @@ export function addCustomEntry(
   return { ...lexicon, entries: [...lexicon.entries, entry], updatedAt: now.toISOString() };
 }
 
-/** Record a boundary that isn't a bank entry (a theme named in a probe: "anything about being used"). */
+/**
+ * Record a boundary that isn't a bank entry — a THEME named in a probe ("anything about being used").
+ *
+ * Themes only, since 74 §3.6.29. A `kind:'word'` record was the pre-§3.6.11 storage for a hard no and is
+ * now pure legacy: suppression derives from the entry's live mark, `readLexicon` drops any record it finds,
+ * and a new one could only ever be a suppression with no row to lift it. Narrowed here rather than left to
+ * a convention, so the one thing that can create a boundary cannot create that.
+ */
 export function addBoundary(
   lexicon: EroticLexicon,
-  boundary: Omit<LexiconBoundary, 'at'>,
+  boundary: Omit<LexiconBoundary, 'at' | 'kind'> & { kind: 'theme' },
   now: Date,
 ): EroticLexicon {
   return {
@@ -631,17 +637,12 @@ export function suppressedTexts(lexicon: EroticLexicon, direction?: 'hear' | 'sa
       return entry.hearState === 'never' || entry.sayState === 'never';
     })
     .map((entry) => entry.text);
-  // A bank entry's suppression comes from its live state ABOVE, never from a record. Lexicons written
-  // before 2026-08-19 still carry a `kind:'word'` record per hard no; honouring those would make a lifted
-  // preference keep suppressing forever, so an entry-backed word record is ignored here. Nothing has to be
-  // migrated: the record is simply no longer the source of truth. A `theme` (named in a probe, not a bank
-  // entry) is unaffected, and so is a word boundary with no entry behind it.
-  const entryTexts = new Set(lexicon.entries.map((entry) => entry.text.trim().toLowerCase()));
+  // A bank entry's suppression comes from its live state ABOVE, never from a record. Since §3.6.29 there
+  // is no other kind: `kind:'word'` records were the pre-§3.6.11 storage for a hard no, nothing writes one,
+  // and `readLexicon` drops any it finds — so every boundary reaching here is a THEME named in a probe
+  // ("anything about being used"), which no entry can express and no mark can lift.
   const fromBoundaries = lexicon.boundaries
     .filter((boundary) => !direction || !boundary.direction || boundary.direction === direction)
-    .filter(
-      (boundary) => boundary.kind !== 'word' || !entryTexts.has(boundary.text.trim().toLowerCase()),
-    )
     .map((boundary) => boundary.text);
   return [...new Set([...fromEntries, ...fromBoundaries])];
 }

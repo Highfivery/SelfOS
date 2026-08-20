@@ -8,6 +8,7 @@ import type { EroticLexicon, LexiconEntry } from '../../schemas';
 import {
   addBoundary,
   addCustomEntry,
+  dropLegacyWordBoundaries,
   applyDirectionalMarks,
   pruneUnshownMarks,
   resetPreDirectionalDeckMarks,
@@ -160,7 +161,14 @@ describe('the erotic lexicon (74 §4.4)', () => {
   });
 
   it('suppresses a candidate line that touches any boundary', () => {
-    const lex = addBoundary(seeded(), { text: 'daddy', kind: 'word' }, NOW);
+    // Both suppressions come from a live MARK (74 §3.6.29 — a `kind:'word'` record can no longer exist).
+    const lex = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { 'names-hard-power:daddy': { hear: 'never', say: 'never' } },
+      'take:2',
+      LATER,
+    );
     expect(violatesBoundary(lex, 'You filthy whore')).toBe(true);
     expect(violatesBoundary(lex, 'yes daddy, please')).toBe(true);
     expect(violatesBoundary(lex, 'good girl, just like that')).toBe(false);
@@ -232,8 +240,9 @@ describe('the erotic lexicon (74 §4.4)', () => {
 });
 
 describe('boundary matching (74 §5.7)', () => {
-  it('matches a WORD boundary literally and a THEME boundary by its content words', () => {
-    let lex = addBoundary(emptyLexicon('p1', NOW), { text: 'whore', kind: 'word' }, NOW);
+  it('matches a marked term literally and a THEME boundary by its content words', () => {
+    // The literal half is a live mark; the themed half is the only kind of BOUNDARY RECORD left (§3.6.29).
+    let lex = seeded();
     lex = addBoundary(lex, { text: 'anything about being used', kind: 'theme' }, NOW);
     // Literal.
     expect(violatesBoundary(lex, 'you filthy whore')).toBe(true);
@@ -280,18 +289,13 @@ describe('74 §3.6.26 — the deck answers per direction, and its old answers ar
       ],
       boundaries: [{ text: 'cunt', kind: 'word', at: NOW.toISOString() }],
     };
-    // Not suppressed today: `suppressedTexts` ignores a word record while an entry with that text exists.
-    // Remove the entry and leave the record and it starts suppressing — a word they never ruled out, banned
-    // app-wide, with no row anywhere to lift it. Exactly the un-gettable-rid-of preference §3.2 abolished,
-    // reached by cleaning up.
-    expect(suppressedTexts(legacy)).not.toContain('cunt');
-    expect(suppressedTexts({ ...legacy, entries: [] })).toContain('cunt');
-
+    // The reset clears the answer; the RECORD is taken by `dropLegacyWordBoundaries` on the same read
+    // (74 §3.6.29). Both run inside `readLexicon`, which is the guarantee that matters — asserted below.
     const { lexicon, changed } = resetPreDirectionalDeckMarks(legacy, LATER);
     expect(changed).toBe(true);
     expect(lexicon.entries).toEqual([]);
-    expect(lexicon.boundaries).toEqual([]);
-    expect(suppressedTexts(lexicon)).toEqual([]);
+    expect(dropLegacyWordBoundaries(lexicon, LATER).lexicon.boundaries).toEqual([]);
+    expect(suppressedTexts(dropLegacyWordBoundaries(lexicon, LATER).lexicon)).toEqual([]);
   });
 
   it('clears an entry whose answer lived in the RETIRED whole-entry state, and its record', () => {
@@ -317,8 +321,7 @@ describe('74 §3.6.26 — the deck answers per direction, and its old answers ar
     const { lexicon, changed } = resetPreDirectionalDeckMarks(stripped, LATER);
     expect(changed).toBe(true);
     expect(lexicon.entries).toEqual([]);
-    expect(lexicon.boundaries).toEqual([]);
-    expect(suppressedTexts(lexicon)).toEqual([]);
+    expect(dropLegacyWordBoundaries(lexicon, LATER).lexicon.boundaries).toEqual([]);
   });
 
   it('leaves the pet names alone — they were already answered this way', () => {
@@ -417,9 +420,10 @@ describe('74 §3.6.27 — a whole register the bank retired', () => {
     const { lexicon, changed } = pruneUnshownMarks(gone, DIRTY_TALK.bank, OPEN_ORIENTATION, LATER);
     expect(changed).toBe(true);
     expect(lexicon.entries.map((e) => e.key)).toEqual([GOOD_GIRL]);
-    // The record goes too, or removing the row is what STARTS the suppression.
-    expect(lexicon.boundaries).toEqual([]);
-    expect(suppressedTexts(lexicon)).toEqual([]);
+    // The record goes too, or removing the row is what STARTS the suppression — taken since §3.6.29 by
+    // `dropLegacyWordBoundaries`, which runs on the same read and takes EVERY word record, not just this one.
+    expect(dropLegacyWordBoundaries(lexicon, LATER).lexicon.boundaries).toEqual([]);
+    expect(suppressedTexts(dropLegacyWordBoundaries(lexicon, LATER).lexicon)).toEqual([]);
   });
 
   it('is derived from the bank, so a register still in it is untouched', () => {
@@ -470,7 +474,13 @@ describe('a hard no is respected while set, and changeable (74 §3.2, amended 20
   });
 
   it('matches a literal boundary on word boundaries, so a short word cannot suppress everything', () => {
-    const lex = addBoundary(emptyLexicon('p1', NOW), { text: 'ass', kind: 'word' }, NOW);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { 'anatomy-her:ass': { hear: 'never', say: 'never' } },
+      'take:1',
+      NOW,
+    );
     expect(violatesBoundary(lex, 'that ass')).toBe(true);
     expect(violatesBoundary(lex, 'pass me the water')).toBe(false);
     expect(violatesBoundary(lex, 'a class act')).toBe(false);
@@ -904,5 +914,66 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
     };
     // Not a name family, so nothing is loosened: the word is off wherever it appears.
     expect(violatesBoundary(lex, 'you little slut of a thing')).toBe(true);
+  });
+});
+
+describe('74 §3.6.29 — the legacy word-boundary records are gone', () => {
+  /*
+   * The defect this closes, measured on the real vault: 999 `kind:'word'` records, 382 of them ORPHANED by
+   * earlier bank purges. `suppressedTexts` honours an orphan (it ignores a word record only while an entry
+   * with that text exists), and `violatesBoundary`'s everyday-word relaxation is derived from the person's
+   * live ENTRIES — so an orphan also loses the relaxation and degrades to a plain substring match on words
+   * like `love`. Result: 27% of ordinary intimate lines discarded app-wide, with no row anywhere to lift one.
+   */
+  const orphaned: EroticLexicon = {
+    ...emptyLexicon('p1', NOW),
+    entries: [],
+    boundaries: [
+      { text: 'love', kind: 'word', at: NOW.toISOString() },
+      { text: 'anything about being used', kind: 'theme', at: NOW.toISOString() },
+    ],
+  };
+
+  it('drops every word record and keeps every theme', () => {
+    const { lexicon, changed } = dropLegacyWordBoundaries(orphaned, LATER);
+    expect(changed).toBe(true);
+    expect(lexicon.boundaries.map((b) => b.kind)).toEqual(['theme']);
+  });
+
+  it('is idempotent, so it never writes on a read', () => {
+    const once = dropLegacyWordBoundaries(orphaned, LATER).lexicon;
+    expect(dropLegacyWordBoundaries(once, LATER).changed).toBe(false);
+  });
+
+  it('stops an orphaned record rejecting an ordinary line — the whole point', () => {
+    // Before: no entry backs the record, so it suppresses AND loses the everyday-word relaxation.
+    expect(suppressedTexts(orphaned)).toContain('love');
+    expect(violatesBoundary(orphaned, 'I love the way you look at me')).toBe(true);
+    const cleaned = dropLegacyWordBoundaries(orphaned, LATER).lexicon;
+    expect(suppressedTexts(cleaned)).not.toContain('love');
+    expect(violatesBoundary(cleaned, 'I love the way you look at me')).toBe(false);
+    // The theme still bites, so this narrows the legacy SHAPE and not enforcement.
+    expect(violatesBoundary(cleaned, 'I love using you')).toBe(true);
+  });
+
+  it('a live mark still suppresses — the record was never the source of truth', () => {
+    const marked = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { [WHORE]: { hear: 'never', say: 'never' } },
+      'take:1',
+      NOW,
+    );
+    const cleaned = dropLegacyWordBoundaries(marked, LATER).lexicon;
+    expect(suppressedTexts(cleaned)).toContain('whore');
+    expect(violatesBoundary(cleaned, 'you filthy whore')).toBe(true);
+  });
+
+  it('heals a stored vault on the very next read, with no migration step', async () => {
+    const fs = memFileSystem();
+    await writeLexicon(fs, KEY, orphaned);
+    const read = await readLexicon(fs, KEY, 'p1', LATER);
+    expect(read.boundaries.map((b) => b.kind)).toEqual(['theme']);
+    expect(violatesBoundary(read, 'I love the way you look at me')).toBe(false);
   });
 });

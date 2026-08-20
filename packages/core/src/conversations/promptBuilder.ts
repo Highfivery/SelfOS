@@ -55,10 +55,17 @@ export async function buildSystemPrompt(
   // 52-challenge-sessions §8.3 — the per-person 18+ ack. The challenge-coach's EXPLICIT sexual register is
   // appended ONLY when this is true; un-acked, the addendum's gated stance steers away from sexual content.
   adultAllowed?: boolean,
-  // 74 §5.8 — the erotic lexicon. `lexicon` is the person's OWN language; `partnerSteer`/`partnerSuppression`
-  // are their partner's, assembled by the host (which owns the relationship + both acks). All three are
-  // appended AFTER context so the boundary always leads, and only when the 18+ ack is held.
-  lexiconBlocks?: { own?: string; partnerSteer?: string; partnerSuppression?: string },
+  // 74 §5.8/§5.8a — the erotic lexicon. `own`/`partnerSteer` are the POSITIVE halves: they hand a coach
+  // explicit vocabulary, so they are gated on the 18+ ack (and, by the host, on the topic being intimate).
+  // `ownSuppression`/`partnerSuppression` are the hard-no lists and are **unconditional**: they can only ever
+  // PREVENT a suggestion, so no ack state, topic or relationship state makes withholding one correct — and a
+  // revoked ack must not quietly re-open a word someone ruled out. All four go AFTER context so safety leads.
+  lexiconBlocks?: {
+    own?: string;
+    ownSuppression?: string;
+    partnerSteer?: string;
+    partnerSuppression?: string;
+  },
 ): Promise<string> {
   const exercise = guideId ? getExercise(guideId) : undefined;
   // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
@@ -94,9 +101,12 @@ export async function buildSystemPrompt(
   // 74 §5.8 — their own erotic language, then (silently) what lands for their partner, then their
   // partner's hard nos as a negative constraint. The suppression runs even with no steer: it can only
   // ever PREVENT a suggestion, which needs no consent (74 §8.4).
-  if (adultAllowed && lexiconBlocks) {
-    if (lexiconBlocks.own) parts.push(lexiconBlocks.own);
-    if (lexiconBlocks.partnerSteer) parts.push(lexiconBlocks.partnerSteer);
+  if (lexiconBlocks) {
+    // Positive halves: ack-gated (74 §5.8).
+    if (adultAllowed && lexiconBlocks.own) parts.push(lexiconBlocks.own);
+    if (adultAllowed && lexiconBlocks.partnerSteer) parts.push(lexiconBlocks.partnerSteer);
+    // Suppression: unconditional (74 §8.4/§5.8a).
+    if (lexiconBlocks.ownSuppression) parts.push(lexiconBlocks.ownSuppression);
     if (lexiconBlocks.partnerSuppression) parts.push(lexiconBlocks.partnerSuppression);
   }
 

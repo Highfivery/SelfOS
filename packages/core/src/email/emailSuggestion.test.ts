@@ -495,12 +495,24 @@ describe('emailed answers are written for the email (#459, #523)', () => {
 });
 
 describe('74 §8.4 — the intimacy email carries the hard nos', () => {
-  /** A person who has ruled one word out. */
+  /**
+   * A person who has ruled one word out — as a live MARK, which is the only way a hard no exists since
+   * 74 §3.6.11. (A `kind:'word'` boundary record was the pre-§3.6.11 storage and is dropped on read, §3.6.29.)
+   */
   async function withBoundary(fs: ReturnType<typeof memFileSystem>): Promise<void> {
-    await writeLexicon(fs, key, {
-      ...emptyLexicon(PERSON, now),
-      boundaries: [{ text: 'whore', kind: 'word', at: now.toISOString() }],
-    });
+    const { applyDirectionalMarks } = await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    await writeLexicon(
+      fs,
+      key,
+      applyDirectionalMarks(
+        emptyLexicon(PERSON, now),
+        DIRTY_TALK.bank,
+        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        'take:1',
+        now,
+      ),
+    );
   }
 
   const intimacyInput = {

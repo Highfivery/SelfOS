@@ -175,9 +175,13 @@ graceful fallback when a person lacks `viewResults`.
 analyze** · **Analyzed** (a pure `sentStatusOf`/`SENT_GROUPS` classification). Each section has a quiet toolbar
 (**search** + **status filter** + **sort** — recently sent / recently answered / A–Z; favourites pin to the
 top) and **"Show more"** pagination (`PAGE_SIZE`). Sent/answered/received times show **date AND time**
-(`formatDateTime`). A **Sent card** carries favourite · **share-link** (icon + tooltip, moved out of the kebab)
-· **view** ("See what was sent") icons + a kebab (**Duplicate** · Delete), with an **inline delete confirm**
-(rendered in the card, never off-screen). An **answered-not-analysed** card offers a one-tap **Analyze**
+(`formatDateTime`). A **Sent card** carries a favourite icon + a kebab
+(**See what was sent** · **Copy share link** · **Duplicate** · Delete), with an **inline delete confirm**
+(rendered in the card, never off-screen). _(2026-08-20 — share-link and view moved back INTO the kebab. Not
+tidiness: four 32px `IconButton`s sat in a `flex: none` cluster taking **134px that cannot shrink**, while the
+type eyebrow is a `flex: 1` sibling with `flex-basis: 0`, so it absorbed the entire shortfall — **124.7px ≈ 17
+characters at a 1280px window, 66px ≈ 9 at the grid floor**, against built-in labels running to 36 characters.
+Two icons take 68px. See §33.)_ An **answered-not-analysed** card offers a one-tap **Analyze**
 (reuses `insights:analyze`); an **analysed** card shows the **Insight excerpt** (2026-07-09: an "Insight"
 eyebrow + the summary rendered through the shared safe `<Markdown>` (34) and **clamped to 3 whole lines on a
 padding-free body** — a clean ellipsis, never a half-sliced line — with the affordances on their **own row
@@ -242,7 +246,10 @@ the one group that needs the user's action must never be buried by a fresh analy
 `orderSentGroups` hoists it, then applies the recency/lifecycle ranking above to the remainder below it. The card
 spacing reserve (`.cardTitleButton { min-height: 2.6em }`) is likewise dropped in favour of a natural-height
 title + a bottom-pinned `.cardFoot` (`margin-top: auto`), so a one-line title leaves no void and footers align
-across a row (65 §3.1). The **Received** tab gained its own **sort** (`sortReceived`: Recently received
+across a row (65 §3.1). _(**Superseded 2026-08-20 by §33**: the bottom pin is gone. Grid items stretch by
+default, so pinning the foot to a row-inflated height was tidying the symptom rather than the cause —
+`.grid { align-items: start }` now lets each card take its natural height, and the state chips moved up under
+the title.)_ The **Received** tab gained its own **sort** (`sortReceived`: Recently received
 [default] · Recently answered · Title A–Z; favourites pinned, missing-date items sink). The attention count on
 the Received tab uses a soft `--color-warning-subtle-bg`/`-text` pill (both themes) rather than a harsh
 dark-yellow-on-black.
@@ -4309,3 +4316,72 @@ email. Those need a fixed set of things to RATE, which is a different job from g
 
 **Owner steering now lives** where it is per-person: the Explored panel's pin / leave-alone steers, partner
 wishes ([`70`](70-adaptive-exploration.md) §12 P4), and the brief on a draft.
+
+---
+
+## 33. Card layout — the squeeze, measured and fixed (2026-08-20)
+
+**Status: BUILT.** Owner-reported: _"the cards get squished with the amount of content in them (which I want
+to keep)."_ Every element stays; the container changed.
+
+### 33.1 What was actually wrong (measured, not eyeballed)
+
+A Sent card renders ~13 elements into a grid column that is **266.7px at a 1280px window** and 208px at the
+`minmax(240px, 1fr)` floor. Four proven causes:
+
+1. **The eyebrow was starved.** `.cardIcons { flex: none }` held 134px (4 × 32px + gaps); `.eyebrow { flex: 1 }`
+   has `flex-basis: 0`, so it absorbed 100% of the deficit → ~124.7px, and 66px at the floor.
+2. **Pills broke inside their own radius.** `.pill` set no `white-space`, so a pill placed on a line with
+   insufficient room shrank to min-content and wrapped internally ("From your / biographer").
+3. **Dates split mid-value.** `.cardMeta`'s spans were unconstrained flex items → "Answered Jun 30, 2026 ·" /
+   "10:02 AM", which also defeated the `tabular-nums` above it.
+4. **The dead space came from the grid, not the card.** Grid items stretch by default, so one card with a
+   3-line insight set the height of every card in its row; `.cardFoot { margin-top: auto }` pinned the foot to
+   that inflated height rather than removing the cause.
+
+### 33.2 The fix
+
+- **Track floor 240px → `minmax(min(360px, 100%), 1fr)`.** The `min(…, 100%)` guard is required — an
+  unguarded track can exceed its container (§12).
+- **`align-items: start` on `.grid`.** Cards take their natural height; a short card is never stretched.
+  `.cardFoot` consequently drops `margin-top: auto` and moves **under the title**, so a card's state reads
+  immediately rather than at its foot.
+- **Two icons, not four.** View + share move into the kebab (§3.1).
+- **`white-space: nowrap`** on `.pill`; **`.cardMeta > span { white-space: nowrap }`**; `.recipsLabel { flex: none }`.
+- **`.autoRationale` clamps to 2 lines** — it was the only prose block on a card with no clamp, so one long
+  AI rationale set a whole row's height. _Note it renders only on a **Received** card (`ReceivedCard` is its
+  sole consumer), so it never contributed to the reported Sent-card squeeze; it is fixed here because it is
+  the same defect class. It is the one change in this slice with **no automated guard** — an attempt to add
+  one seeded a Received card and destabilised the test, and a flaky guard is worse than an honest gap._
+- Clamped titles carry a `title` attribute (a clipped title was otherwise unrecoverable).
+
+### 33.3 Defects fixed alongside
+
+- `styles.sentCard` / `styles.receivedCard` were **referenced but defined nowhere**, rendering
+  `class="card undefined"`. There was no per-type card styling at all; the dead references are removed.
+- `--glance-label-w` was **used once and defined nowhere**, so only its `128px` fallback ever applied. Replaced
+  with a real value, and the ellipsised label now carries a `title`.
+- `.areaList` (Explored) used an unguarded `minmax(340px, 1fr)` — it overflowed horizontally at phone width
+  **and between 768–964px**, where the sub-nav column is a hard 264px and cannot give width back (§12).
+- `.tbSearch input` was pinned at **96px at every viewport** (~12 characters on a 900px toolbar); the field now
+  takes a bounded share of the toolbar.
+- _(Investigated and **not** changed: `questionnaireStore.reset()` leaving `customTypes` behind initially read
+  as a per-person leak. It isn't — custom types live in `config/questionnaires.json`, a household-wide vault
+  file identical for every member, so nothing leaks. Clearing them would have been a real regression: the
+  AppShell reload calls `load()` but never `loadTypes()`, and a person switch is an in-app modal that keeps the
+  route mounted, so the builder's type picker would have emptied until a remount. The comment on `reset()` now
+  records why it is deliberately left alone.)_
+
+### 33.4 Guard
+
+E2E `questionnaires cards (§3.1)` asserts, in real Chromium: the 36-character type label is not clipped
+(`scrollWidth <= clientWidth`), the status/provenance pills compute `white-space: nowrap`, two cards sharing a
+grid row keep **different heights**, the secondary actions are in the kebab, and 360px has no inner scroller.
+It also asserts the header holds **exactly two buttons**, which is the guard for the icon consolidation
+itself — deliberately a count, not a width, because at 1280px the eyebrow gets exactly the 280px it needs even
+with the old four-icon cluster restored, so a width assertion there would pass on the unfixed header.
+**The three geometry/property assertions were verified to FAIL when their fix is reverted** — the eyebrow check
+reports 280px needed against 199px available at the old floor; the stretch check reports `[[231,231],[208,208]]`
+without `align-items: start`; the pill check reports `"normal"`. _An earlier version of the pill assertion was
+geometric and proved **vacuous** — with the floor at 360px the pills no longer have room to wrap at any
+supported width, so it passed with the fix reverted. It is deliberately a property fence, and says so._

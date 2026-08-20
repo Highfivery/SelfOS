@@ -598,3 +598,15 @@ auto`, reconcile the `.from`/`.cardMeta` pulls). Unit tests for `sentGrouping`; 
   queue (card stack + progress + prev/next + auto-advance + all-caught-up), the per-item sharing step (approve
   carries per-fact `shareableTypes`), and the merge-proposal card variant; reorder the page (trends/responses
   full-width). Amends 62 §3.1/§4 / 39.
+
+---
+
+## Superseded
+
+**§3.1's shared-bottom-edge rule is superseded by 08 §33 (2026-08-20).** This spec had cards pin `.cardFoot`
+with `margin-top: auto` so status/privacy/meta shared a bottom edge across a row. That is now gone: the grid
+sets `align-items: start`, so each card takes its natural height. The bottom edge was tidying a symptom —
+grid items stretch by default, so one card with a long insight inflated every card in its row, and pinning the
+foot to that inflated height is what produced the dead space the owner reported. The corresponding testing item
+here ("footers share a bottom edge across a mixed row") is withdrawn; it was never built, and the current E2E
+asserts the opposite.

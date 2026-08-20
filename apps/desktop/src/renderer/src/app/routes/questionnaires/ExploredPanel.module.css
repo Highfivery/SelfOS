@@ -830,9 +830,12 @@
    plain column list, which is what pushed the steers out to the right and put
    the topic list in a detached slab beside its area. */
 
+/* `min(340px, 100%)` is load-bearing (§12): an unguarded `minmax(340px, 1fr)` track never shrinks below
+   340px, so it overflowed its container horizontally at phone width AND between 768-964px on desktop —
+   where the sub-nav column is a hard 264px and cannot give any width back. */
 .areaList {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
   gap: var(--space-3);
   align-items: start;
 }

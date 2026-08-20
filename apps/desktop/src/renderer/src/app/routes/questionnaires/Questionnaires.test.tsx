@@ -998,8 +998,13 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    // A SENT card carries a "Copy share link" icon (moved out of the kebab) → opens it + fetches the link.
-    await userEvent.click(await screen.findByRole('button', { name: 'Copy share link' }));
+    // A SENT card offers "Copy share link" in its ⋯ menu → opens the delivery panel + fetches the link.
+    // (It lives in the menu, not the header: four fixed-width icon buttons in the header took 134px that
+    // could not shrink, and the type label absorbed the whole shortfall — §3.1.)
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Options for Weekly check-in/ }),
+    );
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Copy share link' }));
     expect(questionnairesShareLink).toHaveBeenCalledWith('q1', false);
     expect(
       await screen.findByDisplayValue('https://x.workers.dev/q/shr#k=key'),

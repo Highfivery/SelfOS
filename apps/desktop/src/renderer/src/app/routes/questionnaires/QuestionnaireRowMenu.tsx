@@ -4,17 +4,26 @@ import { IconButton } from '../../../design-system/components';
 import styles from './Questionnaires.module.css';
 
 /**
- * A per-questionnaire "⋯" menu in the list (08-questionnaires §3.9): currently just Delete, but a self-
- * contained menu so the row stays uncluttered and more actions can join later. Keyboard + screen-reader
- * friendly: a labelled trigger with `aria-expanded`, Escape to close, and a backdrop for outside-click.
- * Deletion itself is confirmed by the parent (it's destructive — it removes any responses + insights).
+ * A per-questionnaire "⋯" menu in the list (08-questionnaires §3.9). It carries the card's secondary
+ * actions — see-what-was-sent, copy-share-link, Duplicate, Delete — so the card header holds only the
+ * favourite and this trigger. That is not tidiness: four 32px icon buttons in a `flex: none` cluster took
+ * 134px that could not shrink, and the type label (a `flex: 1` sibling) absorbed the entire shortfall,
+ * clipping 36-character labels to ~9 characters at the grid floor (§3.1).
+ * Keyboard + screen-reader friendly: a labelled trigger with `aria-expanded`, Escape to close, and a
+ * backdrop for outside-click. Deletion is confirmed by the parent (it removes responses + insights).
  */
 export function QuestionnaireRowMenu({
   title,
+  onView,
+  onShare,
   onDuplicate,
   onDelete,
 }: {
   title: string;
+  /** Open the frozen snapshot of what was actually sent (present only once sent). */
+  onView?: () => void;
+  /** Copy the recipient's secure link (present only while a send is open + unanswered). */
+  onShare?: () => void;
   /** Copy this questionnaire into a new draft to edit + re-send (e.g. to refresh stale answers). */
   onDuplicate?: () => void;
   onDelete: () => void;
@@ -50,6 +59,32 @@ export function QuestionnaireRowMenu({
             onClick={() => setOpen(false)}
           />
           <div className={styles.menu} role="menu">
+            {onView ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                onClick={() => {
+                  setOpen(false);
+                  onView();
+                }}
+              >
+                See what was sent
+              </button>
+            ) : null}
+            {onShare ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                onClick={() => {
+                  setOpen(false);
+                  onShare();
+                }}
+              >
+                Copy share link
+              </button>
+            ) : null}
             {onDuplicate ? (
               <button
                 type="button"

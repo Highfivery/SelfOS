@@ -150,5 +150,9 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
     });
     await window.selfos?.questionnairesSetFavorite({ id, favorite });
   },
+  // `customTypes` is deliberately NOT cleared: it is household-wide (a plain `config/questionnaires.json`
+  // in the vault, identical for every member), so there is nothing person-scoped to leak — and clearing it
+  // would empty the builder's type picker until the route remounted, since the AppShell reload calls
+  // `load()` but never `loadTypes()`.
   reset: () => set({ questionnaires: [], sendStates: {}, sentOverview: {}, loaded: false }),
 }));

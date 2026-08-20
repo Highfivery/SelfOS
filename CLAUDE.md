@@ -148,6 +148,22 @@ origin/main`) so history stays linear and the release manifest never carries a s
    giveaway that the machine is still saturated: a boot test that normally takes ~4s took **17.1s** immediately
    after the dev app was closed.)
 
+   **A "crashing" `pnpm dev` is almost always a STALE INSTANCE holding the single-instance lock, not a crash.**
+   `main/index.ts` does `if (!app.requestSingleInstanceLock()) app.quit()`, so a second instance builds fine,
+   prints `start electron app...`, and exits **silently with no error** — which in a terminal is
+   indistinguishable from a crash, and sends you hunting through your own diff for a startup bug that isn't
+   there. Check for a live instance BEFORE reading any code. The trap that makes it stick: pkilling on the app
+   NAME does **not** kill the process holding the lock — only the HELPER processes carry `SelfOS Dev` in their
+   arguments (via `--user-data-dir`), while the main process is just `.../MacOS/Electron .`. Kill by the repo
+   path, which matches both:
+
+   ```bash
+   pkill -f 'SelfOS/node_modules/.pnpm/electron'
+   ```
+
+   The same stale instance is also a prime suspect for the owner reporting an already-fixed bug: it is running
+   whatever code it was launched with, however long ago.
+
 8. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
    _"Tag & publish vX.Y.Z now, or batch with the next change?"_ Releasing = **merging the open
    release-please PR** (which auto-bumps the version, writes `CHANGELOG.md`, tags `vX.Y.Z`, and builds +
@@ -560,6 +576,22 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **Owner-reported ("every time i run pnpm dev it crashes") — it was not a crash; CLAUDE.md §6
+  step 7 amended.** Diagnosed rather than pattern-matched to the change I had just made: the build succeeded,
+  printed `start electron app...`, and the process exited with **no error at all**. The cause was a SelfOS Dev
+  instance that had been running since 8:00PM holding the lock — `main/index.ts` does
+  `if (!app.requestSingleInstanceLock()) app.quit()`, so every subsequent `pnpm dev` quit on arrival. Proven
+  both directions: with the stale instance present my run exited inside 45s at exactly that line; with it
+  cleared, dev started and stayed up. **The trap that makes it durable: pkilling on the app NAME does not kill
+  the process holding the lock** — only the helper processes carry `SelfOS Dev` (via `--user-data-dir`), while
+  the main process is bare `.../MacOS/Electron .`, so a half-kill leaves the lock held and the next run still
+  "crashes". Kill by repo path (`pkill -f 'SelfOS/node_modules/.pnpm/electron'`). Also worth knowing: that
+  instance was running the code it launched with hours earlier, so it is a prime suspect whenever the owner
+  reports an already-fixed bug — the §6 stale-code lesson, from a direction the existing note did not cover.
+  **Lesson: a silent exit immediately after a successful build is a LOCK, not a crash — check for a live
+  instance before reading a line of your own diff. "It crashes every time I run it" arriving right after a
+  large change is exactly the moment the wrong suspect is most convincing.**
+
 - 2026-08-19 — **Live-model pass on Dirty Talk (the model was fine; our own filter was eating the analysis);
   SPEC 74 §3.6.31; on `chore/pet-name-purge-two`).** Ran every AI phase against **real Claude** at the owner's
   real shape (758 entries, 708 suppressed), on an in-memory COPY of his lexicon — never the live vault, which a

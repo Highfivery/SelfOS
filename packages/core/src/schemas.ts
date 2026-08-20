@@ -3780,6 +3780,24 @@ export interface SentRecipientSummary {
   answeredAt?: string;
 }
 
+/** Why a question came back unanswered, as a kind rather than the person's words (08 §34). */
+export type SkipKind = 'unclear' | 'prefer-not-to-say' | 'not-applicable' | 'other';
+
+/**
+ * A count-only picture of what was skipped and why (08 §34.2). Deliberately carries NO reason text: it is
+ * the shape that is safe to show the sender of a PRIVATE send, where the recipient was promised the sender
+ * would not see their written answers — and a skip reason IS a written answer, and the most identifying
+ * thing a person can type. The Standard path reads the reasons separately, from the answers it is already
+ * allowed to show.
+ */
+export interface SkipSummary {
+  /** Visible questions with no usable answer — declined outright or left blank. */
+  total: number;
+  /** Visible questions in total, so a caller can say "all 5" vs "3 of 8". */
+  visible: number;
+  byKind: Record<SkipKind, number>;
+}
+
 /**
  * A per-questionnaire "Sent" overview for the landing cards (08-questionnaires §3.1) — richer than
  * QuestionnaireSendState: who it went to + who's answered, so a card can read "1 of 2 answered". A derived,
@@ -3809,8 +3827,14 @@ export interface QuestionnaireSentOverview {
    *  `insightSummary`. */
   insightId?: string;
   /** The latest submitted-but-un-analysed send, so the card can offer a one-tap "Analyze". Absent when
-   *  there's nothing new to analyse (nothing submitted, or all analysed). */
+   *  there's nothing new to analyse (nothing submitted, all analysed) — or when the only thing left is a
+   *  send whose every answer was skipped and whose privacy mode means there is nothing we could read from
+   *  it (08 §34). Offering an action that can only fail is the reported bug. */
   analyzableAssignmentId?: string;
+  /** Present when the latest submitted send came back with NOTHING answered (08 §34) — counts only, never
+   *  the recipient's written reasons, so this same shape is safe on a Private send. Drives the card's
+   *  distinct "no answers" state and its "why it didn't land" breakdown. */
+  skipped?: SkipSummary;
   /** The privacy mode of the recipients' latest sends, for the card's privacy chip (§3.1 card privacy
    *  badges): `private` = the sender sees only the derived insight, `standard` = the sender sees the
    *  answers, `mixed` = a legacy multi-recipient questionnaire whose latest sends differ. Derived with the

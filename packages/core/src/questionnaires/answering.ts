@@ -5,6 +5,8 @@ import {
   type DeclinedAnswer,
   type Question,
   type SendAnswer,
+  type SkipKind,
+  type SkipSummary,
 } from '../schemas';
 import { MAX_RESPONSE_BYTES } from '../relay/relayLimits';
 
@@ -48,6 +50,39 @@ export const SKIP_REASON_PRESETS = [
   PREFER_NOT_TO_SAY_SKIP_REASON,
   NOT_APPLICABLE_SKIP_REASON,
 ] as const;
+
+/** The preset a reason came from, or `other` for free text / no reason. Keyed on the exact preset strings. */
+export function skipKindOf(reason: string | undefined): SkipKind {
+  const r = (reason ?? '').trim();
+  if (r === UNCLEAR_SKIP_REASON) return 'unclear';
+  if (r === PREFER_NOT_TO_SAY_SKIP_REASON) return 'prefer-not-to-say';
+  if (r === NOT_APPLICABLE_SKIP_REASON) return 'not-applicable';
+  return 'other';
+}
+
+export function summarizeSkips(questions: Question[], answers: AnswerMap): SkipSummary {
+  const visible = visibleQuestions(questions, answers);
+  const byKind: Record<SkipKind, number> = {
+    unclear: 0,
+    'prefer-not-to-say': 0,
+    'not-applicable': 0,
+    other: 0,
+  };
+  let total = 0;
+  for (const q of visible) {
+    const value = answers[q.id];
+    if (isAnswered(q, value)) continue;
+    total += 1;
+    byKind[isDeclined(value) ? skipKindOf(value.reason) : 'other'] += 1;
+  }
+  return { total, visible: visible.length, byKind };
+}
+
+/** Every visible question came back without an answer — the state the sender's card must say plainly. */
+export function isFullySkipped(questions: Question[], answers: AnswerMap): boolean {
+  const summary = summarizeSkips(questions, answers);
+  return summary.visible > 0 && summary.total === summary.visible;
+}
 
 /**
  * Whether a value is a per-question decline (08 §25.2) — the recipient skipped this question (optionally

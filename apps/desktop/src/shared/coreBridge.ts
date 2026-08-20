@@ -469,6 +469,7 @@ import type {
   AdaptiveStateView,
   AdaptiveSynthesisView,
   EroticLexicon,
+  SkipSummary,
 } from '@selfos/core/schemas';
 // A value, not a type — the readiness numbers are shared with the renderer so the two cannot drift.
 import { generationReadiness } from '@selfos/core/schemas';
@@ -702,6 +703,10 @@ import {
   setAutoCheckinConfig,
 } from '@selfos/core/auto-checkins';
 import {
+  type AnswerValue,
+  type AnswerMap,
+  summarizeSkips,
+  isFullySkipped,
   addCustomType,
   analyzeAssignment,
   attachRelayLink,
@@ -5134,6 +5139,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         const privacies = new Set([...agg.latestByRecipient.values()].map((r) => r.privacy));
         const privacy: PrivacyMode | 'mixed' | undefined =
           privacies.size === 1 ? [...privacies][0] : privacies.size > 1 ? 'mixed' : undefined;
+        // A send that came back with NOTHING answered (08 §34). `analyzeAssignment` filters declines out of
+        // the Q&A and then bails EMPTY before it ever reaches the model, so offering "Analyze" here is an
+        // action that CANNOT succeed — the reported bug. Read only the one candidate send (bounded I/O), and
+        // if it is fully skipped, replace the impossible action with a state that says so. The summary is
+        // counts only, so it is the same shape whether the send was Standard or Private.
+        let skipped: SkipSummary | undefined;
+        if (agg.analyzable) {
+          const [snapshot, response] = await Promise.all([
+            getAssignmentSnapshot(ctx.fs, ctx.key, agg.analyzable.id),
+            getResponse(ctx.fs, ctx.key, agg.analyzable.id),
+          ]);
+          if (snapshot && response?.submittedAt !== undefined) {
+            const answers: AnswerMap = Object.fromEntries(
+              response.answers.map((a) => [a.questionId, a.value as AnswerValue]),
+            );
+            if (isFullySkipped(snapshot.questions, answers)) {
+              skipped = summarizeSkips(snapshot.questions, answers);
+            }
+          }
+        }
         overview[questionnaireId] = {
           questionnaireId,
           lastSentAt: agg.lastSentAt,
@@ -5147,7 +5172,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(analyzed && agg.latestInsight
             ? { insightSummary: agg.latestInsight.summary, insightId: agg.latestInsight.id }
             : {}),
-          ...(agg.analyzable ? { analyzableAssignmentId: agg.analyzable.id } : {}),
+          ...(agg.analyzable && !skipped ? { analyzableAssignmentId: agg.analyzable.id } : {}),
+          ...(skipped ? { skipped } : {}),
         };
       }
       return overview;

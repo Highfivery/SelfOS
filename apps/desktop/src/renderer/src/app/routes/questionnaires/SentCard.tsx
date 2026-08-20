@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Bot, Check, Clock, RefreshCw, Sparkles, Star } from 'lucide-react';
+import { BookOpen, Bot, Check, Clock, RefreshCw, SkipForward, Sparkles, Star } from 'lucide-react';
 import type {
   Questionnaire,
+  SkipSummary,
   QuestionnaireSendState,
   QuestionnaireSentOverview,
   SentRecipientSummary,
@@ -19,6 +20,22 @@ import styles from './Questionnaires.module.css';
 /** Built-in type → its human label; a custom type is already a human string, so fall back to it. */
 function typeLabel(type: string): string {
   return QUESTIONNAIRE_TYPES.find((t) => t.value === type)?.label ?? type;
+}
+
+/**
+ * The skip breakdown as readable chips, commonest-first. Counts only — never the recipient's own words,
+ * which on a Private send they were promised the sender would not see (08 §34.2).
+ */
+function skipKindLabels(summary: SkipSummary): string[] {
+  const named: [keyof SkipSummary['byKind'], string][] = [
+    ['unclear', 'unclear'],
+    ['not-applicable', 'doesn’t apply'],
+    ['prefer-not-to-say', 'preferred not to say'],
+    ['other', 'no reason given'],
+  ];
+  return named
+    .filter(([kind]) => summary.byKind[kind] > 0)
+    .map(([kind, label]) => `${summary.byKind[kind]} ${label}`);
 }
 
 /** How many recipient chips to show before collapsing the rest into "+N". */
@@ -109,6 +126,11 @@ export function SentCard({
   const answeredCount = overview?.answeredCount ?? 0;
   const total = recipients.length;
   const analyzable = overview?.analyzableAssignmentId;
+  // A response that came back with NOTHING answered (08 §34). It is not "awaiting" and it is not
+  // analysable — `analyzeAssignment` bails before the model — so it gets a state of its own rather than an
+  // action that cannot succeed. The breakdown is counts only, which is what makes it safe to show for a
+  // Private send too: the recipient's written reasons never cross the bridge.
+  const skipped = overview?.skipped;
   const analyzed = overview?.analyzed ?? false;
   // The re-ask nudge: answers exist, the whole thing is analysed (nothing new to do), and enough time has
   // passed that fresher answers would be worth it.
@@ -178,6 +200,13 @@ export function SentCard({
       <div className={styles.cardFoot}>
         {isDraft ? (
           <span className={`${styles.pill} ${styles.pillDraft}`}>Draft · not ready</span>
+        ) : skipped ? (
+          <span className={`${styles.pill} ${styles.pillSkipped}`}>
+            <SkipForward size={12} aria-hidden="true" />
+            {skipped.total === skipped.visible
+              ? `No answers · all ${skipped.visible} skipped`
+              : `No answers · ${skipped.total} skipped`}
+          </span>
         ) : analyzed ? (
           <span className={`${styles.pill} ${styles.pillDone}`}>
             <Sparkles size={12} aria-hidden="true" />
@@ -262,6 +291,19 @@ export function SentCard({
               {analyzing ? 'Analyzing…' : 'Analyze to see the insight →'}
             </button>
           )}
+        </div>
+      ) : null}
+
+      {skipped ? (
+        <div className={styles.skipPrompt}>
+          <span className={styles.zoneLabel}>Why it didn’t land</span>
+          <span className={styles.skipCounts}>
+            {skipKindLabels(skipped).map((label) => (
+              <span key={label} className={`${styles.pill} ${styles.pillSkipped}`}>
+                {label}
+              </span>
+            ))}
+          </span>
         </div>
       ) : null}
 

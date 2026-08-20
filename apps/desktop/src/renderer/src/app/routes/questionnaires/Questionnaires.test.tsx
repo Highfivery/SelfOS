@@ -1561,6 +1561,52 @@ describe('Questionnaires', () => {
     expect(panel.getAllByText(/Auto check-in|From your biographer/)).toHaveLength(2);
   });
 
+  it('a fully-skipped response reads as its own state and offers no Analyze (08 §34)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'What we haven’t said out loud',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: new Date().toISOString(), total: 1, answered: true } }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: new Date().toISOString(),
+            recipients: [{ name: 'Mara', status: 'submitted', answered: true }],
+            answeredCount: 1,
+            newResponses: 1,
+            analyzed: false,
+            privacy: 'private',
+            skipped: {
+              total: 3,
+              visible: 3,
+              byKind: { unclear: 2, 'prefer-not-to-say': 0, 'not-applicable': 1, other: 0 },
+            },
+          },
+        }),
+    });
+    renderApp();
+
+    expect(await screen.findByText('No answers · all 3 skipped')).toBeInTheDocument();
+    expect(screen.getByText('Why it didn’t land')).toBeInTheDocument();
+    expect(screen.getByText('2 unclear')).toBeInTheDocument();
+    expect(screen.getByText('1 doesn’t apply')).toBeInTheDocument();
+    // The reported bug: an action that can only ever fail must not be offered.
+    expect(screen.queryByRole('button', { name: /Analyze to see the insight/ })).toBeNull();
+  });
   it('a sent card offers Analyze when answered-not-analysed, and shows the Insight excerpt once analysed (§3.1)', async () => {
     const insightsAnalyze = vi.fn(() =>
       Promise.resolve({ ok: false as const, reason: 'NO_RESPONSE' as const }),

@@ -4385,3 +4385,54 @@ reports 280px needed against 199px available at the old floor; the stretch check
 without `align-items: start`; the pill check reports `"normal"`. _An earlier version of the pill assertion was
 geometric and proved **vacuous** — with the floor at 360px the pills no longer have room to wrap at any
 supported width, so it passed with the fix reverted. It is deliberately a property fence, and says so._
+
+---
+
+## 34. A skipped-through response is an outcome, not a dead end (2026-08-20)
+
+**Status: BUILT (part 1 of 2).** Owner-reported: a questionnaire whose questions were all skipped _"gives the
+option to analyze to see the insight, but clicking on it doesn't do anything."_
+
+### 34.1 Why it did nothing
+
+`analyzeAssignment` filters declines out of the analysed Q&A (§25.5 — a skip is feedback about the question,
+not a fact about the person), then hits `if (qa.length === 0)` and returns `EMPTY` **before any model call**.
+So the round-trip is sub-frame, the "Analyzing…" state never paints, and the card is unchanged afterwards.
+The message lands where the person is not looking: on the landing it is a Banner at the top of the page, above
+the tabs; on Results it renders inside the send row, which is **collapsed by default**, so it is not in the DOM
+at all and the row still reads "Submitted". And because `analyzable` is derived from _an Insight not existing_,
+the card re-offered the same impossible action forever.
+
+### 34.2 What it does now
+
+`questionnairesSentOverview` reads the one candidate send (bounded I/O — only the send that would have been
+offered) and, when every visible question came back without an answer, **withholds `analyzableAssignmentId`**
+and returns a `SkipSummary` instead. The card gets a state of its own — _"No answers · all 5 skipped"_ — over a
+**"Why it didn't land"** breakdown. Two consequences worth naming: the send also leaves the nav badge, which
+counts `analyzableAssignmentId`, so the app stops nagging about something it cannot do; and a send with one
+real answer beside a skip is **still analysable** — only "nothing at all" is terminal.
+
+**`SkipSummary` carries counts and never the recipient's words.** That is the load-bearing decision, not a
+detail: on a Private send the recipient was shown, verbatim, _"they won't see your written answers"_ — and a
+skip reason **is** a written answer, stored in the same `Answer.value`, and the most identifying thing a person
+can type. Counts by kind are the shape that is safe for either privacy mode, so the same code path serves both.
+A blank counts as a skip too: the person saw the question and moved past it, which is the same signal for
+"why didn't this land".
+
+### 34.3 Still to come (part 2)
+
+- The **AI read of the refusal** (owner's choice) — Standard sends only, because the insight summary is the one
+  thing that _does_ cross to the sender on a Private send, so a model paraphrase of _why she refused_ would
+  breach the same promise the counts protect.
+- The **partial-skip block** in the analysis prompt, under the same split: full reasons on a Standard send,
+  kinds only on a Private one.
+- The four skip-pipeline repairs and the 12-month `not-applicable` expiry (own slice).
+
+### 34.4 Guards
+
+`summarizeSkips` / `isFullySkipped` / `skipKindOf` are pure and unit-tested, including that a summary of a
+reason reading _"I had a miscarriage in March"_ serialises **without that text**. A coreBridge test drives the
+full send → skip-everything → submit path and asserts `analyzableAssignmentId` is gone, the counts are right,
+and the overview does not contain the reason — plus that a partly-answered send is untouched. **Verified to
+FAIL when reverted** (`expected '<assignment-id>' to be undefined`). An RTL test asserts the card renders the
+state and the breakdown and offers no Analyze button.

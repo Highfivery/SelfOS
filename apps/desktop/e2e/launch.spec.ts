@@ -16428,8 +16428,10 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     // and deciding for himself is the entire point of the phase.
     await w.getByRole('button', { name: /Done with this one/i }).click();
     await w.getByRole('button', { name: /^warm & sweet/i }).click();
-    await expect(w.getByRole('button', { name: /^angel — .*→ Tester/i }).first()).toBeVisible();
-    await expect(w.getByRole('button', { name: /^angel — Tester →/i }).first()).toBeVisible();
+    // `beautiful` since §3.6.30 cut `angel` — both are convention-coded and neither is grammatically
+    // gendered, so the property under test is unchanged; only the exemplar had to still exist.
+    await expect(w.getByRole('button', { name: /^beautiful — .*→ Tester/i }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /^beautiful — Tester →/i }).first()).toBeVisible();
     await w.getByRole('button', { name: /Done with this one/i }).click();
     await w.getByRole('button', { name: /Done with names/i }).click();
     // The words are next, and they open on their owed two-tap practice.

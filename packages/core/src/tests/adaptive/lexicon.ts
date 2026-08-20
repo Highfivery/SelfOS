@@ -348,8 +348,22 @@ export function pruneUnshownMarks(
     }
     entries.push(next);
   }
+  // A retired entry's word record goes with it (74 §3.6.27). Kept, it would start suppressing a word whose
+  // row no longer exists anywhere — `suppressedTexts` ignores such a record only while an entry backs it.
+  const boundaries =
+    retired.dropped.length === 0
+      ? lexicon.boundaries
+      : lexicon.boundaries.filter(
+          (boundary) =>
+            boundary.kind !== 'word' ||
+            !retired.dropped.includes(boundary.text.trim().toLowerCase()),
+        );
+  if (boundaries.length !== lexicon.boundaries.length) changed = true;
   if (!changed) return { lexicon, changed: false };
-  return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
+  return {
+    lexicon: { ...lexicon, entries, boundaries, updatedAt: now.toISOString() },
+    changed: true,
+  };
 }
 
 /**
@@ -378,11 +392,16 @@ export function pruneUnshownMarks(
 function retireCutMarks(
   all: readonly LexiconEntry[],
   bank: Bank,
-): { entries: LexiconEntry[]; changed: boolean } {
+): { entries: LexiconEntry[]; changed: boolean; dropped: string[] } {
   const ourFamily = new Set(bank.families.map((family) => family.id));
+  // 74 §3.6.27 — a family the bank RETIRED. Derivation cannot see one (it stops being `ourFamily` the moment
+  // it goes), so a removed register is named on the bank and every mark in it is retired outright.
+  const retiredFamily = new Set(bank.retiredFamilies ?? []);
   const isRetired = (entry: LexiconEntry): boolean =>
-    !entry.custom && ourFamily.has(entry.family) && bankEntry(bank, entry.key) === undefined;
-  if (!all.some(isRetired)) return { entries: [...all], changed: false };
+    !entry.custom &&
+    (retiredFamily.has(entry.family) ||
+      (ourFamily.has(entry.family) && bankEntry(bank, entry.key) === undefined));
+  if (!all.some(isRetired)) return { entries: [...all], changed: false, dropped: [] };
 
   const kept = new Map(all.filter((entry) => !isRetired(entry)).map((entry) => [entry.key, entry]));
   for (const entry of all) {
@@ -408,7 +427,16 @@ function retireCutMarks(
       say: survivor.sayState === undefined && survivor.say === 0 ? entry.say : survivor.say,
     });
   }
-  return { entries: [...kept.values()], changed: true };
+  // The texts whose entry is GONE. Their `kind:'word'` records must go with them: `suppressedTexts` ignores
+  // such a record only while an entry with that text exists, so leaving one behind turns a retired word into
+  // a suppression with no row anywhere to lift it (§3.2, and the same trap `resetPreDirectionalDeckMarks`
+  // handles for the deck).
+  const surviving = new Set([...kept.values()].map((entry) => entry.text.trim().toLowerCase()));
+  const dropped = all
+    .filter(isRetired)
+    .map((entry) => entry.text.trim().toLowerCase())
+    .filter((text) => !surviving.has(text));
+  return { entries: [...kept.values()], changed: true, dropped: [...new Set(dropped)] };
 }
 
 /**
@@ -701,7 +729,6 @@ const EVERYDAY_NAME_FAMILIES: ReadonlySet<string> = new Set([
   'names-aftercare',
   'names-other-tongues',
   'names-petplay',
-  'names-kinship',
   'names-roleplay',
 ]);
 

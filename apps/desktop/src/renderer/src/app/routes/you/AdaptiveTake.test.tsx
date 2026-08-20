@@ -315,6 +315,43 @@ describe('AdaptiveTake (74 §3.2)', () => {
 
   // --- 74 §3.4 — every tap saves itself ---
 
+  it('does NOT grey the row when only ONE direction is a no (74 §3.6.26)', async () => {
+    // Owner-reported. The row read as spent the moment either side was ruled out, because the whole-row test
+    // defaulted an UNANSWERED side to `never` — so "never say this to me" greyed a row whose other half was
+    // still blank, or loved. The two directions are separate answers; only both-no is an empty row.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveBank: (() => Promise.resolve(state({ draft: DRAFT }))) as never,
+    });
+    renderTake();
+    await beginTake();
+    await pastPractice();
+
+    // A term the PRACTICE did not touch. `good girl` is no good here: the practice sheet's own beats mark it,
+    // so its other side already carries an `okay` and even the buggy rule came out false — a guard that
+    // passes against the bug it exists to catch (caught by actually running the revert).
+    await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
+    const row = (): HTMLElement => {
+      const btn = screen.getByRole('button', { name: 'run (primal) — Them → You — never' });
+      const found = btn.closest('div[class*="row"]');
+      if (!found) throw new Error('no row around the mark');
+      return found as HTMLElement;
+    };
+    await userEvent.click(
+      screen.getByRole('button', { name: 'run (primal) — Them → You — never' }),
+    );
+    // One side ruled out, the other untouched — an ordinary answered row, not a spent one.
+    expect(row().className).not.toMatch(/rowNo/);
+
+    // ...and ruling out the OTHER side too is what makes it a row with nothing in it.
+    await userEvent.click(
+      screen.getByRole('button', { name: 'run (primal) — You → Them — never' }),
+    );
+    expect(row().className).toMatch(/rowNo/);
+  });
+
   it('autosaves each mark without waiting for Next, and says so', async () => {
     const bankPass = vi.fn(() => Promise.resolve(state({ draft: DRAFT })));
     installMockBridge({

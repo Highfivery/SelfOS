@@ -952,6 +952,64 @@ direction — checked rather than assumed: **no dimension on the spine is hear-d
 nothing live and exists so the next one that is cannot reintroduce the bug by being written the obvious way.
 Pinned by a test against a one-off dimension.
 
+### 3.6.27 Two registers retired, and a fourth purge — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+_"completely remove the kinship words and saved data for it"_, then _"more purging on pet names that arent
+sexual, like 'mother of my children'"_. Scope confirmed before anything was deleted, because the neighbours sit
+close: **kinship + age gap**, and `daddy`/`mommy` **stay** — they live in `names-hard-power` as D/s authority
+terms beside `my daddy dom`, a different register that happens to share a word.
+
+- **`names-kinship` (44)** — family terms as pre-agreed roleplay: sis, bro, step-sis, step-mom, daddy's girl.
+- **`names-agegap` (37)** — sugar daddy, milf, dilf, cougar, toy boy.
+- **34 more names across five surviving registers**, on §3.6.11's line (could it plausibly be said in bed?):
+  relationship status and parenting (`wife`, `husband`, `mother of my children`, `my mother-to-be`), achievement
+  praise (`my best`, `my trophy`, `my crown` — the class §3.6.25 cut `my MVP` for), affectionate exasperation
+  (`my hurricane`, `menace`, `troublemaker` — the `my scallywag` class), and non-erotic devotion (`my world`,
+  `my sun`, `my blessing`). `my religion`/`my addiction`/`my drug`/`my sin` were offered and **kept**: they read
+  as erotic obsession, not worship. The cuckold and swinging "wife" names (`my slut wife`, `my cuck husband`)
+  were never candidates — cut is by **(family, text)**, so a word that also lives in a sexual register keeps
+  that copy.
+
+**The mechanism a removed FAMILY needed.** §3.6.25's retirement is DERIVED — "family still in the bank, key
+gone" — and that derivation stops matching the moment the family itself leaves: `ourFamily` simply stops
+containing it, so every mark in a deleted register would survive with no row on any screen to change it. That is
+the un-gettable-rid-of preference §3.2 abolished, reached by deleting the family instead of the entry. So a
+retired family is **listed** on the bank (`retiredFamilies`) and every mark in it is retired outright.
+
+**And the word records go with the marks.** `suppressedTexts` ignores a legacy `kind:'word'` record only while
+an entry with that text still exists, so removing entries and keeping records makes the removal START a
+suppression rather than end one. `pruneUnshownMarks` now reaps the records of everything it retires — which also
+covers the ordinary entry-level purges §3.6.25 introduced, where the same hole was open.
+
+Verified against the real vault: the owner had **28 kinship marks, every one a `never`**, and 41 in age gap —
+69 marks removed, his 978 pet names otherwise untouched. The bank goes to 1,477 names in 22 registers.
+`names-playful` is left with 2 entries (`freak`, `my little freak`); flagged rather than restructured, because
+folding them elsewhere would change their keys and orphan marks.
+
+### 3.6.28 The words are oriented by body too — APPROVED + **BUILT** (2026-08-19, owner-reported)
+
+_"the words need to be smart enough for the gender roles, for instance 'cum in me' shouldnt be avaible for a
+guy to say to a girl"_.
+
+Orientation already existed for the deck (§3.6.3) — it was the CONTENT that was missing, and reading the lines
+showed the report is two different faults wearing one sentence:
+
+1. **`cum in me` was simply untagged.** It names no organ of the SPEAKER's; it requires the LISTENER to have a
+   penis. So it is an ordinary listener-bodied line and today's mapping already handles it — it just carried no
+   `body`, so it was offered both ways to everyone.
+2. **`stretch my pussy` could not be expressed at all.** `shownSides` assumes a line is about the person it is
+   said TO — hearing it is about MY body, saying it about THEIRS. A line about the SPEAKER inverts that, and
+   without the flip a man is offered a line about his own pussy as something to say. Hence
+   `BankEntry.bodyOf: 'speaker'`, which swaps which body each direction is checked against. Absent ⇒ the
+   listener's, so ~1,000 existing declarations are untouched.
+
+**Tagged: 33 speaker-bodied lines and 109 body tags in total.** Only where the anatomy is genuinely decisive —
+the resolver fails open by design (§3.6.5), and withholding on a guess gives someone a quietly thinner test with
+no way to know why. So `make me come`, `come with me` and `please let me come` stay open to everyone, as do the
+external ones (`come on my face`) where a vulva-owner can plausibly be the subject; only ejaculation INSIDE
+(`cum in me`, `cum in my ass`, `breed me`) is treated as needing a penis. **Three lines name BOTH bodies**
+(`your cunt was built for my cock`) and one `body` field cannot say so — left open rather than tagged wrong.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

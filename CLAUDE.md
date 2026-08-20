@@ -560,6 +560,39 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **Cleanup ×4 (two registers retired, a fourth purge, the grey-out fixed, and the WORDS get
+  oriented; owner-reported/directed; SPEC 74 §3.6.27–§3.6.28; on `chore/pet-name-purge-two`).** Four asks in one
+  pass, each measured before anything was deleted. **(1) Kinship + age gap, gone.** Scope confirmed rather than
+  assumed — the neighbours sit close, and `daddy`/`mommy` STAY because they live in `names-hard-power` as D/s
+  authority beside `my daddy dom`, a different register sharing a word. 81 bank entries; the owner had **28
+  kinship marks, every one a `never`.** **The mechanism it needed is the interesting part:** §3.6.25's retirement
+  is DERIVED ("family still in the bank, key gone"), and that stops matching the instant the family itself leaves
+  — `ourFamily` no longer contains it — so every mark in a deleted register would have survived with no row
+  anywhere to change it, which is the un-gettable-rid-of preference §3.2 abolished, reached from a third
+  direction. Retired families are now LISTED on the bank. **And the word records go with the marks**, because
+  `suppressedTexts` ignores a legacy record only while an entry backs it — so removing entries and keeping
+  records makes a purge START suppressions rather than end them; that hole was open on §3.6.25's ordinary purges
+  too and is closed for both. **(2) A fourth purge, 34 names**, on §3.6.11's could-it-be-said-in-bed line, in
+  four classes the owner picked from a list I showed BEFORE cutting (status/parenting, achievement praise,
+  affectionate exasperation, non-erotic devotion) — `my religion`/`my addiction`/`my sin` were offered and kept
+  as erotic obsession, and the cuckold "wife" names were never candidates since the cut is by (family, text).
+  **(3) The grey-out**, reported off a screenshot: `allNo` defaulted an UNANSWERED side to `never`, so ruling out
+  one direction greyed a row whose other half was blank or loved. **(4) The words are oriented by body** — and
+  reading the lines showed _"cum in me shouldnt be avaible for a guy to say"_ is TWO faults in one sentence:
+  `cum in me` names no organ of the speaker's (it needs the LISTENER to have a penis) so today's mapping already
+  handled it and it was simply **untagged**; while `stretch my pussy` was **inexpressible**, because `shownSides`
+  assumes a line is about the person it is said TO. New `bodyOf: 'speaker'` flips which body each direction
+  checks; 33 speaker-bodied lines and 109 body tags, only where the anatomy is decisive. **Lessons: (1) three of
+  these four were content or tagging problems wearing the costume of a logic bug — the orientation ENGINE was
+  right and had nothing to work with, and the fix was reading ~90 lines and deciding what each one names, which
+  no amount of staring at `shownSides` would have produced. (2) A revert-check caught a VACUOUS guard again, and
+  for a reason I would never have guessed: the grey-out test marked `good girl`, which the practice sheet has
+  already marked on its other side, so even the buggy rule returned false. Asserting the revert applied is not
+  enough — the test has to fail. (3) Deleting a FAMILY and deleting an ENTRY are different operations to the
+  retirement logic, and only one of them was built; "we already handle purges" was true and useless. (4) A
+  keyword sweep for "non-sexual" names is 70% false positives (`my slut wife`, `my cuck husband` all match
+  "wife"/"husband") — the classes have to be read, and shown to the owner, before anything is cut.**
+
 - 2026-08-19 — **Build (the words step gets two columns, like the pet names; owner-chosen from a mockup; SPEC 74
   §3.6.26; on `chore/pet-name-purge-two`).** _"theres no way to mark i like to hear vs. i like to say."_ The
   §3.6.13 fold had left the split reachable only in theory: the band still promised _"you split the two apart in

@@ -1195,13 +1195,19 @@ export function AdaptiveTake(): JSX.Element {
                       // (74 §3.2, amended 2026-08-19). A row used to freeze once the take that set it
                       // closed, which stranded a mis-tap noticed the next day.
                       const mark = store.marks[entry.key] ?? {};
-                      const answered = mark.hear !== undefined || mark.say !== undefined;
-                      // Both directions ruled out is the only whole-row "no" left — one side being a no while
-                      // the other is loved is an ordinary answer, not a struck-through row.
-                      const allNo =
-                        answered &&
-                        (mark.hear ?? 'never') === 'never' &&
-                        (mark.say ?? 'never') === 'never';
+                      const shownSides = (['hear', 'say'] as const).filter((side) =>
+                        entry.sides.includes(side),
+                      );
+                      const answered = shownSides.some((side) => mark[side] !== undefined);
+                      /*
+                       * The row greys out only when EVERY side they were shown is explicitly a no.
+                       *
+                       * It first read `(mark.hear ?? 'never') === 'never'`, which counts an UNANSWERED side
+                       * as a refusal — so ruling out one direction greyed the whole row while the other was
+                       * still blank, or worse, loved. The two directions are separate answers (§3.6.26);
+                       * only the row where both are a no is a row with nothing in it.
+                       */
+                      const allNo = answered && shownSides.every((side) => mark[side] === 'never');
                       return (
                         <div
                           key={entry.key}

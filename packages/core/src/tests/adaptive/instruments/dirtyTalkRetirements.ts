@@ -17,8 +17,6 @@ import type { BankRetirements } from '../bank';
  * again to somewhere its owner never chose.
  */
 export const DIRTY_TALK_NAME_RETIREMENTS: BankRetirements = {
-  'names-agegap:my-arm-candy': 'names-agegap:arm-candy',
-  'names-agegap:my-boy-toy': 'names-agegap:boy-toy',
   'names-breeding:my-broodmare': 'names-breeding:broodmare',
   'names-feminising:my-beauty-queen': 'names-feminising:beauty-queen',
   'names-feminising:my-little-lady': 'names-feminising:little-lady',
@@ -39,13 +37,6 @@ export const DIRTY_TALK_NAME_RETIREMENTS: BankRetirements = {
   'names-hard-power:my-queen': 'names-hard-power:queen',
   'names-hard-power:my-sir': 'names-hard-power:sir',
   'names-innocence:my-innocent-girl': 'names-innocence:innocent-girl',
-  'names-kinship:my-brother': 'names-kinship:brother',
-  'names-kinship:my-cousin': 'names-kinship:cousin',
-  'names-kinship:my-kissing-cousin': 'names-kinship:kissing-cousin',
-  'names-kinship:my-little-sis': 'names-kinship:little-sis',
-  'names-kinship:my-sister': 'names-kinship:sister',
-  'names-kinship:my-step-daddy': 'names-kinship:step-daddy',
-  'names-kinship:my-twin': 'names-kinship:twin',
   'names-masculine:my-animal': 'names-masculine:animal',
   'names-masculine:my-bear': 'names-masculine:bear',
   'names-masculine:my-beast': 'names-masculine:beast',
@@ -203,3 +194,17 @@ export const DIRTY_TALK_NAME_RETIREMENTS: BankRetirements = {
   'names-yours:my-wife': 'names-yours:wife',
   'names-yours:my-wifey': 'names-yours:wifey',
 };
+
+/**
+ * 74 §3.6.27 — whole REGISTERS the owner cut, and every mark in them goes.
+ *
+ * `names-kinship` was family terms as pre-agreed roleplay (sis, bro, step-mom, daddy's girl) and
+ * `names-agegap` was the age-gap register (sugar daddy, milf, dilf, cougar). Both removed at the owner's
+ * request, 2026-08-19. `daddy` and `mommy` STAY: they live in `names-hard-power` as D/s authority terms
+ * alongside `my daddy dom`, which is a different register that happens to share a word.
+ *
+ * Listed rather than derived, because a family that has left the bank cannot be derived FROM the bank — the
+ * §3.6.25 rule ("family still here, key gone") stops matching the moment the family goes, and the marks would
+ * then outlive every screen that could change them.
+ */
+export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = ['names-kinship', 'names-agegap'];

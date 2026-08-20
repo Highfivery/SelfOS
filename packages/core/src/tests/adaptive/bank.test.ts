@@ -224,7 +224,7 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   });
 
   it('carries the roleplay framing on every register that needs it', () => {
-    for (const id of ['names-kinship', 'names-roleplay', 'names-innocence', 'names-agegap']) {
+    for (const id of ['names-roleplay', 'names-innocence']) {
       const family = names.find((f) => f.id === id);
       expect(family?.note?.toLowerCase()).toMatch(/adult|roleplay/);
     }

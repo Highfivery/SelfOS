@@ -2,7 +2,7 @@ import { DIRTY_TALK_SPINE } from '../spine';
 import type { AdaptiveTestDefinition } from '../types';
 import { DIRTY_TALK_BANK } from './dirtyTalkBank';
 import { DIRTY_TALK_NAMES } from './dirtyTalkNames';
-import { DIRTY_TALK_NAME_RETIREMENTS } from './dirtyTalkRetirements';
+import { DIRTY_TALK_NAME_RETIREMENTS, DIRTY_TALK_RETIRED_FAMILIES } from './dirtyTalkRetirements';
 
 /**
  * 74-adaptive-tests — **Dirty Talk**, the first adaptive instrument: a map of the sexual language a person
@@ -36,6 +36,9 @@ export const DIRTY_TALK: AdaptiveTestDefinition = {
     // 74 §3.6.25 — where a retired name's marks go. Only the ones with somewhere to GO are listed; a name
     // cut with no survivor is derived from the family, so the list cannot go stale.
     retiredInto: DIRTY_TALK_NAME_RETIREMENTS,
+    // 74 §3.6.27 — whole registers the owner cut. A family that has LEFT the bank cannot be derived from the
+    // bank, so it is named here or its marks outlive every control that could change them.
+    retiredFamilies: DIRTY_TALK_RETIRED_FAMILIES,
   },
   spine: DIRTY_TALK_SPINE,
   // The names and the deck are both marked per direction (74 §3.6.26); the AI

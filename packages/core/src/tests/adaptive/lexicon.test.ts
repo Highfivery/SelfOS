@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { OPEN_ORIENTATION } from './orientation';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 
 import { memFileSystem } from '../../host/memFileSystem';
@@ -8,6 +9,7 @@ import {
   addBoundary,
   addCustomEntry,
   applyDirectionalMarks,
+  pruneUnshownMarks,
   resetPreDirectionalDeckMarks,
   derivedWantsToSay,
   emptyLexicon,
@@ -376,6 +378,59 @@ describe('74 §3.6.26 — the deck answers per direction, and its old answers ar
     const once = resetPreDirectionalDeckMarks(legacy, LATER);
     expect(once.changed).toBe(true);
     expect(resetPreDirectionalDeckMarks(once.lexicon, LATER).changed).toBe(false);
+  });
+});
+
+describe('74 §3.6.27 — a whole register the bank retired', () => {
+  it('takes every mark in it, and the word records with them', () => {
+    // Measured before writing this: the owner had 28 kinship entries, EVERY mark a `never`. Left behind they
+    // would suppress app-wide off a register with no rows on any screen — the §3.2 preference nobody can
+    // lift, reached by deleting the family instead of the entry.
+    const gone: EroticLexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: 'names-kinship:sis',
+          text: 'sis',
+          kind: 'word',
+          family: 'names-kinship',
+          tier: 5,
+          hear: 0,
+          say: 0,
+          hearState: 'never',
+          sayState: 'never',
+        },
+        {
+          key: GOOD_GIRL,
+          text: 'good girl',
+          kind: 'word',
+          family: 'names-praise',
+          tier: 2,
+          hear: 4,
+          say: 4,
+          hearState: 'love',
+          sayState: 'love',
+        },
+      ],
+      boundaries: [{ text: 'sis', kind: 'word', at: NOW.toISOString() }],
+    };
+    const { lexicon, changed } = pruneUnshownMarks(gone, DIRTY_TALK.bank, OPEN_ORIENTATION, LATER);
+    expect(changed).toBe(true);
+    expect(lexicon.entries.map((e) => e.key)).toEqual([GOOD_GIRL]);
+    // The record goes too, or removing the row is what STARTS the suppression.
+    expect(lexicon.boundaries).toEqual([]);
+    expect(suppressedTexts(lexicon)).toEqual([]);
+  });
+
+  it('is derived from the bank, so a register still in it is untouched', () => {
+    expect(DIRTY_TALK.bank.retiredFamilies).toContain('names-kinship');
+    expect(DIRTY_TALK.bank.retiredFamilies).toContain('names-agegap');
+    // ...and neither has entries any more, which is what makes the retirement honest rather than a label.
+    expect(DIRTY_TALK.bank.entries.some((e) => e.family === 'names-kinship')).toBe(false);
+    expect(DIRTY_TALK.bank.entries.some((e) => e.family === 'names-agegap')).toBe(false);
+    // `daddy`/`mommy` are D/s AUTHORITY terms in another register and stay (owner decision, §3.6.27).
+    expect(DIRTY_TALK.bank.entries.some((e) => e.text === 'daddy')).toBe(true);
+    expect(DIRTY_TALK.bank.entries.some((e) => e.text === 'mommy')).toBe(true);
   });
 });
 

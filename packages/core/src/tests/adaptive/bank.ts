@@ -90,6 +90,21 @@ export interface BankEntry {
   addresses?: BankAddress;
   /** Whose anatomy it names. Absent ⇒ nobody's. */
   body?: BankBody;
+  /**
+   * 74 §3.6.28 — WHOSE body `body` refers to.
+   *
+   * Almost every line is about the person it is said TO ("your cunt is dripping"), which is what
+   * `shownSides` assumes: hearing it is about MY body, saying it is about THEIRS. A large minority invert
+   * that — "stretch my pussy", "suck my cock" — and for those the mapping has to flip, or a man is offered
+   * "stretch my pussy" as something to SAY.
+   *
+   * Absent ⇒ the line is about the listener, which is the common case and the pre-§3.6.28 behaviour.
+   *
+   * Note this is a different question from who has to have the organ. "cum in me" names no organ of the
+   * SPEAKER's — it requires the LISTENER to have a penis — so it is an ordinary listener-bodied line and
+   * needs only its tag, not this flag.
+   */
+  bodyOf?: 'speaker';
 }
 
 /** Deterministic, stable slug — mirrors `slug()` in `intimacy/topics.ts` so the two read the same way. */
@@ -113,6 +128,8 @@ export type TierItem =
       ex?: string;
       addresses?: BankAddress;
       body?: BankBody;
+      /** 74 §3.6.28 — whose body `body` names. Absent ⇒ the listener's, which is the common case. */
+      bodyOf?: 'speaker';
     };
 
 /** Per-tier entries for one family. A tier with no entries is simply omitted. */
@@ -144,6 +161,9 @@ export function bankFamily(
         ...(spec.ex ? { example: spec.ex } : {}),
         ...(addresses ? { addresses } : {}),
         ...(body ? { body } : {}),
+        // Entry-only: a whole family is never speaker-bodied (74 §3.6.28 — even `demands-receiving` mixes
+        // "stretch my pussy" with "use me", and only the first names an organ of the speaker's).
+        ...(typeof item === 'string' || !item.bodyOf ? {} : { bodyOf: item.bodyOf }),
       });
     }
   }
@@ -156,6 +176,15 @@ export interface Bank {
   entries: readonly BankEntry[];
   /** Marks on a name this bank retired INTO another one (see {@link BankRetirements}). */
   retiredInto?: BankRetirements;
+  /**
+   * 74 §3.6.27 — whole FAMILIES this bank has retired.
+   *
+   * Entry-level retirement is derived: an entry whose family is still in the bank but whose key is gone was
+   * cut (§3.6.25). That derivation cannot see a family that left entirely — `ourFamily` simply stops
+   * containing it — so those marks would survive with no row anywhere to lift them, which is the
+   * un-gettable-rid-of preference §3.2 abolished. A removed family therefore has to be listed.
+   */
+  retiredFamilies?: readonly string[];
 }
 
 export function buildBank(blocks: readonly { family: BankFamily; entries: BankEntry[] }[]): Bank {

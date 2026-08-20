@@ -33,6 +33,48 @@ const entry = (bank: Bank, key: string): BankEntry => {
 
 const name = (key: string): BankEntry => entry(DIRTY_TALK_NAMES, key);
 
+describe('74 §3.6.28 — the WORDS are oriented by body too', () => {
+  const deck = (key: string): BankEntry => entry(DIRTY_TALK_BANK, key);
+
+  it('never offers a man "cum in me" to SAY (owner-reported)', () => {
+    // The reported bug. "cum in me" names no organ of the SPEAKER's — it needs the LISTENER to have a penis
+    // — so it is an ordinary listener-bodied line that simply had no tag, and was offered both ways to
+    // everyone. He can want to HEAR it; he cannot say it to a partner with no penis.
+    const sides = shownSides(deck('cum:cum-in-me'), STRAIGHT_MAN);
+    expect(sides).toContain('hear');
+    expect(sides).not.toContain('say');
+  });
+
+  it('never offers a man "stretch my pussy" to SAY, and never offers it to HEAR from a man', () => {
+    // The other half, and the one the model could not express: this names the SPEAKER's own body, so the
+    // axis has to flip. Without `bodyOf` the resolver checks his PARTNER's body for the say side and
+    // happily offers a man a line about his own pussy.
+    const sides = shownSides(deck('demands-receiving:stretch-my-pussy'), STRAIGHT_MAN);
+    expect(sides).toContain('hear'); // she says it to him
+    expect(sides).not.toContain('say');
+  });
+
+  it('offers a speaker-bodied line the OTHER way round for the other partner', () => {
+    const STRAIGHT_WOMAN: Orientation = {
+      selfAddress: 'girl',
+      partnerAddress: 'man',
+      selfBody: 'vulva',
+      partnerBody: 'penis',
+    };
+    const sides = shownSides(deck('demands-receiving:stretch-my-pussy'), STRAIGHT_WOMAN);
+    expect(sides).toContain('say');
+    expect(sides).not.toContain('hear');
+  });
+
+  it('leaves a line whose anatomy decides nothing open to everyone', () => {
+    // The resolver fails OPEN by design (§3.6.5). "make me come" and "come with me" name nobody's anatomy,
+    // so tagging them would give someone a quietly thinner test for no reason.
+    for (const key of ['cum:make-me-come', 'cum:come-with-me']) {
+      expect(shownSides(deck(key), STRAIGHT_MAN)).toEqual(['hear', 'say']);
+    }
+  });
+});
+
 describe('names are oriented per direction', () => {
   it('offers a gendered name only in the direction it can land', () => {
     // THE REPORTED BUG: "my man" as something he calls her.
@@ -78,10 +120,13 @@ describe('names are oriented per direction', () => {
   });
 
   it('reads the head noun, not the possessor', () => {
-    // "daddy's girl" is a girl; "my daddy's slut" is a slut of any gender.
-    expect(name('names-kinship:daddy-s-girl').addresses).toBe('girl');
-    expect(name('names-kinship:mommy-s-boy').addresses).toBe('man');
+    // A gendered head is read…
+    expect(name('names-praise:good-girl').addresses).toBe('girl');
+    // …and a MALE possessor over a genderless head decides nothing, which is the half that can actually go
+    // wrong: "my daddy's slut" is a slut of any gender. (The gendered-possessive examples this also used —
+    // "daddy's girl", "mommy's boy" — left with the kinship register in §3.6.27.)
     expect(name('names-rough-heavy:my-daddy-s-slut').addresses).toBeUndefined();
+    expect(name('names-rough-heavy:my-master-s-slut').addresses).toBeUndefined();
   });
 
   it('leaves everything open when either axis is unanswered', () => {

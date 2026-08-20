@@ -243,4 +243,19 @@ export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = [
    * and the mark is retired outright rather than moved somewhere no screen can reach.
    */
   'names-breeding',
+  /*
+   * 74 §3.6.33 — nine more registers retired at the owner's direction, 2026-08-20, after he read the full
+   * table of entry counts and his own mark counts. The measurement that made it coherent: of his 162 marks
+   * across these nine, 295 sides are `never`, 5 are `okay` and **none is a `love`** — he had already ruled
+   * out essentially everything in them, so retiring the registers matches what his marks already said.
+   */
+  'names-innocence',
+  'names-feminising',
+  'names-petplay',
+  'names-roleplay',
+  'names-worthless',
+  'names-object',
+  'names-service',
+  'names-sharing',
+  'names-other-tongues',
 ];

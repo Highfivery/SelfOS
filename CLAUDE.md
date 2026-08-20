@@ -607,6 +607,11 @@ A running log of durable decisions and feedback captured into the project config
   that Together emits the hard-no list for an UN-acked pair, which is that fix's entire point. Gate green:
   typecheck ×4, lint, format, **2466 core + 13 relay + 1745 desktop** unit. Every new guard **verified to fail
   when reverted**.
+  **Then the owner retired TEN registers** (`names-breeding` first, then innocence / feminising / petplay /
+  roleplay / worthless / object / service / sharing / other-tongues) plus 17 individually-named entries —
+  the names bank **1,297 → 709, 20 registers → 10**. The measurement that made it coherent rather than merely
+  large: of his 162 marks across the nine, **295 sides are `never`, 5 `okay`, and not one is a `love`** — he
+  had already ruled out essentially everything in them. Verified mark by mark on the real vault: **717 → 547**.
   **Lessons: (1) my first vault measurement was WRONG in the most convincing way — a hand-built `Orientation`
   missing `selfAddress`/`partnerAddress` made `addressMatches` false for every tagged entry, so I measured "135
   of Ben's marks dropped" and "ALL of Angel's dropped" and both were artifacts of my own harness. Identical

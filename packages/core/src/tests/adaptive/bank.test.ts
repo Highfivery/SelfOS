@@ -200,7 +200,9 @@ describe('74 §3.6.8 — the pet-name bank', () => {
     // target — the phase has to stay substantial, and a retirement that halved it should fail here rather
     // than pass quietly. It did exactly that on the breeding retirement, which is the point: each step down
     // is a deliberate, owner-approved edit, never a quiet drift.
-    expect(names.length).toBeGreaterThanOrEqual(19);
+    // 74 §3.6.33 — 10 after the owner retired nine more registers. Each step down is a deliberate,
+    // owner-approved edit that had to come here and change this number, never a quiet drift.
+    expect(names.length).toBeGreaterThanOrEqual(10);
   });
 
   it('gives every name a line showing it in use — a bare word is never the whole row', () => {
@@ -290,9 +292,16 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   });
 
   it('carries the roleplay framing on every register that needs it', () => {
-    for (const id of ['names-roleplay', 'names-innocence']) {
-      const family = names.find((f) => f.id === id);
-      expect(family?.note?.toLowerCase()).toMatch(/adult|roleplay/);
+    /*
+     * 74 §3.6.33 — `names-roleplay` and `names-innocence` were the two registers named here, and both were
+     * retired. Rather than delete the rule or pin it to dead ids, it is now DERIVED: any surviving name
+     * register that presents itself as a roleplay must say so in its own note. That re-arms automatically
+     * the moment such a register is added again, which pinning ids never would.
+     */
+    for (const family of names) {
+      const blob = `${family.label} ${family.note ?? ''}`.toLowerCase();
+      if (!/roleplay/.test(blob)) continue;
+      expect(family.note?.toLowerCase()).toMatch(/adult|roleplay/);
     }
   });
 

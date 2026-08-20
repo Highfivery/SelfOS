@@ -1328,6 +1328,31 @@ derived FROM the bank, and its marks would otherwise outlive every screen that c
 on the real vault: the owner's 3 marks in it retire cleanly (717 to 712 across this whole section), with
 zero retired-family entries, zero unknown keys and zero marks migrating to a dead target.
 
+**Then nine more registers, at the owner's direction after reading the full table.** `names-innocence`,
+`names-feminising`, `names-petplay`, `names-roleplay`, `names-worthless`, `names-object`, `names-service`,
+`names-sharing` and `names-other-tongues` — 535 entries — plus 17 individually-named entries in registers
+he is keeping (9 in `names-hard-power`, 4 in `names-rough-mild`, 3 in `names-soft-power`, 1 in
+`names-worship`). **The names bank goes 1,261 to 709 and 19 registers to 10.** Three names on his list did
+not match anything (`my unfauthful wife`, `my loaded girl`, `my dress-up foll`); rather than guess at a
+typo, each was resolved by closest-match and reported — all three land inside registers being retired
+anyway, so the outcome is the same either way.
+
+**The measurement that made it coherent rather than merely large:** of his 162 marks across those nine
+registers, **295 sides are `never`, 5 are `okay`, and not one is a `love`.** He had already ruled out
+essentially everything in them, so retiring the registers matches what his marks already said — and no
+loved vocabulary is lost anywhere. Verified end to end on the real vault: **717 to 547**, reconciled mark
+by mark (112 roleplay, 50 object, 5 rough-mild, 3 breeding, and the one legacy empty row that the migration
+step drops before the prune ever sees it).
+
+**Five tripwires fired, and each got a different answer — none of them "delete the assertion."** The
+register FLOOR failed twice and was lowered twice, deliberately. The roleplay-framing rule named two dead
+ids, so it is now DERIVED — any surviving register that presents itself as a roleplay must say so in its
+own note — which re-arms automatically if such a register is added again. The anatomy-head rule and the
+gendered-role rule both still had live subjects, so they were re-pointed (`names-rough-heavy:my cock queen`
+and the `master`/`mistress`/`my domme`/`my dom` set) rather than dropped. Only the feminising rule was
+removed, because its whole premise — a feminine name aimed at a man — has no subject left in the bank, and
+a guard with a borrowed subject stops guarding what it claims.
+
 **Two tripwires fired on it, and both were right to.** The name-register FLOOR (`>= 20`) failed, which is
 exactly what a floor is for — it is lowered to 19 deliberately rather than drifting quietly. And the
 §3.6.32 dead-target guard went partly VACUOUS: it used `names-breeding:my-broodmare`, so retiring the

@@ -98,24 +98,22 @@ describe('names are oriented per direction', () => {
     }
   });
 
-  it('leaves the feminising register asked both ways', () => {
-    // Its whole premise is a feminine name aimed at a man, so `either` IS the correct answer to "who must
-    // this person be?" — it is not an exemption, and tagging it would delete the register for its audience.
-    const feminising = DIRTY_TALK_NAMES.entries.filter((e) => e.family === 'names-feminising');
-    expect(feminising.length).toBeGreaterThan(50);
-    for (const e of feminising) {
-      expect(e.addresses).toBeUndefined();
-      expect(shownSides(e, STRAIGHT_MAN)).toEqual(['hear', 'say']);
-    }
-  });
+  /*
+   * 74 §3.6.33 — "leaves the feminising register asked both ways" lived here. `names-feminising` was retired
+   * at the owner's direction, so the invariant it pinned (a feminine name aimed at a man is correctly
+   * UNTAGGED, not an exemption) has no subject left in the bank. Removed rather than re-pointed at a
+   * register that means something else — a guard with a borrowed subject stops guarding what it claims.
+   */
 
   it('names anatomy only where the name IS the body part', () => {
-    // "my cock" names his own body; "cock sleeve" names a use for someone ELSE's, so tagging it would
+    // "my cock" names his own body; "dick sucker" names a use for someone ELSE's, so tagging it would
     // demand the wrong person's anatomy.
+    // 74 §3.6.33 — `names-object:cock-sleeve` was the second example here until that register was retired.
+    // `my cock queen` is the same shape in a register that survives, so the invariant keeps a live subject.
     expect(name('names-body:my-cock').body).toBe('penis');
     expect(name('names-body:my-pussy').body).toBe('vulva');
     expect(shownSides(name('names-body:my-pussy'), STRAIGHT_MAN)).toEqual(['say']);
-    expect(name('names-object:cock-sleeve').body).toBeUndefined();
+    expect(name('names-rough-heavy:my-cock-queen').body).toBeUndefined();
     expect(name('names-rough-heavy:dick-sucker').body).toBeUndefined();
   });
 
@@ -304,21 +302,18 @@ describe('a gendered role noun is tagged wherever its family already tags its si
     expect(tag('names-hard-power:dominatrix')).toBe('girl');
   });
 
-  it('tags an occupational -ess/-maid form, whose neutral sibling stays open', () => {
-    expect(tag('names-roleplay:my-waitress')).toBe('girl');
-    expect(tag('names-roleplay:my-stewardess')).toBe('girl');
-    expect(tag('names-roleplay:my-barmaid')).toBe('girl');
-    // Adjacent in the bank, the clearest pair in it, and both were missed.
-    expect(tag('names-roleplay:my-schoolmaster')).toBe('man');
-    expect(tag('names-roleplay:my-schoolmistress')).toBe('girl');
-    // Genuinely neutral job titles are NOT swept up by the rule.
-    for (const key of [
-      'names-roleplay:my-flight-attendant',
-      'names-roleplay:my-bartender',
-      'names-roleplay:my-tutor',
-    ]) {
-      expect(tag(key)).toBeUndefined();
-    }
+  it('tags a gendered role form, whose neutral sibling stays open', () => {
+    /*
+     * 74 §3.6.33 — this used the occupational pairs in `names-roleplay` (waitress/bartender,
+     * schoolmaster/schoolmistress) until that register was retired. `names-hard-power` carries the same
+     * shape and survives: a gendered form tagged, the neutral form of the SAME role left open, which is the
+     * criterion this exists to pin — it is the grammatical gender that decides, not the topic.
+     */
+    expect(tag('names-hard-power:master')).toBe('man');
+    expect(tag('names-hard-power:mistress')).toBe('girl');
+    expect(tag('names-hard-power:my-domme')).toBe('girl');
+    // The neutral form of that same role is NOT swept up by the rule.
+    expect(tag('names-hard-power:my-dom')).toBeUndefined();
   });
 
   it('leaves a word gendered only by convention open, however feminine it reads', () => {

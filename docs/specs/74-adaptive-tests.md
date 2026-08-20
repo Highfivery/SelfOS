@@ -1570,6 +1570,31 @@ which is the class the audit actually found. Its sibling already caught an examp
 nothing caught the other shape. Every one **verified to fail when reverted**, with the revert asserted to have
 applied (`count == 1`) before believing the result either way.
 
+**The names step now navigates like the words step, because they are two screens of one test.** The words
+step has had an in-place area picker and Previous/Next-area in the rail since §3.6.22; the names step still
+made you leave the register, land back on a 9-card grid and choose again — a round trip per register, nine
+times. It gains the same shape: `Register N of 9 · X marked · Y names`, a full-width `Select` that jumps
+straight to any register, and **Next register / Previous register / All registers in the SHARED rail**, which
+is where the words step has always kept its area verbs. The separate "Done with this one" card above the rail
+is gone — it was the last thing making the two screens different shapes. Two details are decisions rather
+than conveniences: the index comes from the **bank's own order, never the card sort** (an index that moves
+when you re-sort is worse than no index), and a register change **resets the scroll and moves focus** to the
+new register's name, exactly as `goToArea` does — otherwise a keyboard or screen-reader user gets nine silent
+screen changes.
+
+**One live-model finding, fixed.** All four phases were re-run against real Claude at the owner's real shape.
+Lines, probe and synthesis were green — the synthesis wrote four paragraphs and **all four survived the
+boundary filter**, which is the §3.6.31 regression check — and its readings were specific and positional
+("almost everything on your hear list points outward"). The SCENARIO phase came back `MALFORMED` once in four.
+Re-running it three times was 3/3 green, so it is model variance rather than a defect — but it exposed one:
+`runScenarioPhase` was the last phase parsing **strictly**. `SceneSchema` is per-element tolerant, which only
+helps once the OBJECT parses; a reply cut off mid-set fails `extractJsonObject` wholesale and every complete
+scene before the cut is thrown away with the truncated one. It now falls back to
+`salvageJsonObjectArrayField(text, 'scenes')` — the §37 salvage the portrait and the synthesis already use —
+so a truncated set keeps the scenes that did arrive. Guarded with a reply cut off mid-third-scene, **verified
+to fail when reverted**. The failure already degraded honestly (a named reason and a retry, §3.6.17); this
+makes it rarer.
+
 **Two fixtures broke, and both were asserting the opposite of their own claim** — the §3.6.33 lesson, from the
 other direction. `adaptiveService.test`'s "leaves ANOTHER instrument's entries alone" built its foreign row by
 spreading a Dirty Talk entry, so it carried `names-rough-heavy` with a key the bank does not have — which is

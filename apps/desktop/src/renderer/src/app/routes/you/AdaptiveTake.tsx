@@ -429,6 +429,7 @@ export function AdaptiveTake(): JSX.Element {
   // already-marked terms to page through (the §3.4 argument, one level down).
   const [areaIndex, setAreaIndex] = useState(0);
   const areaHeadingRef = useRef<HTMLDivElement>(null);
+  const registerHeadingRef = useRef<HTMLDivElement>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   /**
    * 74 §3.6.1 — whether the two-tap practice is still owed.
@@ -712,6 +713,26 @@ export function AdaptiveTake(): JSX.Element {
     requestAnimationFrame(() => areaHeadingRef.current?.focus());
   };
   const nextArea = (): void => goToArea(areaIndex + 1);
+
+  /*
+   * 74 §3.6.34 — the names step navigates like the words step, because they are two screens of one test.
+   *
+   * The words step has had an in-place area picker and Previous/Next in the rail since §3.6.22; the names
+   * step still made you leave the register, land back on a grid and choose again. Same shape now: the
+   * register list is a stable order (the bank's, never the card sort — an index that moves when you re-sort
+   * is worse than no index), and the verbs live in the rail rather than in a card of their own.
+   */
+  const registers = store.names?.registers ?? [];
+  const openRegisterIndex = registers.findIndex((r) => r.id === store.openRegister);
+  const goToRegister = (next: number): void => {
+    const last = registers.length - 1;
+    const target = registers[next < 0 ? 0 : next > last ? last : next];
+    if (!target) return;
+    store.setOpenRegister(target.id);
+    const scroller = document.querySelector('[data-app-scroll]') ?? document.scrollingElement;
+    if (scroller) scroller.scrollTop = 0;
+    requestAnimationFrame(() => registerHeadingRef.current?.focus());
+  };
 
   // Withheld in the bridge until the 18+ ack — the hub is where that ack lives.
   if (store.loaded && !bank) {
@@ -1028,6 +1049,8 @@ export function AdaptiveTake(): JSX.Element {
           {/* 74 §3.6.8 — the pet-name phase runs first: what the two of you call each other. */}
           {phase === 'names' ? (
             <NamesPhase
+              headingRef={registerHeadingRef}
+              onGoToRegister={goToRegister}
               rail={
                 <TakeRail
                   statuses={statuses}
@@ -1047,15 +1070,51 @@ export function AdaptiveTake(): JSX.Element {
                   }
                   actions={
                     <>
-                      <Button
-                        variant="primary"
-                        disabled={store.busy}
-                        onClick={() => void store.finishNames(testId)}
-                      >
-                        Done with names →
-                      </Button>
+                      {/* Inside a register the primary moves you ON rather than out, exactly as the words
+                          step's does — walking straight out from here would step past every register you
+                          have not opened (the §3.6.9 walk, finding 3). */}
+                      {store.openRegister && openRegisterIndex + 1 < registers.length ? (
+                        <Button
+                          variant="primary"
+                          disabled={store.busy}
+                          onClick={() => goToRegister(openRegisterIndex + 1)}
+                        >
+                          Next register →
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          disabled={store.busy}
+                          onClick={() => void store.finishNames(testId)}
+                        >
+                          Done with names →
+                        </Button>
+                      )}
+                      {store.openRegister && openRegisterIndex > 0 ? (
+                        <Button
+                          variant="secondary"
+                          className={adaptive.railBack}
+                          disabled={store.busy}
+                          onClick={() => goToRegister(openRegisterIndex - 1)}
+                        >
+                          {/* ONE flex child — `Button` is a flex container with a gap (§3.6.13). */}
+                          <span>
+                            ←<span className={adaptive.tail}> Previous register</span>
+                          </span>
+                        </Button>
+                      ) : null}
+                      {store.openRegister ? (
+                        <Button
+                          variant="ghost"
+                          disabled={store.busy}
+                          onClick={() => store.setOpenRegister(null)}
+                        >
+                          All registers
+                        </Button>
+                      ) : null}
                       <Button
                         variant="ghost"
+                        className={adaptive.railDone}
                         disabled={store.busy}
                         onClick={() => void store.synthesize(testId)}
                       >

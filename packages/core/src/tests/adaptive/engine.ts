@@ -5,6 +5,7 @@ import {
   extractJsonArray,
   salvageLooseStringField,
   extractJsonObject,
+  salvageJsonObjectArrayField,
   tolerantArray,
 } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
@@ -665,8 +666,20 @@ Return ONLY {"scenes": [{"scene": string, "options": string[]}]}.`,
       ...(out.reason ? { reason: out.reason } : {}),
       ...(out.message ? { message: out.message } : {}),
     };
+  /*
+   * 74 §3.6.34 — salvage a truncated set rather than losing all five scenes.
+   *
+   * `SceneSchema` is already per-element tolerant, but that only helps once the OBJECT parses: a reply cut
+   * off mid-set fails `extractJsonObject` wholesale and every scene goes with it. A live run against the
+   * owner's real shape hit exactly that — one MALFORMED in four, at 3000 tokens for five scenes of 3–4 lines
+   * each — and the three complete scenes before the cut were thrown away with the fourth. This is the §37
+   * salvage the portrait and the synthesis already use, applied to the one phase that still parsed strictly.
+   */
   const parsed = ScenarioSchema.safeParse(extractJsonObject(out.text));
-  const written = parsed.success ? parsed.data.scenes : [];
+  const written = parsed.success
+    ? parsed.data.scenes
+    : (ScenarioSchema.safeParse({ scenes: salvageJsonObjectArrayField(out.text, 'scenes') }).data
+        ?.scenes ?? []);
   // The SCENE is prose shown to them too, and it used to pass through unchecked while its options were
   // filtered — a scene that sets up a boundary is the same failure as an option that names one. A scene whose
   // options are all filtered is dropped; the others in the set still stand.

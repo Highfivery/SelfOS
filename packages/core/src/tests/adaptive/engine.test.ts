@@ -9,6 +9,7 @@ import type { AiDeps } from '../../questionnaires/aiCall';
 import {
   applyDirectionalMarks,
   emptyLexicon,
+  writeLexicon,
   addBoundary,
   type BankMark,
   type DirectionalMark,
@@ -683,5 +684,46 @@ describe('74 §3.6.29 — the digest keeps the two directions apart', () => {
     expect(sayLine).toContain('good boy');
     expect(sayLine).not.toContain('good girl');
     expect(digest).toMatch(/Fine with, not favourites.*cunt/);
+  });
+});
+
+describe('74 §3.6.34 — a truncated scenario set keeps the scenes that did arrive', () => {
+  it('salvages the complete scenes instead of losing all five', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const lexicon = emptyLexicon('p1', new Date());
+    await writeLexicon(fs, key, lexicon);
+    // Cut off mid-way through the third scene, exactly as a max_tokens stop does.
+    const truncated =
+      '{"scenes":[' +
+      '{"scene":"You get in first and wait.","options":["tell me what you want","come here"]},' +
+      '{"scene":"They text you at lunch.","options":["say it out loud","not yet"]},' +
+      '{"scene":"The third one never fini';
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(truncated),
+      stream: () =>
+        Promise.resolve({
+          text: truncated,
+          usage: { inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const result = await runScenarioPhase(
+      {
+        fs,
+        key,
+        client,
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-6',
+        personId: 'p1',
+        now: new Date(),
+      },
+      lexicon,
+      'buildUp',
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value?.map((scene) => scene.scene)).toEqual([
+      'You get in first and wait.',
+      'They text you at lunch.',
+    ]);
   });
 });

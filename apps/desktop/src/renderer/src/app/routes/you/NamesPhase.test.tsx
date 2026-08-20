@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdaptiveNamesView } from '@shared/schemas';
@@ -61,10 +62,23 @@ const NAMES: AdaptiveNamesView = {
   ],
 };
 
+/** The register the take navigated to, so a test can assert the picker drove it. */
+let wentTo: number | null = null;
+
 function renderPhase(): void {
   // The verbs live in the shared step rail (74 §3.6.9), which the take owns — this stands in for it, so the
-  // phase's own controls are the only thing under test here.
-  render(<NamesPhase rail={<div data-testid="step-rail" />} />);
+  // phase's own controls are the only thing under test here. Since §3.6.34 the register verbs live there
+  // too, which is why navigation arrives as a callback rather than being the phase's own business.
+  wentTo = null;
+  render(
+    <NamesPhase
+      rail={<div data-testid="step-rail" />}
+      headingRef={createRef<HTMLDivElement>()}
+      onGoToRegister={(index) => {
+        wentTo = index;
+      }}
+    />,
+  );
 }
 
 describe('NamesPhase (74 §3.6.8)', () => {
@@ -107,7 +121,9 @@ describe('NamesPhase (74 §3.6.8)', () => {
     await userEvent.click(
       screen.getByRole('button', { name: 'good girl — Angel → Ben — love it' }),
     );
-    await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
+    // 74 §3.6.34 — going back is the TAKE's job now (the rail's "All registers"), so a test that only
+    // renders the phase asks the store directly rather than through a stub that has no verbs.
+    act(() => useAdaptiveTestStore.getState().setOpenRegister(null));
     const card = screen.getByRole('button', { name: /praise/i });
     expect(card).toHaveTextContent('1 marked · 2 names');
     expect(card).not.toHaveTextContent('%');
@@ -122,7 +138,9 @@ describe('NamesPhase (74 §3.6.8)', () => {
       screen.getByRole('button', { name: 'good girl — Angel → Ben — love it' }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'good boy — Angel → Ben — never' }));
-    await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
+    // 74 §3.6.34 — going back is the TAKE's job now (the rail's "All registers"), so a test that only
+    // renders the phase asks the store directly rather than through a stub that has no verbs.
+    act(() => useAdaptiveTestStore.getState().setOpenRegister(null));
     const card = screen.getByRole('button', { name: /praise/i });
     expect(card).toHaveTextContent('2 marked · 2 names');
     // One loved, one ruled out — mutually exclusive, so they sum to the marked total.
@@ -226,9 +244,35 @@ describe('NamesPhase (74 §3.6.8)', () => {
     expect(screen.queryByRole('button', { name: /Done with this one/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /praise/i }));
     expect(screen.getByTestId('step-rail')).toBeInTheDocument();
-    // Inside a register the primary closes the REGISTER — walking out of the step from here would step past
-    // the registers they have not opened (the §3.6.9 walk, finding 3).
-    expect(screen.getByRole('button', { name: /Done with this one/i })).toBeInTheDocument();
+    /*
+     * 74 §3.6.34 — and inside a register there is STILL no card of its own. The register's verbs (Next
+     * register / Previous register / All registers) moved into the shared rail, which is where the words
+     * step has always kept its area verbs. A separate card above the rail was the last thing making two
+     * screens of one test different shapes.
+     */
+    expect(screen.queryByRole('button', { name: /Done with this one/i })).not.toBeInTheDocument();
+  });
+
+  /*
+   * 74 §3.6.34 — the names step navigates like the WORDS step, because they are two screens of one test.
+   *
+   * The words step has had an in-place area picker since §3.6.22 while this one made you leave the register,
+   * land on a grid and choose again. The index comes from the bank's own order, never the card sort — an
+   * index that moves when you re-sort is worse than no index at all.
+   */
+  it('moves register-to-register in place, in a stable order, without going back to the grid', async () => {
+    await load();
+    renderPhase();
+    await userEvent.click(screen.getByRole('button', { name: /praise/i }));
+    expect(screen.getByText(/Register 1 of 2/)).toBeInTheDocument();
+
+    const jump = screen.getByRole('combobox', { name: /Go to a register/i });
+    await userEvent.selectOptions(jump, '1');
+    expect(wentTo).toBe(1);
+
+    // The picker lists every register in the bank's order, not just the open one.
+    expect(within(jump).getByRole('option', { name: /1\. praise/i })).toBeInTheDocument();
+    expect(within(jump).getByRole('option', { name: /2\. rough, heavy/i })).toBeInTheDocument();
   });
 
   /*
@@ -248,7 +292,9 @@ describe('NamesPhase (74 §3.6.8)', () => {
       screen.getByRole('button', { name: 'good girl — Angel → Ben — love it' }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'good boy — Angel → Ben — love it' }));
-    await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
+    // 74 §3.6.34 — going back is the TAKE's job now (the rail's "All registers"), so a test that only
+    // renders the phase asks the store directly rather than through a stub that has no verbs.
+    act(() => useAdaptiveTestStore.getState().setOpenRegister(null));
     const card = screen.getByRole('button', { name: /praise/i });
     // Every name in the register is marked — the case that used to read "100% · all marked".
     expect(card).toHaveTextContent('2 marked · 2 names');

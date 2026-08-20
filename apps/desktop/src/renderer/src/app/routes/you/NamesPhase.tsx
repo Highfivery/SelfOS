@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Ban, Contrast, Flame } from 'lucide-react';
 import type { AdaptiveNameEntryView, AdaptiveNameRegisterView } from '@shared/schemas';
-import { Button, Card, Heading, Select, Text } from '../../../design-system/components';
+import { Heading, Select, Text } from '../../../design-system/components';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import {
   EMPTY_STATS,
@@ -137,12 +137,18 @@ function RegisterCard({
 
 export function NamesPhase({
   rail,
+  headingRef,
+  onGoToRegister,
 }: {
   /**
    * The shared step rail (74 §3.6.9), owned by the take so every step shows the SAME one. This phase used to
    * render its own, which meant a person's sense of "where am I" changed between two screens of one test.
    */
   rail: JSX.Element;
+  /** 74 §3.6.34 — focus lands here on a register change, exactly as it does on an area change. */
+  headingRef: React.RefObject<HTMLDivElement>;
+  /** Move register-to-register without going back to the grid — the words step's Previous/Next area. */
+  onGoToRegister: (index: number) => void;
 }): JSX.Element | null {
   const store = useAdaptiveTestStore();
   const names = store.names;
@@ -177,6 +183,7 @@ export function NamesPhase({
 
   const me = names.selfName ?? 'you';
   const them = names.partnerName ?? 'them';
+  const openIndex = names.registers.findIndex((register) => register.id === open?.id);
   const markedHere = rows.filter((entry) => {
     const mark = store.nameMarks[entry.key];
     return mark?.hear !== undefined || mark?.say !== undefined;
@@ -263,12 +270,37 @@ export function NamesPhase({
       </div>
       <div className={adaptive.deckHead}>
         <div className={adaptive.headTop}>
-          <div className={adaptive.deckHeadTitle}>
+          {/* Focus target for a register change (see `goToRegister`) — the words step's `areaHeadingRef`. */}
+          <div ref={headingRef} tabIndex={-1} className={adaptive.deckHeadTitle}>
             <Heading level={2}>{open.label.replace(/^Names — /, '')}</Heading>
           </div>
           <Text size="sm" tone="tertiary">
-            {markedHere} marked · {open.count} names
+            Register {openIndex + 1} of {names.registers.length} · {markedHere} marked ·{' '}
+            {open.count} names
           </Text>
+          <span className={adaptive.headSpacer} />
+          {/*
+           * 74 §3.6.34 — go straight to a register, the way the words step has gone straight to an area
+           * since §3.6.22. A full-width `Select`, not a row of chips: nine labels of any length would wrap
+           * into a pile or scroll sideways, and §12 says a control that does not fit gets a space-filling
+           * component rather than a wrap.
+           */}
+          <Select
+            aria-label="Go to a register"
+            className={adaptive.areaJump}
+            value={String(openIndex)}
+            onChange={(event) => onGoToRegister(Number(event.currentTarget.value))}
+          >
+            {names.registers.map((register, index) => {
+              const marked = stats[register.id]?.marked ?? 0;
+              return (
+                <option key={register.id} value={index}>
+                  {index + 1}. {register.label.replace(/^Names — /, '')}
+                  {marked > 0 ? ` · ${marked} marked` : ''}
+                </option>
+              );
+            })}
+          </Select>
         </div>
         {open.note ? (
           <Text tone="secondary" className={adaptive.areaNote}>
@@ -291,20 +323,10 @@ export function NamesPhase({
             />
           ))}
         </div>
-        {/* Inside a register the primary is "Done with this one" — walking straight out of the step from here
-            would step past the registers they have not opened (the §3.6.9 walk, finding 3). */}
-        <div className={adaptive.railWrap}>
-          <Card className={adaptive.railCard}>
-            <div className={adaptive.railActions}>
-              <Button variant="primary" onClick={() => store.setOpenRegister(null)}>
-                <span>
-                  Done<span className={adaptive.verbLong}> with this one</span> →
-                </span>
-              </Button>
-            </div>
-          </Card>
-          {rail}
-        </div>
+        {/* 74 §3.6.34 — the register's verbs live in the SHARED rail now (Next register / Previous
+            register / All registers), which is where the words step has always kept its area verbs. The
+            separate card above the rail was the last thing making these two screens different shapes. */}
+        {rail}
       </div>
     </div>
   );

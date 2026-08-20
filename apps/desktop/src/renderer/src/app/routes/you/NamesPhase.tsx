@@ -208,8 +208,11 @@ export function NamesPhase({
         <div className={adaptive.deckBody}>
           <div>
             <Text size="sm" tone="tertiary" className={adaptive.regSummary}>
-              {started} of {names.registers.length} registers started ·{' '}
-              {names.entries.length.toLocaleString()} names in all
+              {/* 74 §3.6.29 — counts, never a fraction. "0 of 21 registers started" is the same denominator
+                  shape just removed from the cards: it implies 21 is a number you are meant to reach. */}
+              {names.entries.length.toLocaleString()} names across {names.registers.length}{' '}
+              registers
+              {started > 0 ? ` · ${started} started` : ''}
             </Text>
             <div className={adaptive.regBar2}>
               <Select

@@ -91,7 +91,8 @@ A **radio** list of household people (`isSubject`, excluding the owner), each sh
 relationship, with a reachability chip. A person with no `Person.email` shows "SelfOS only" and an
 inline **add-address** affordance writing to their People profile.
 
-Single-select is structural, not a validation rule (§4.2).
+Single-select is structural, not a validation rule (§4.2). The selected row carries a filled **radio
+dot** as well as a tint — selection must read as form, never colour alone (§9).
 
 ### 3.3 Step 2 — compose
 
@@ -111,6 +112,12 @@ Then: the **type** picker (announcement / question / suggestion), a free-text **
 The draft renders as editable subject + body (+ answer labels for question/suggestion), with **Try
 again**. A banner restates the voice rule: _goes out as SelfOS — no sender, no signature, no first
 person._
+
+**Starting a second note resets the mode and type, not just the draft.** Carrying them forward is what
+made a note written by hand leave the surface on `self` with the draft cleared — matching neither the AI
+card nor the editor, so the compose step opened on nothing at all. The editor renders whenever the owner
+is writing it themselves _or_ a draft exists, so it can never be gated on state a button click alone
+seeds.
 
 ### 3.4 Step 3 — preview & send
 

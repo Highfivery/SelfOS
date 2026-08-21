@@ -1798,7 +1798,8 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
     await w.getByRole('link', { name: 'People' }).click();
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Notes' }).click();
-    await w.getByLabel('Notes', { exact: true }).fill('enjoys cycling');
+    // Scoped to `main`: the Notes NAV LINK carries the same aria-label (the 2026-08-18 badge lesson).
+    await w.locator('main').getByLabel('Notes', { exact: true }).fill('enjoys cycling');
     // Lock the notes to this person only via the per-field ShareToggle.
     await w.getByRole('button', { name: /Notes: shared/i }).click();
     await w.getByRole('button', { name: 'Save' }).click();
@@ -1806,7 +1807,9 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
     // Reopen and confirm the merged field + the lock round-tripped through encryption.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Notes' }).click();
-    await expect(w.getByLabel('Notes', { exact: true })).toHaveValue('enjoys cycling');
+    await expect(w.locator('main').getByLabel('Notes', { exact: true })).toHaveValue(
+      'enjoys cycling',
+    );
     await expect(w.getByRole('button', { name: /Notes: private/i })).toBeVisible();
   } finally {
     await app.close();
@@ -17626,7 +17629,6 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .first()
       .click();
     // `settle` is scoped to the per-step loop above; this is outside it.
-    await w.waitForTimeout(600);
     /*
      * The profile step WAITS to be asked (74 §3.6.9) — "Next: your profile" navigates to it and spends
      * nothing, which is the whole point of that change. Without this the walk sat on the step until its
@@ -18205,6 +18207,20 @@ test('notes (76): write a note to one person → decrypt the record → it lands
     await expect(w.getByText(/In SelfOS only/i)).toBeVisible();
 
     await expectNoInnerOverflow(w);
+
+    // A SECOND note must not inherit the first one's mode and open on an empty screen (76 §3.2).
+    await w.getByRole('button', { name: 'Write a note' }).click();
+    await w.getByRole('radio', { name: /Angel/ }).click();
+    await w.getByRole('button', { name: /Write for Angel/ }).click();
+    await expect(w.getByLabel('What are you thinking?')).toBeVisible();
+    await w.getByRole('button', { name: 'Write it myself' }).click();
+    await expect(w.getByLabel('Subject')).toBeVisible();
+    await w.setViewportSize({ width: 390, height: 780 });
+    await expect(w.getByRole('heading', { name: 'A note for Angel' })).toBeVisible();
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 860 });
+    await w.getByRole('button', { name: 'Back' }).click();
+    await w.getByRole('button', { name: 'Notes' }).click();
 
     // The record is on disk, ENCRYPTED, under the AUTHOR — then read back through the real service.
     const owner = (await listPeople(fs, key)).find((p) => p.displayName !== 'Angel')!;

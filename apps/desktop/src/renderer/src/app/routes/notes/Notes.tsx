@@ -79,12 +79,19 @@ export function Notes(): JSX.Element {
   if (!canManage) return <div className={styles.page} />;
 
   const recipient = recipients.find((r) => r.personId === recipientId) ?? null;
+  /** What the editor binds to. A draft may legitimately not exist yet while writing by hand. */
+  const editable = draft ?? { subject: '', body: '', answers: [] };
 
   const startNew = (): void => {
     setDraft(null);
     setIntent('');
     setSent(null);
     setRecipientId(null);
+    // Reset the MODE and TYPE too. Without this a second note silently inherits the first one's
+    // choices — and with mode already 'self' and the draft just cleared, the compose step rendered
+    // nothing at all: no AI card (mode isn't 'ai') and no editor (the draft was null).
+    setMode('ai');
+    setType('suggestion');
     setStep({ kind: 'who' });
   };
 
@@ -196,6 +203,11 @@ export function Notes(): JSX.Element {
                 setAddressDraft('');
               }}
             >
+              {/* A visible radio dot. Selection must read as FORM, not a background tint alone (§9). */}
+              <span
+                className={`${styles.dot} ${recipientId === r.personId ? styles.dotOn : ''}`}
+                aria-hidden="true"
+              />
               <span className={styles.avatar} aria-hidden="true">
                 {initials(r.displayName)}
               </span>
@@ -281,10 +293,7 @@ export function Notes(): JSX.Element {
           </Button>
           <Button
             variant={mode === 'self' ? 'primary' : 'secondary'}
-            onClick={() => {
-              setMode('self');
-              if (!draft) setDraft({ subject: '', body: '', answers: [] });
-            }}
+            onClick={() => setMode('self')}
           >
             Write it myself
           </Button>
@@ -358,15 +367,20 @@ export function Notes(): JSX.Element {
           </Card>
         ) : null}
 
-        {draft ? (
+        {/*
+          Rendered whenever the owner is writing it themselves OR a draft exists. Keying this on the
+          draft alone left an empty screen: entering compose already in 'self' mode with a cleared
+          draft matched neither branch, because the initializer only ran on the mode BUTTON's click.
+        */}
+        {mode === 'self' || draft ? (
           <Card>
             <Stack gap={4}>
               <Field label="Subject">
                 {(field) => (
                   <TextInput
                     {...field}
-                    value={draft.subject}
-                    onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+                    value={editable.subject}
+                    onChange={(e) => setDraft({ ...editable, subject: e.target.value })}
                   />
                 )}
               </Field>
@@ -374,9 +388,9 @@ export function Notes(): JSX.Element {
                 {(field) => (
                   <Textarea
                     {...field}
-                    value={draft.body}
+                    value={editable.body}
                     rows={7}
-                    onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                    onChange={(e) => setDraft({ ...editable, body: e.target.value })}
                   />
                 )}
               </Field>

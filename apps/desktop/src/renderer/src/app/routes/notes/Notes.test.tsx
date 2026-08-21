@@ -177,6 +177,37 @@ describe('Notes (76 §3)', () => {
     expect(screen.getByDisplayValue('Mine')).toBeInTheDocument();
   });
 
+  it('a SECOND note does not inherit the first one\u2019s mode, and never opens empty', async () => {
+    asOwner();
+    installMockBridge({
+      notesRecipients: () => Promise.resolve([ANGEL]),
+      notesList: () => Promise.resolve([]),
+      notesSend: () => Promise.resolve({ ok: true as const, noteId: 'n1', emailed: true }),
+    });
+
+    render(<Notes />);
+    // Write the first note BY HAND, so `mode` is left on 'self'.
+    await userEvent.click(await screen.findByRole('button', { name: 'Write a note' }));
+    await userEvent.click(screen.getByRole('radio', { name: /Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Write for Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Write it myself' }));
+    await userEvent.type(screen.getByLabelText('Subject'), 'First');
+    await userEvent.type(screen.getByLabelText('Body'), 'Hello.');
+    await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Send to Angel/ }));
+
+    // Now start a SECOND one. It must open on the AI card, not silently inherit 'self' with no draft.
+    await userEvent.click(await screen.findByRole('button', { name: 'Write a note' }));
+    await userEvent.click(screen.getByRole('radio', { name: /Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Write for Angel/ }));
+    expect(screen.getByLabelText('What are you thinking?')).toBeInTheDocument();
+
+    // And writing it by hand still shows the editor \u2014 the draft is gone, the fields are not.
+    await userEvent.click(screen.getByRole('button', { name: 'Write it myself' }));
+    expect(screen.getByLabelText('Subject')).toHaveValue('');
+    expect(screen.getByLabelText('Body')).toBeInTheDocument();
+  });
+
   it('shows delivery as a timeline, and says plainly when a note never emailed', async () => {
     asOwner();
     const base = {

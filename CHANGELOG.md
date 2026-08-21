@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.58.1](https://github.com/Highfivery/SelfOS/compare/v0.58.0...v0.58.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* **questionnaires:** a refusal is readable — on the send where we may say so ([#541](https://github.com/Highfivery/SelfOS/issues/541)) ([4f129e4](https://github.com/Highfivery/SelfOS/commit/4f129e4a3a528d79c64e9a86c1e542476ccab779))
+
 ## [0.58.0](https://github.com/Highfivery/SelfOS/compare/v0.57.0...v0.58.0) (2026-08-20)
 
 

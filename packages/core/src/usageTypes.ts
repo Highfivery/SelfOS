@@ -26,6 +26,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'memory.reconcile': 'Memory — refresh',
   'coaching.synthesize': 'Coaching — weekly synthesis',
   'email.suggest': 'Email — AI suggestion',
+  // 76 — the owner drafting a note to one person.
+  'note.draft': 'Note — AI draft',
   'goal.suggest': 'Goals — AI suggestions',
   'relationship.synthesize': 'Memory — relationship insights',
   'test.narrate': 'Self-assessment — what it means',

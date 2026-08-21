@@ -195,6 +195,22 @@ None new. The `app:version` IPC already returns `__APP_VERSION__`; About consume
   `0.1.0`); subsequent ones follow the commits. **Do not** force it with a `Release-As:` commit (that footer
   lingers in history and forces backward version proposals later); set the version via the manifest baseline +
   `bump-minor-pre-major`, and the first `feat` cuts `0.1.0`.
+- **A release PR carries NO CI check, permanently, and needs `gh pr merge --squash --admin`** (found
+  2026-08-20, publishing v0.58.0). The `main` ruleset requires `Lint · Typecheck · Test`, and on a release PR
+  that check is not pending — it is **absent** (`gh pr checks` prints "no checks reported"), so a plain
+  `gh pr merge` fails with _"the base branch policy prohibits the merge"_ and `--auto` queues behind a check
+  that can never arrive. The cause is upstream of this repo: release-please opens its PR with
+  `secrets.GITHUB_TOKEN`, and **GitHub does not fire workflows for token-created PRs** (recursion protection).
+  `ci.yml` already triggers on an unqualified `pull_request:` and so DOES match the release branch — widening
+  the trigger cannot help, because no event is emitted. Making the check real would require giving
+  release-please a PAT instead of `GITHUB_TOKEN`; **rejected** (owner, 2026-08-20) — a long-lived write-scoped
+  credential in repo secrets, in exchange for re-testing a diff that contains no source.
+  **The bypass is earned by a pre-flight, not assumed:** a release PR must touch **exactly four** paths —
+  `.release-please-manifest.json`, `CHANGELOG.md`, `package.json`, `apps/desktop/package.json` — with the only
+  non-changelog edits being the version bump, both `package.json`s moving in lockstep with the manifest (§3).
+  Anything else in that file list means something other than release-please wrote to the branch: **stop**. The
+  commit being released already passed CI when its own PR merged; that, not the release PR, is where the source
+  is tested.
 - **Release-please manifest drift (a release-PR loop)** — `.release-please-manifest.json` is the source of truth
   for the current version; if it drifts **below** the latest git tag (e.g. a stale lower-version Release PR gets
   merged, or `origin/main` is hand-merged into a branch while release PRs are in flight, carrying an old manifest

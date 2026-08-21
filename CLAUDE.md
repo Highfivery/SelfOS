@@ -561,6 +561,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-20 — **Release ops (a release PR has NO check, by construction — `--admin` is the path; owner-decided;
+  SPEC 19 §7 + the `release` skill).** Publishing **v0.58.0** (the whole Dirty Talk arc, 15 features + ~25
+  fixes) hit a wall the skill did not describe: `gh pr merge 494 --squash` failed with _"the base branch policy
+  prohibits the merge"_, and `gh pr checks` reported **"no checks reported"** — the required
+  `Lint · Typecheck · Test` was not pending, it was **absent**. **Diagnosed rather than pattern-matched to a
+  broken CI run:** `ci.yml` already triggers on an unqualified `pull_request:`, so it DOES match the release
+  branch; the reason nothing fired is that release-please opens the PR with `secrets.GITHUB_TOKEN`
+  (`release.yml:33`) and **GitHub deliberately does not fire workflows for token-created PRs**. So a trigger
+  change cannot fix it and `--auto` is worse than useless — it queues behind a check that can never arrive.
+  **I offered the owner a fix that does not work** ("make CI trigger on the release branch") and had to correct
+  it before acting; the only real alternative is giving release-please a PAT, which he **rejected** — a
+  long-lived write-scoped credential in repo secrets to re-test a diff containing no source. So `--admin` is
+  documented as the intended path, **earned by a pre-flight rather than assumed**: the PR must touch exactly
+  four paths (manifest, `CHANGELOG.md`, both `package.json`s), version-bump only, both packages in lockstep —
+  anything else means something other than release-please wrote to that branch, and the bypass is void. The
+  commit being released already passed CI when its own PR merged; that is where the source is tested. Verified
+  before merging (4 files, 0.57.0 → 0.58.0) and after (dmg 110MB attached, `draft=false`, Latest, manifest ==
+  latest tag, **no new loop PR**). **Lessons: (1) an ABSENT check and a PENDING check look similar in a merge
+  failure and have opposite causes — read `gh pr checks` before concluding CI is broken or re-running anything.
+  (2) A workflow trigger that already matches is proof the trigger is not the problem; GITHUB_TOKEN suppression
+  is upstream of any YAML you can edit. (3) Do not offer a remedy you have not verified is possible — I
+  proposed a trigger change for a repo whose trigger was already correct, and only checking `ci.yml` before
+  acting stopped it becoming a pointless commit.**
+
 - 2026-08-20 — **Live-model pass on the three AI steps (the fake could not have shown either defect; SPEC 74
   §3.6.39; on `chore/pet-name-purge-two`).** The §3.6.35–§3.6.38 work was all verified against the offline
   fake, so every phase was run against **real Claude at the owner's real shape** (563 entries resolved, 146

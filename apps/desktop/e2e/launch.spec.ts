@@ -26,6 +26,7 @@ import {
   upsertPerson,
   upsertRelationship,
 } from '@selfos/core/people';
+import { readNote } from '@selfos/core/notes';
 import { getGoal, saveGoal } from '@selfos/core/goals';
 import { hashPin } from '@selfos/core/crypto';
 import { queryUsage, recordUsage } from '@selfos/core/usage';
@@ -18145,6 +18146,82 @@ test('say something to your partner (75): writes lines, filters BOTH ways, keeps
     // One action, and it opens the take so you can show them what it asks (§11.1-7 — no nudge, no message).
     await w.getByRole('button', { name: 'See what it asks' }).click();
     await expect(w).toHaveURL(/tests\/dirty-talk\/take/);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Notes (76) — the owner writes to ONE person, chosen before a word of the note exists.
+ *
+ * Drives the COMPLETE flow through the rendered UI (§7): the nav entry, the recipient step, the
+ * compose step, the preview, and the send — then decrypts the vault to prove the note record landed,
+ * and switches to the recipient to prove it reached their queue with no sender named.
+ */
+test('notes (76): write a note to one person → decrypt the record → it lands in THEIR inbox, unattributed', async () => {
+  const { userData, vault } = await seedReadyVault();
+
+  // Seed Angel as a SUBJECT with a login — the picker offers people who have their own experience in
+  // the app, and only a subject has an Inbox for a note to land in.
+  const fs = createNodeFileSystem(vault);
+  const key = (await loadMasterKey(createNodeSecretStore(userData, passthrough)))!;
+  await upsertPerson(fs, key, { displayName: 'Angel', isSubject: true, tags: [] });
+  const angel = (await listPeople(fs, key)).find((p) => p.displayName === 'Angel')!;
+  await setAccount(fs, key, { personId: angel.id, roleId: 'member' });
+  await seedCompletedIntake(fs, key, angel.id); // else the member onboarding gate takes over her session
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // The Notes surface is owner-only and says so.
+    await w.getByRole('link', { name: 'Notes' }).click();
+    await expect(w.getByRole('heading', { name: 'Notes' })).toBeVisible();
+    await expect(w.getByText('Admin only')).toBeVisible();
+
+    await w.getByRole('button', { name: 'Write a note' }).click();
+
+    // Step 1 is the PERSON, before a word of the note exists.
+    await expect(w.getByRole('heading', { name: 'Who is this for?' })).toBeVisible();
+    await w.getByRole('radio', { name: /Angel/ }).click();
+    // No address yet — the surface says plainly that the note still lands, rather than failing later.
+    await expect(w.getByText(/reach their SelfOS inbox only/i)).toBeVisible();
+    await w.getByRole('button', { name: /Write for Angel/ }).click();
+
+    // Step 2 — written for her. The owner's own words; no AI needed for this walk.
+    await expect(w.getByRole('heading', { name: 'A note for Angel' })).toBeVisible();
+    await w.getByRole('button', { name: 'Write it myself' }).click();
+    await w.getByLabel('Subject').fill('Covers are here');
+    await w.getByLabel('Body').fill('Your books can have covers now.');
+
+    await w.getByRole('button', { name: /^Preview/ }).click();
+    await expect(w.getByText('In their email')).toBeVisible();
+    await expect(w.getByText('In their SelfOS inbox')).toBeVisible();
+
+    await w.getByRole('button', { name: /Send to Angel/ }).click();
+    await expect(w.getByText(/No email went out/i)).toBeVisible();
+    await expect(w.getByText(/In SelfOS only/i)).toBeVisible();
+
+    await expectNoInnerOverflow(w);
+
+    // The record is on disk, ENCRYPTED, under the AUTHOR — then read back through the real service.
+    const owner = (await listPeople(fs, key)).find((p) => p.displayName !== 'Angel')!;
+    const notesDir = join(vault, 'people', owner.id, 'notes');
+    const files = (await readdir(notesDir)).filter((f) => f.endsWith('.enc'));
+    expect(files).toHaveLength(1);
+    expect(await readFile(join(notesDir, files[0]!), 'utf8')).toContain('aes-256-gcm');
+    const note = await readNote(fs, key, owner.id, files[0]!.replace(/\.enc$/, ''));
+    expect(note?.recipientPersonId).toBe(angel.id);
+    expect(note?.subject).toBe('Covers are here');
+    expect(note?.emailedAt).toBeUndefined(); // reach failed; the note did not
+
+    // And it is in HER queue — naming the thing, never who sent it.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: 'Inbox' }).click();
+    await expect(w.getByText('Covers are here')).toBeVisible();
+    await expect(w.getByText(/from tester/i)).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

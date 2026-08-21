@@ -25,6 +25,7 @@ function LegacyTestRedirect({ take }: { take?: boolean }): JSX.Element {
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
+import { Notes } from './routes/notes/Notes';
 import { Usage } from './routes/usage/Usage';
 import { Together } from './routes/together/Together';
 import { TogetherSession } from './routes/together/TogetherSession';
@@ -68,6 +69,7 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'you/:testId', capability: 'tests.own', element: <LegacyTestRedirect /> },
   { path: 'people', capability: 'people.manage', element: <People /> },
   { path: 'roles', capability: 'roles.manage', element: <Roles /> },
+  { path: 'notes', capability: 'notes.manage', element: <Notes /> },
   // Together (58 §5.3): gated by `together.own`; the finer live-partner-edge gating is enforced in the
   // screen + the bridge (the surface self-hides without a partner, and a direct route shows a calm state).
   // A splat so the home's tabs deep-link (`/together/practices`, …) + survive reload (58 §3.2a). The

@@ -259,6 +259,7 @@ import type {
   LiftSuppressionInput,
   AddPartnerWishInput,
 } from '@selfos/core/questionnaires';
+import type { InboxEntry } from '@selfos/core/inbox';
 import type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 
 /**
@@ -403,6 +404,8 @@ export const IpcChannels = {
   questionnairesSteerTopic: 'questionnaires:steerTopic',
   questionnairesCurateCandidate: 'questionnaires:curateCandidate',
   questionnairesLiftSuppression: 'questionnaires:liftSuppression',
+  inboxList: 'inbox:list',
+  inboxDismiss: 'inbox:dismiss',
   questionnairesClearCandidateFeed: 'questionnaires:clearCandidateFeed',
   questionnairesRefreshNextCandidates: 'questionnaires:refreshNextCandidates',
   questionnairesAcknowledgeAdult: 'questionnaires:acknowledgeAdult',
@@ -794,6 +797,7 @@ export const OPENAI_API_KEY_ID = 'openai.apiKey';
 /** The secret id for the device-local Resend API key (67-email-engagement §4.1; the `openai.apiKey` posture). */
 export const RESEND_API_KEY_ID = 'resend.apiKey';
 export type { DeviceView, SkipSummary } from '@selfos/core/schemas';
+export type { InboxEntry, InboxEntryKind } from '@selfos/core/inbox';
 export type {
   QuestionnaireCoverageView,
   CoverageAreaView,
@@ -1228,6 +1232,10 @@ export interface SelfosBridge {
   questionnairesCurateCandidate(input: CandidateCurateInput): Promise<QuestionnaireCoverageView>;
   /** Lift ONE mark from the person's own "Left alone" list (08 §34.5) — the per-mark undo. */
   questionnairesLiftSuppression(input: LiftSuppressionInput): Promise<QuestionnaireCoverageView>;
+  /** The cross-domain queue (08 §35) — everything waiting for the signed-in person, newest first. */
+  inboxList(): Promise<InboxEntry[]>;
+  /** Remove one entry from your own queue; returns the refreshed list. */
+  inboxDismiss(entryId: string): Promise<InboxEntry[]>;
   /** Clear the whole candidate feed (mark every active candidate skipped). Own-scoped. */
   questionnairesClearCandidateFeed(): Promise<QuestionnaireCoverageView>;
   /** Adaptive Exploration (70 §3.2/§5.4): the manual "Look for more" — force a candidate refresh for the active

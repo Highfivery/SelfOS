@@ -4654,3 +4654,89 @@ restoring the dead "N new" makes the Private card nag (`Expected 0, Received 1`)
 matters — it returns `shareable: true`, and answers the refusal prompt with **different text** from the
 ordinary analysis, so the E2E proves _which_ prompt ran rather than merely that something did. A fake returning
 `false` would have passed the reverted code.
+
+## 35. The Inbox is a queue, not a questionnaire list (2026-08-21)
+
+**Status: BUILT.** "Your Inbox" meant questionnaires. Everything else addressed to you announced itself
+through the notification fan-out instead — a Together invitation, someone asking you to add to their book, a
+book they shared. Those are queue-shaped: they arrive, they wait for you, they are done with. A bell is a poor
+home for them, because a dismissed notification is gone whether or not you dealt with the thing behind it, and
+a badge that has been cleared says nothing about what is still outstanding.
+
+### 35.1 Navigate, never act
+
+**The queue only ever opens things.** No entry accepts, declines, or marks anything read on the person's
+behalf. This is a safety property, not a style preference, and each of the four kinds shows why:
+
+- **A Together invitation** — accepting is _also_ the consent record. `rulesAckAt` is simultaneously "I have
+  read the rules of the room" and "I have joined", and the bridge's `togetherAccept` checks capability and
+  membership but **not** that anything was ever shown. The ceremony is renderer-only and reachable from
+  exactly one screen. An inline Accept would write a consent record for a screen the person never saw, and
+  would bypass **"Decline quietly"** — whose only call site is that ceremony, and which exists for someone who
+  does not feel able to say no directly (58 §8.3).
+- **A shared book** — `booksMarkSharedRead` writes a receipt the AUTHOR can see ("Read the latest" / "Hasn't
+  opened it yet"), and nothing in the app can undo it. Reading is the reader's act; the queue listing a book
+  must never make "you opened my book" permanently true.
+- **A contribution invitation** — there is no accept or decline to offer. It is a standing grant, not a
+  proposal: you add something or you don't.
+- **A check-in** is the exception that proves the rule — it is answered _in place_, because the Inbox has
+  always been the answering surface for a questionnaire. Moving that would be a regression dressed as
+  consistency.
+
+So every other kind carries an `openPath` and nothing else, and the surface that owns the decision keeps its
+own framing, gates and consent step.
+
+### 35.2 Announce, never preview
+
+Names and titles only, and only where the person is already cleared to see them.
+
+- **A contribution invitation shows no book title** — not a rule this code applies but a property of the data
+  it is handed: `ContributionInviteView` has no `title` field, because nothing may tell a person a book exists
+  unless its author told them (73 §8.2). It names the author and their note, which is what they actually asked.
+- **A Together invitation carries no message text.** An invitation can already hold the initiator's opening
+  message and a coach reply before it is accepted, and every other surface withholds them — the notification
+  header states the rule outright, the Home card shows only "X invited you", and the ceremony itself shows only
+  the topic.
+- **A shared book does show its title**, because being shared a book _is_ being told it exists — the exact
+  opposite of a contribution invitation.
+
+**A leak found and closed on the way:** `TogetherSessionCard` rendered `lastMessageSnippet` with no status
+guard, so the sessions board showed up to 140 characters of the newest message on an invitation the person had
+not accepted — the one surface that previewed what every other one deliberately withholds. Now gated on
+`status !== 'invited'`.
+
+### 35.3 The registry, the order, and dismissing
+
+The registry is the extensibility seam (the `contextProviders` pattern, §5.1): a kind registers a provider and
+appears in the queue with no change to the Inbox itself. `collectInbox` merges every provider into **one list,
+newest first** (owner, 2026-08-20) — a single chronological queue reads as "what came in", which is what an
+inbox is, and stays legible when three of the four kinds are usually empty.
+
+**A provider that throws contributes nothing and never takes the queue down with it.** That matters more here
+than in a single-feature list: four domains feed this, and one unreadable book must not cost someone the
+check-in sitting above it.
+
+**Dismissal is vault-stored, in the recipient's own space** (owner, 2026-08-20). Two precedents disagreed — a
+received questionnaire's dismissal is vault-stored, favourites and nudge-dismissals are device-local — and the
+questionnaire is the closer analogue: someone offered you something and you took it out of your queue, so a
+dismissal that reappears on your other device reads as the app forgetting what you told it. It has to live in
+the recipient's own space regardless, because the thing dismissed is not theirs: a contribution invitation
+lives in the author's book folder and a shared book's grant lives in the author's vault. The filter runs
+**after** the providers, so a dismissal survives an entry its provider will go on returning forever.
+
+Only the two book kinds are dismissible. A check-in and a Together invitation are not — deciding is the whole
+point of opening them, and an invitation already has "Not right now" on its own screen.
+
+A shared book is queue-shaped: it appears when it is new to you or the author has published since you last
+opened it, and leaves once you have read the current version. A permanent list of books you have already read
+is a library, not an inbox.
+
+### 35.4 Guards
+
+Core: the registry merges and orders; **a throwing provider costs only its own kind**; a dismissed entry stays
+gone while its provider still returns it; dismissing twice does not churn the record; one person's dismissals
+never touch another's. Renderer: all four kinds render in one list; a Together invitation **navigates and
+offers no Accept**; only the dismissible kinds show the control.
+
+**Verified to FAIL when reverted**: removing the per-provider `try` (one bad provider empties the queue),
+ignoring the dismissal filter, making every kind dismissible, and dropping the navigation branch.

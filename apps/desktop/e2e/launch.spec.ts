@@ -47,6 +47,10 @@ import {
   submitResponse,
   UNCLEAR_SKIP_REASON,
 } from '@selfos/core/questionnaires';
+import { appendMessage, createSession } from '@selfos/core/together';
+import { createBook } from '@selfos/core/books';
+import { inviteContribution } from '@selfos/core/books';
+import { readInboxDismissals } from '@selfos/core/inbox';
 import { getIntakeSession, intakeCatalogSnapshot } from '@selfos/core/intake';
 import { listEmailActivity, listEmailResponses, readEmailPrefs } from '@selfos/core/email';
 import {
@@ -6381,6 +6385,122 @@ test('refusal read (08 §34.3): a Standard all-skipped send is readable; a Priva
   }
 });
 
+test('inbox (08 §35): one queue for four kinds — it opens things, and never acts on your behalf', async () => {
+  const { userData, vault } = await seedReadyVault();
+  {
+    const fs0 = createNodeFileSystem(vault);
+    const key0 = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key0) throw new Error('inbox e2e: master key missing');
+    // A partner who invites the owner to a Together session, and asks them to add to a book.
+    const partner = await upsertPerson(fs0, key0, {
+      displayName: 'Angel',
+      isSubject: true,
+      tags: [],
+    });
+    await upsertRelationship(fs0, key0, {
+      fromPersonId: 'owner-1',
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+
+    // A Together invitation: created by HER, so only her `rulesAckAt` exists → `invited` for the owner.
+    const session = await createSession(
+      fs0,
+      key0,
+      {
+        initiatorPersonId: partner.id,
+        participantIds: [partner.id, 'owner-1'],
+        topic: 'How we talk about money',
+      },
+      new Date('2026-08-04T00:00:00.000Z'),
+    );
+    // …with an opening message already in it, which the queue must NOT preview (§35.2).
+    await appendMessage(fs0, key0, session.id, {
+      id: 'm1',
+      schemaVersion: 1,
+      sessionId: session.id,
+      authorPersonId: partner.id,
+      text: 'I feel like we barely talk about this.',
+      privateAside: false,
+      ts: '2026-08-04T00:01:00.000Z',
+    });
+
+    // A contribution invitation on a book whose TITLE the owner may never see (73 §8.2).
+    const book = await createBook(fs0, key0, {
+      personId: partner.id,
+      title: 'The Weight of Quiet',
+      type: 'biography',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
+      now: new Date('2026-08-02T00:00:00.000Z'),
+    });
+    await inviteContribution(fs0, key0, partner.id, {
+      bookId: book.id,
+      personId: 'owner-1',
+      note: 'Anything about Denver?',
+      now: new Date('2026-08-03T00:00:00.000Z'),
+    });
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    const list = w.getByRole('region', { name: 'Inbox' });
+
+    // Both non-questionnaire kinds are queued, in one list.
+    await expect(list.getByText('How we talk about money')).toBeVisible();
+    await expect(list.getByText('Angel asked you to add to their book')).toBeVisible();
+    await expect(list.getByText('Anything about Denver?')).toBeVisible();
+
+    // §35.2 — announce, never preview. Neither the message she already sent nor the book's title.
+    await expect(w.getByText(/barely talk about this/)).toHaveCount(0);
+    await expect(w.getByText('The Weight of Quiet')).toHaveCount(0);
+
+    // §35.1 — the invitation OPENS; it is never accepted from here. Tapping it lands on the ceremony,
+    // where the rules of the room and "Decline quietly" live.
+    await list.getByText('How we talk about money').click();
+    await expect(w.getByText('You both see the conversation.')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Decline quietly' })).toBeVisible();
+
+    // §35.3 — a book invitation can be dismissed, and it STAYS dismissed (vault-stored, so a reload keeps it
+    // gone rather than the provider handing it straight back).
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w
+      .getByRole('button', { name: /Remove from your inbox: Angel asked you to add to their book/ })
+      .click();
+    await expect(list.getByText('Angel asked you to add to their book')).toHaveCount(0);
+    await w.getByRole('link', { name: 'Home', exact: true }).click();
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await expect(list.getByText('Angel asked you to add to their book')).toHaveCount(0);
+    // …while the invitation, which is not dismissible, is still there.
+    await expect(list.getByText('How we talk about money')).toBeVisible();
+
+    // ~360px: the queue rows carry an icon, a title, a chip and a dismiss — the worst case for §12.
+    await w.setViewportSize({ width: 360, height: 800 });
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1024, height: 800 });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+
+  // At rest: the dismissal is in the RECIPIENT's own vault (§35.3), and nothing marked the book read.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (key) {
+    const dismissals = await readInboxDismissals(fs, key, 'owner-1');
+    expect(dismissals.ids.some((id) => id.startsWith('contribution-invitation:'))).toBe(true);
+  }
+});
+
 test('inbox: “That’s not right about me” rewords the question AND its answers, quoting the source (08 §32)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
@@ -11509,7 +11629,7 @@ test('discoverability: the Inbox empty state offers "Create a questionnaire" →
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Inbox' }).click();
-    await expect(w.getByText(/nothing to answer right now/i)).toBeVisible();
+    await expect(w.getByText(/nothing waiting right now/i)).toBeVisible();
     await w.getByRole('button', { name: /Create a questionnaire/i }).click();
     await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('/questionnaires');
     await expect(w.getByRole('heading', { name: 'Questionnaires' })).toBeVisible();

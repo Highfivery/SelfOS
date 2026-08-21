@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Answer, InboxAssignmentDetail, InboxItem } from '@shared/channels';
+import type { Answer, InboxAssignmentDetail, InboxEntry, InboxItem } from '@shared/channels';
 
 /**
  * The active person's Inbox (08-questionnaires §3.3) — questionnaires sent to them. Per-person state:
@@ -8,6 +8,12 @@ import type { Answer, InboxAssignmentDetail, InboxItem } from '@shared/channels'
  */
 interface InboxState {
   items: InboxItem[];
+  /**
+   * The cross-domain queue (08 §35) — check-ins alongside Together invitations, invitations to add to
+   * someone's book, and books shared with you. `items` stays beside it because a check-in is ANSWERED here
+   * and the answering pane needs the whole assignment; the queue row is enriched from it by id.
+   */
+  entries: InboxEntry[];
   loaded: boolean;
   load: () => Promise<void>;
   reset: () => void;
@@ -21,16 +27,26 @@ interface InboxState {
   decline: (assignmentId: string, note?: string) => Promise<void>;
   /** Remove a received questionnaire from the Inbox (#350): a self check-in is deleted, else dismissed. */
   dismiss: (assignmentId: string) => Promise<void>;
+  /** Remove one QUEUE entry from your own inbox (08 §35.3) — vault-stored, so it stays gone on every device. */
+  dismissEntry: (entryId: string) => Promise<void>;
 }
 
 export const useInboxStore = create<InboxState>((set, get) => ({
   items: [],
+  entries: [],
   loaded: false,
   load: async () => {
-    const items = (await window.selfos?.assignmentsInbox()) ?? [];
-    set({ items, loaded: true });
+    const [items, entries] = await Promise.all([
+      window.selfos?.assignmentsInbox() ?? Promise.resolve([]),
+      window.selfos?.inboxList() ?? Promise.resolve([]),
+    ]);
+    set({ items, entries, loaded: true });
   },
-  reset: () => set({ items: [], loaded: false }),
+  reset: () => set({ items: [], entries: [], loaded: false }),
+  dismissEntry: async (entryId) => {
+    const entries = (await window.selfos?.inboxDismiss(entryId)) ?? [];
+    set({ entries });
+  },
   setFavorite: async (assignmentId, favorite) => {
     // Optimistic flip so the star responds instantly; the bridge persists it (device-local, per-person).
     set({

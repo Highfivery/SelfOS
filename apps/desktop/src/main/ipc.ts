@@ -382,6 +382,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesSteerTopic, bridge.questionnairesSteerTopic);
   handle(IpcChannels.questionnairesCurateCandidate, bridge.questionnairesCurateCandidate);
   handle(IpcChannels.questionnairesLiftSuppression, bridge.questionnairesLiftSuppression);
+  handle(IpcChannels.inboxList, bridge.inboxList);
+  handle(IpcChannels.inboxDismiss, bridge.inboxDismiss);
   handle(IpcChannels.questionnairesClearCandidateFeed, bridge.questionnairesClearCandidateFeed);
   handle(
     IpcChannels.questionnairesRefreshNextCandidates,

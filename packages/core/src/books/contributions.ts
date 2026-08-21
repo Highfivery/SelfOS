@@ -170,6 +170,7 @@ export async function listMyInvitations(
         authorPersonId: author.id,
         authorName: author.displayName,
         ...(invite.note ? { note: invite.note } : {}),
+        invitedAt: invite.invitedAt,
         // `correction` is only offered on a book they can actually read (§3.2).
         canRead: Boolean(book.publishedAt) && book.sharedWith.includes(personId),
       });

@@ -14,6 +14,12 @@ import type {
   EmailVerifyResult,
   IntimacyInventoryOffer,
   OwnerEmailActivityEntry,
+  NoteDraftInput,
+  NoteDraftResult,
+  NoteRecipient,
+  NoteRow,
+  NoteSendInput,
+  NoteSendResult,
   MutualGreenLight,
   BookManifest,
   BookShelfEntry,
@@ -444,6 +450,14 @@ export const IpcChannels = {
   emailIntimacyOffers: 'email:intimacyOffers',
   emailApplyIntimacyOffer: 'email:applyIntimacyOffer',
   emailActivity: 'email:activity',
+
+  // Notes (76) — an owner-authored note to ONE person. All gated `notes.manage` in the bridge.
+  notesRecipients: 'notes:recipients',
+  notesDraft: 'notes:draft',
+  notesSend: 'notes:send',
+  notesList: 'notes:list',
+  notesDelete: 'notes:delete',
+  peopleSetEmail: 'people:setEmail',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
   insightsUpdate: 'insights:update',
@@ -1382,6 +1396,14 @@ export interface SelfosBridge {
   emailEditResponse(input: { id: string; answer: string }): Promise<EmailResponse | null>;
   /** EVERY member's email activity (owner-only, 67 §3.7) — the full-visibility Email-activity view. */
   emailAllActivity(): Promise<OwnerEmailActivityEntry[]>;
+  /** Who a note can be addressed to — an identity projection, never a full `Person` (76 §6). */
+  notesRecipients(): Promise<NoteRecipient[]>;
+  notesDraft(input: NoteDraftInput): Promise<NoteDraftResult>;
+  notesSend(input: NoteSendInput): Promise<NoteSendResult>;
+  notesList(): Promise<NoteRow[]>;
+  notesDelete(input: { noteId: string }): Promise<void>;
+  /** Set a person's contact address — the address a note is emailed to (76 §3.2). Owner-gated. */
+  peopleSetEmail(input: { personId: string; email: string }): Promise<Person | null>;
   /** The stored rendered content of one sent email (owner-only, 67 §3.7) — "see what was sent". */
   emailContent(input: { personId: string; id: string }): Promise<EmailContentSnapshot | null>;
   /** The active person's mutual green lights — a couple suggestion both partners tapped "I'm game" on (67 §3.6). */

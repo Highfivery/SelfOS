@@ -49,7 +49,11 @@
     "./story-diff": "./src/books/storyDiff.ts",
     "./story-matter": "./src/books/storyMatter.ts",
     "./story-metrics": "./src/books/manuscriptMetrics.ts",
-    "./adaptive-spine": "./src/tests/adaptive/spine.ts"
+    "./adaptive-spine": "./src/tests/adaptive/spine.ts",
+    "./notes": {
+      "types": "./src/notes/index.ts",
+      "default": "./src/notes/index.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

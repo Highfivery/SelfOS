@@ -9,6 +9,9 @@ import type { AiDeps } from '../questionnaires/aiCall';
 import { buildNoteContext } from './noteContext';
 import { containsFirstPerson, draftNote } from './noteDraft';
 import { createNote, listNotesByAuthor, listNotesForRecipient, markNoteEmailed } from './noteStore';
+import { collectInbox } from '../inbox';
+import { registerBuiltInInboxProviders } from '../inbox/providers';
+import { buildNoteEmail } from '../email/emailComposer';
 
 const NOW = new Date('2026-08-21T12:00:00.000Z');
 
@@ -280,5 +283,84 @@ describe('notes — the voice rule (76 §5.4)', () => {
       intent: 'x',
     });
     expect(bad.ok).toBe(false);
+  });
+});
+
+describe('notes — the recipient surfaces (76 §3.6)', () => {
+  it('appears in the recipient’s Inbox with NO sender, and only counts when there is something to answer', async () => {
+    registerBuiltInInboxProviders();
+    const { fs, key, owner, her } = await seed();
+
+    await createNote(
+      fs,
+      key,
+      owner,
+      {
+        recipientPersonId: her,
+        type: 'announcement',
+        subject: 'Covers are here',
+        body: 'Your books can have covers now.\nSecond line that must not leak into the queue.',
+        answers: [],
+        drafted: 'ai',
+      },
+      NOW,
+    );
+    await createNote(
+      fs,
+      key,
+      owner,
+      {
+        recipientPersonId: her,
+        type: 'question',
+        subject: 'One thing you’d want more of?',
+        body: 'No wrong answer.',
+        answers: [
+          { label: 'Time outside', stance: 'other' },
+          { label: 'Quiet evenings', stance: 'other' },
+        ],
+        drafted: 'ai',
+      },
+      NOW,
+    );
+
+    const entries = (await collectInbox({ fs, key, personId: her, now: NOW, readAt: {} })).filter(
+      (e) => e.kind === 'note',
+    );
+    expect(entries).toHaveLength(2);
+
+    // No attribution anywhere — a note reads as the app, on both surfaces.
+    expect(entries.every((e) => e.fromName === undefined)).toBe(true);
+    // Announce, never preview: the first line only.
+    expect(entries.some((e) => e.detail?.includes('must not leak'))).toBe(false);
+    // The badge means "something needs you" — an announcement does not.
+    expect(entries.find((e) => e.title === 'Covers are here')?.waiting).toBe(false);
+    expect(entries.find((e) => e.title?.startsWith('One thing'))?.waiting).toBe(true);
+  });
+
+  it('the email carries no signature, no greeting and no sender', () => {
+    const mail = buildNoteEmail({
+      recipientName: 'Angel',
+      subject: 'Something for those late nights',
+      body: 'You’ve written most nights this month.',
+      answers: [{ label: 'I’m game', url: 'https://relay.example/t/abc' }],
+    });
+
+    expect(mail.subject).toBe('Something for those late nights');
+    // No "Hi <name>" opener, and nothing that reads as a person signing off.
+    expect(mail.html).not.toContain('Hi Angel');
+    expect(mail.text).not.toContain('Hi Angel');
+    expect(mail.text).not.toMatch(/^—\s/m);
+    expect(mail.html).toContain('https://relay.example/t/abc');
+    // The standing not-medical line is untouched by any of this.
+    expect(mail.text).toContain('wellness');
+  });
+
+  it('an email with no tap buttons still closes with a way in, rather than dead-ending', () => {
+    const mail = buildNoteEmail({
+      subject: 'Covers are here',
+      body: 'Your books can have covers.',
+    });
+    expect(mail.text).toContain('Open SelfOS');
+    expect(mail.html).toContain('Open SelfOS');
   });
 });

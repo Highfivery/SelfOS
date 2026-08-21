@@ -122,6 +122,8 @@ async function performSend(deps: {
   scheduledAt?: string;
   tokens?: string[];
   sourceKey?: string;
+  /** Who the email is FOR, when that differs from the person it is logged under (76 §5.3). */
+  recipientPersonId?: string;
   now: Date;
 }): Promise<EmailSendResult> {
   const outcome = await deps.email.send({
@@ -170,6 +172,7 @@ async function performSend(deps: {
     ...(outcome.ok ? { resendMessageId: outcome.id } : {}),
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
     ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
+    ...(deps.recipientPersonId ? { recipientPersonId: deps.recipientPersonId } : {}),
     ...(contentSnapshotPath ? { contentSnapshotPath } : {}),
   };
   await appendActivity(deps.fs, deps.key, entry);
@@ -318,6 +321,59 @@ export async function sendQuestionnaireDeliveryEmail(deps: {
     composed: deps.composed,
     now: deps.now,
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
+    ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
+  });
+}
+
+/**
+ * Family I — an owner-authored note (76 §5.3).
+ *
+ * Shares family A's gating profile, not the engagement families': it goes to the recipient's CONTACT
+ * address (`Person.email`, passed in), is NOT gated on their per-family opt-in or `paused`, and is not
+ * crisis-suppressed. The owner sets the address and the note is not refusable — an owner decision
+ * (76 §8.3), recorded there along with its deliverability cost.
+ *
+ * The activity entry is logged under the **SENDER** with `recipientPersonId` stamped. That is what makes
+ * the delivery metrics work at all: `reconcileEmailSchedule` is active-person-scoped, so logging under
+ * the recipient would mean their opens never refreshed until they themselves opened the app.
+ *
+ * The caller has ALREADY written the note record (76 §5.3). A failure here reduces reach; it never
+ * loses the note.
+ */
+export async function sendNoteEmail(deps: {
+  fs: FileSystem;
+  key: Uint8Array;
+  email: EmailClient;
+  resendKey: string | undefined;
+  /** The author — the activity is logged under them, so their own reconcile polls it. */
+  senderPersonId: string;
+  /** Who it is for. Stamped on the entry so the owner view can name them rather than an address. */
+  recipientPersonId: string;
+  /** Their contact address (`Person.email`), NOT an engagement address. */
+  toAddress: string;
+  composed: ComposedEmail;
+  tokens?: string[];
+  sourceKey?: string;
+  now: Date;
+}): Promise<EmailSendResult> {
+  const config = await readEmailConfig(deps.fs, deps.key);
+  const from = fromLineOf(config);
+  if (!deps.resendKey || !from) return { ok: false, reason: 'NOT_CONFIGURED' };
+  if (!deps.toAddress.trim()) return { ok: false, reason: 'NO_ADDRESS' };
+
+  return performSend({
+    fs: deps.fs,
+    key: deps.key,
+    email: deps.email,
+    resendKey: deps.resendKey,
+    from,
+    personId: deps.senderPersonId,
+    family: 'note',
+    toAddress: deps.toAddress,
+    composed: deps.composed,
+    now: deps.now,
+    recipientPersonId: deps.recipientPersonId,
+    ...(deps.tokens ? { tokens: deps.tokens } : {}),
     ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
   });
 }

@@ -444,6 +444,13 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     emailIntimacyOffers: () => Promise.resolve([]),
     emailApplyIntimacyOffer: () => Promise.resolve(true),
     emailActivity: () => Promise.resolve([]),
+    notesRecipients: () => Promise.resolve([]),
+    notesDraft: () =>
+      Promise.resolve({ ok: false as const, reason: 'NO_KEY' as const, message: 'no ai' }),
+    notesSend: () => Promise.resolve({ ok: true as const, noteId: 'n1', emailed: false }),
+    notesList: () => Promise.resolve([]),
+    notesDelete: () => Promise.resolve(),
+    peopleSetEmail: () => Promise.resolve(null),
     insightsAnalyze: () => Promise.resolve({ ok: false, reason: 'NO_RESPONSE' }),
     insightsApprove: () => Promise.resolve(null),
     insightsUpdate: () => Promise.resolve(null),

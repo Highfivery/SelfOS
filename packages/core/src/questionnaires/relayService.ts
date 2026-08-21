@@ -28,9 +28,10 @@ import type { FileSystem } from '../host';
 import { writeEncryptedJson } from '../vault';
 import { assignmentPath, consentPath, snapshotPath } from './paths';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
+import { recordSubmissionOutcomes } from './answerService';
 import { captureResponseFeedback } from './profileFeedback';
 import { getQuestionnaireImage } from './imageService';
-import { saveResponse } from './responseService';
+import { getResponse, saveResponse } from './responseService';
 import { getQuestionnaire, validateQuestionnaire } from './questionnaireService';
 
 /**
@@ -397,6 +398,17 @@ export async function drainRelaySend(
       await captureResponseFeedback(fs, key, assignmentId);
     } catch {
       // profile capture is a learning side-effect, not part of the drain
+    }
+    // …and how each question LANDED (spec 71 §5.4), exactly as an in-app submit does. Without this an answer
+    // that came back over the link taught the ask ledger nothing, so the app went on re-mining ground the
+    // person had visibly skipped — worse the more they preferred the link. Best-effort, like its sibling.
+    try {
+      const submitted = await getResponse(fs, key, assignmentId);
+      if (submitted) {
+        await recordSubmissionOutcomes(fs, key, assignmentId, submitted.answers);
+      }
+    } catch {
+      // outcome learning is a side-effect, not part of the drain
     }
   }
   return { assignmentId, drained, declined };

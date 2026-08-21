@@ -79,6 +79,62 @@ describe('captureResponseFeedback (via submitResponse) → the Personalization P
     expect(prompt).toContain('How is work going?');
   });
 
+  it('stamps the TOPIC a declined question covered, not just its wording (08 §34 / 2b)', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p2', displayName: 'Pat', isSubject: true, tags: [] });
+    // A planner-written question carries the ground it covers (71 §5.3 tags it at write time).
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'q1',
+          type: 'shortText',
+          prompt: 'How is work going?',
+          required: false,
+          topicIds: ['work-stress', 'career'],
+        },
+      ],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'author',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    await submitResponse(fs, key, {
+      assignmentId: a.id,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: NOT_APPLICABLE_SKIP_REASON } },
+      ],
+    });
+
+    const profile = await readProfile(fs, key, 'p2');
+    const entry = profile.feedback.find((f) => f.kind === 'not-applicable');
+    // The PRIMARY ground the planner picked it for. Without this the mark is about one wording only, so the
+    // subject can be re-asked forever in slightly different words, and the Explored panel has nothing to
+    // hang the mark on.
+    expect(entry?.topicId).toBe('work-stress');
+    expect(entry?.questionPrompt).toBe('How is work going?');
+  });
+
+  it('leaves a hand-authored question’s decline topic-less (nothing to stamp)', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p2', displayName: 'Pat', isSubject: true, tags: [] });
+    const id = await seed(fs, 'p2'); // no topicIds on these questions
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: NOT_APPLICABLE_SKIP_REASON } },
+      ],
+    });
+    const profile = await readProfile(fs, key, 'p2');
+    expect(profile.feedback.find((f) => f.kind === 'not-applicable')?.topicId).toBeUndefined();
+  });
+
   it('captures an "unclear" skip as reword guidance', async () => {
     const fs = memFileSystem();
     await upsertPerson(fs, key, { id: 'p3', displayName: 'Sam', isSubject: true, tags: [] });

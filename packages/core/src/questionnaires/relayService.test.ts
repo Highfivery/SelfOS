@@ -22,6 +22,7 @@ import type {
   RelayResponsePayload,
   RelayStoredResponse,
 } from '../schemas';
+import { readLedger } from './askLedger';
 import { saveQuestionnaire } from './questionnaireService';
 import { createAssignment, getAssignment } from './assignmentService';
 import { getResponse } from './responseService';
@@ -280,6 +281,15 @@ describe('relayService', () => {
       'Answered via the link.',
     );
     expect((await getAssignment(fs, key, assignment.id))?.status).toBe('submitted');
+
+    // …and the drain teaches the ask ledger how the question LANDED (71 §5.4), exactly as an in-app submit
+    // does. It used to record only the declines and never the outcomes, so an answer that came back over the
+    // link left every question `pending` forever — and the app went on re-mining ground the person had
+    // visibly answered or skipped, the more so the more they preferred the link.
+    const ledger = await readLedger(fs, key, 'p2');
+    const asked = ledger.entries.find((e) => e.questionId === 'a');
+    expect(asked).toBeDefined();
+    expect(asked?.outcome).not.toBe('pending');
   });
 
   it('a drain never overwrites an in-app answer — first-submission wins (§17.13)', async () => {

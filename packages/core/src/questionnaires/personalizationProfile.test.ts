@@ -19,6 +19,7 @@ import {
   applyEngagement,
   applyReciprocity,
   applySteer,
+  isSuppressionLive,
   buildFeedbackGuidance,
   CANDIDATE_CAP,
   CANDIDATES_PER_AREA,
@@ -275,13 +276,19 @@ describe('buildFeedbackGuidance', () => {
     );
   });
 
-  it('is empty for a weak signal only (a plain reasonless skip)', () => {
-    const p = applyDecline(
+  it('stays empty for a REASONLESS skip, and carries the prose when they wrote some', () => {
+    // A bare skip is still the weak signal it always was - nothing to steer on, so nothing is said.
+    const bare = applyDecline(emptyProfile('p1'), { questionPrompt: 'Q' }, at(1));
+    expect(buildFeedbackGuidance(bare, at(2))).toBe('');
+
+    // Typing a reason is the person telling you what was wrong with the question. That now reaches the
+    // planner (owner, 2026-08-20) - it did not before, so the effort was silently discarded.
+    const explained = applyDecline(
       emptyProfile('p1'),
       { questionPrompt: 'Q', reason: 'later please' },
       at(1),
     );
-    expect(buildFeedbackGuidance(p, at(2))).toBe('');
+    expect(buildFeedbackGuidance(explained, at(2))).toContain('later please');
   });
 
   it('steers toward shorter/simpler questionnaires after a recent abandonment (bailed, spec 69 §5.2)', () => {
@@ -322,6 +329,148 @@ describe('buildFeedbackGuidance', () => {
     // Marked-off wins: it's in the avoid list, never the productive list.
     expect(g).toMatch(/DON'T APPLY/);
     expect(g).not.toMatch(/engaged RICHLY/);
+  });
+});
+
+describe('suppression lifetimes (08 §34 / 2b)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const day = (n: number): Date =>
+    new Date(new Date('2026-01-01T00:00:00.000Z').getTime() + n * DAY);
+
+  it('“doesn’t apply to me” lapses after a year, and both readers agree to the day', () => {
+    const p = applyDecline(
+      emptyProfile('p1'),
+      { topicId: 'money', questionPrompt: 'Money worries?', reason: NOT_APPLICABLE_SKIP_REASON },
+      day(0),
+    );
+
+    // Eleven months on it still holds — the generator avoids it and the panel shows it.
+    expect(buildFeedbackGuidance(p, day(330))).toMatch(/DON'T APPLY/);
+    expect(isSuppressionLive(p.feedback[0]!, day(330))).toBe(true);
+
+    // Thirteen months on it has lapsed, in BOTH readers. Two copies of "365" is the failure this predicate
+    // exists to prevent: the panel saying a mark has gone while the model still steers clear of it, or the
+    // reverse — either way the app is lying to the person about what it is doing.
+    expect(buildFeedbackGuidance(p, day(400))).not.toMatch(/DON'T APPLY/);
+    expect(isSuppressionLive(p.feedback[0]!, day(400))).toBe(false);
+  });
+
+  it('each kind runs on its OWN clock', () => {
+    const naSince = (n: number) =>
+      isSuppressionLive({ kind: 'not-applicable', at: day(0).toISOString() }, day(n));
+    const pnSince = (n: number) =>
+      isSuppressionLive({ kind: 'prefer-not-to-say', at: day(0).toISOString() }, day(n));
+    const laSince = (n: number) =>
+      isSuppressionLive({ kind: 'left-alone', at: day(0).toISOString() }, day(n));
+    // 90 (left-alone) < 180 (prefer-not-to-say) < 365 (not-applicable): at 120 days only the pause has gone.
+    expect([laSince(120), pnSince(120), naSince(120)]).toEqual([false, true, true]);
+    // At 200 the boundary has lapsed too, and only the standing mark remains.
+    expect([laSince(200), pnSince(200), naSince(200)]).toEqual([false, false, true]);
+    // A non-suppressing kind never suppresses anything.
+    expect(isSuppressionLive({ kind: 'answered-richly', at: day(0).toISOString() }, day(1))).toBe(
+      false,
+    );
+  });
+
+  it('the panel toggle lifts its OWN pause and never a decline made while answering', () => {
+    // The person paused the topic from the panel, AND separately declined a question on it while answering —
+    // one "doesn't apply", one boundary.
+    let p = applySteer(emptyProfile('p1'), { topicId: 'money', action: 'leave-alone' }, at(1));
+    p = applyDecline(
+      p,
+      { topicId: 'money', questionPrompt: 'Rent?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(2),
+    );
+    p = applyDecline(
+      p,
+      { topicId: 'money', questionPrompt: 'Debt?', reason: PREFER_NOT_TO_SAY_SKIP_REASON },
+      at(3),
+    );
+
+    const after = applySteer(p, { topicId: 'money', action: 'clear' }, at(4));
+    const kinds = after.feedback.map((f) => f.kind).sort();
+    // The pause is gone; both declines survive. Un-pausing a topic must not silently revoke a boundary the
+    // person set somewhere else entirely.
+    expect(kinds).toEqual(['not-applicable', 'prefer-not-to-say']);
+    expect(buildFeedbackGuidance(after, at(5))).toMatch(/DON'T APPLY/);
+    expect(buildFeedbackGuidance(after, at(5))).toMatch(/boundary/);
+  });
+
+  it('“explore more” likewise leaves declines standing', () => {
+    let p = applyDecline(
+      emptyProfile('p1'),
+      { topicId: 'money', questionPrompt: 'Rent?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(1),
+    );
+    p = applySteer(p, { topicId: 'money', action: 'explore-more' }, at(2));
+    expect(p.feedback.some((f) => f.kind === 'not-applicable')).toBe(true);
+  });
+});
+
+describe('skip reasons reaching the planner (08 §34 / 2b)', () => {
+  it('passes what they TYPED — the only place they say what was wrong with a question', () => {
+    // A free-text reason classifies as `skipped`, which steers nothing — so before this, the prose the person
+    // took the trouble to type reached the planner nowhere at all.
+    let p = applyDecline(
+      emptyProfile('p1'),
+      {
+        questionPrompt: 'Describe your vibe',
+        reason: 'I could not tell if you meant work or home',
+      },
+      at(1),
+    );
+    // A PRESET reason is not quoted: `reason` there is just the preset string back again, which the section
+    // header already says. Quoting it would be noise.
+    p = applyDecline(
+      p,
+      { questionPrompt: 'How is work?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(2),
+    );
+    const g = buildFeedbackGuidance(p, at(3));
+
+    expect(g).toContain('I could not tell if you meant work or home');
+    expect(g).toMatch(/SKIPPED these and said why/);
+    // …and it is explicitly NOT an avoid list — one skipped question with an explanation is a reason to ask
+    // better, not to drop the subject.
+    expect(g).toMatch(/NOT a reason to avoid the subject/);
+    // The preset lands in its own section, unquoted.
+    expect(g).toMatch(/DON'T APPLY/);
+    expect(g).not.toContain(`— they said: "${NOT_APPLICABLE_SKIP_REASON}"`);
+    // The model is told never to hand any of it back.
+    expect(g).toMatch(/NEVER quote, paraphrase or allude to/);
+  });
+
+  it('drops an explained skip once that ground is marked off anyway', () => {
+    let p = applyDecline(
+      emptyProfile('p1'),
+      { questionPrompt: 'Money worries?', reason: 'not something I want to get into today' },
+      at(1),
+    );
+    p = applyDecline(
+      p,
+      { questionPrompt: 'Money worries?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(2),
+    );
+    const g = buildFeedbackGuidance(p, at(3));
+    // The avoid list already says everything the planner needs; repeating their words adds only exposure.
+    expect(g).toMatch(/DON'T APPLY/);
+    expect(g).not.toContain('not something I want to get into today');
+  });
+
+  it('a quoted reason never breaks the productive-vein suppression', () => {
+    // The prose decorates DISPLAY only. Folding it into the label made the avoid-list comparison miss, so the
+    // model was told to go deeper on ground the person had just marked off.
+    let p = applyEngagement(
+      emptyProfile('p1'),
+      { questionPrompt: 'Money worries?', engagement: 'rich' },
+      at(1),
+    );
+    p = applyDecline(
+      p,
+      { questionPrompt: 'Money worries?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(2),
+    );
+    expect(buildFeedbackGuidance(p, at(3))).not.toMatch(/engaged RICHLY/);
   });
 });
 

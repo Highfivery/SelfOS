@@ -313,6 +313,65 @@ describe('ExploredPanel (spec 70 §3)', () => {
     expect(within(bare).queryByRole('button', { name: /Left alone/ })).toBeNull();
   });
 
+  it('a decline on an area with its own row still has a row of its own (08 §34 / 2b)', async () => {
+    // Declines now carry the topicId of the ground they covered. The Left-alone list used to drop any mark
+    // whose topic had an area row — on the assumption the row showed it — but an area row's paused state is
+    // derived from the panel's own `left-alone` steer ONLY. So a "doesn't apply" or a boundary on a topic
+    // that HAS a row appeared in neither place: a live suppression with no row anywhere, and no way to lift
+    // it. Both of these sit on 'Money', which is an area row in the fixture.
+    useCoverageStore.setState({
+      view: view({
+        markedOff: [
+          { topicId: 'Money', label: 'Rent?', kind: 'not-applicable', at: 'now' },
+          { topicId: 'Money', label: 'Debt?', kind: 'prefer-not-to-say', at: 'now' },
+          // The panel's OWN pause IS reflected on the area row, so it stays filtered out of this list.
+          { topicId: 'Money', label: 'Money', kind: 'left-alone', at: 'now' },
+        ],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /Left alone/ }));
+
+    expect(screen.getByText('Rent?')).toBeInTheDocument();
+    expect(screen.getByText('Doesn’t apply')).toBeInTheDocument();
+    expect(screen.getByText('Debt?')).toBeInTheDocument();
+    expect(screen.getByText('Prefer not to say')).toBeInTheDocument();
+    // …and the pause is NOT duplicated here — the area row above already says it.
+    expect(screen.queryByText('Paused')).toBeNull();
+  });
+
+  it('the area toggle reads off the panel’s OWN pause, not any decline (08 §34 / 2b)', async () => {
+    // Keying the toggle on a decline rendered a "Start asking again" that, by design, does not clear it.
+    useCoverageStore.setState({
+      view: view({
+        markedOff: [{ topicId: 'Money', label: 'Rent?', kind: 'not-applicable', at: 'now' }],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
+    // A decline is NOT the panel's pause, so no area offers the undo — it would not clear the decline.
+    expect(screen.queryAllByRole('button', { name: /Start asking again/ })).toHaveLength(0);
+
+    // The same topic marked left-alone DOES offer it, so this is not vacuously empty.
+    useCoverageStore.setState({
+      view: view({
+        markedOff: [{ topicId: 'Money', label: 'Money', kind: 'left-alone', at: 'now' }],
+      }),
+      loaded: true,
+    });
+    expect(await screen.findByRole('button', { name: /Start asking again/ })).toBeInTheDocument();
+  });
+
   it('the ✕ removes a candidate; Clear all empties the feed (spec 70 §3.2)', async () => {
     const curate = vi
       .fn<SelfosBridge['questionnairesCurateCandidate']>()

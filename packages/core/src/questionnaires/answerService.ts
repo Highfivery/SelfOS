@@ -160,8 +160,13 @@ export async function submitResponse(
  * Stamp each asked question's outcome onto the recipient's ask ledger. Deterministic (no AI): a decline is
  * `declined`, an unanswered question is `skipped`, and a substantive free-text answer is `rich`. Every question
  * in the frozen snapshot is covered — a question the person never touched is exactly the `skipped` signal.
+ *
+ * Exported because the relay drain has to do this too. Answers that arrive over a link are answers: leaving
+ * this to the in-app path meant a household member who used the emailed link taught the ask ledger nothing,
+ * so the app kept re-mining ground they had visibly skipped — and the more someone preferred the link, the
+ * less the app learned about them.
  */
-async function recordSubmissionOutcomes(
+export async function recordSubmissionOutcomes(
   fs: FileSystem,
   key: Uint8Array,
   assignmentId: string,

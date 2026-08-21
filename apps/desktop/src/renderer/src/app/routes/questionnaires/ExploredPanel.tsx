@@ -266,9 +266,10 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   const acking = useCoverageStore((s) => s.acking);
   const adultAcknowledged = useCoverageStore((s) => s.view?.adultAcknowledged ?? false);
   const markedOff = useCoverageStore((s) => s.view?.markedOff ?? []);
-  const isLeftAlone = markedOff.some(
-    (m) => m.topicId === area.topicId && m.kind === 'not-applicable',
-  );
+  // Only the panel's OWN pause drives this toggle. A "doesn't apply to me" decline made while answering also
+  // lands in `markedOff` now that declines carry a topicId, and deliberately is NOT cleared by this control
+  // (§34/2b) — keying off it would render a "Start asking again" that does nothing.
+  const isLeftAlone = markedOff.some((m) => m.topicId === area.topicId && m.kind === 'left-alone');
   const busy = steering === area.topicId;
   const [expanded, setExpanded] = useState(false);
   const needsUnlock = area.adultGated === true && !adultAcknowledged;
@@ -538,8 +539,14 @@ export function ExploredPanel(): JSX.Element {
     if (areaFilter === 'paused') return a.topics.some((t) => t.leftAlone);
     return true;
   });
-  // The "left alone" list shows the specific question-level declines not already reflected on an area row.
-  const declines = markedOff.filter((m) => !m.topicId || !areaTopicIds.has(m.topicId));
+  // The "left alone" list shows every mark that ISN'T already visible as a paused area row. Only the panel's
+  // own `left-alone` steer is reflected up there, so only it may be filtered out: once declines started
+  // carrying a topicId, filtering on the topic alone hid a "doesn't apply" or a "prefer not to say" from this
+  // list while the area row — which reads only `left-alone` — showed nothing either. A live suppression with
+  // no row anywhere, and no way to lift it.
+  const declines = markedOff.filter(
+    (m) => !(m.kind === 'left-alone' && m.topicId && areaTopicIds.has(m.topicId)),
+  );
   const hasEverRefreshed = Boolean(view?.candidatesRefreshedAt);
   // The nav uses just the first name so the label stays on one line; the section itself keeps the full name.
   const partnerFirst = partners.length === 1 ? partners[0]?.partnerName.split(' ')[0] : undefined;
@@ -808,7 +815,11 @@ export function ExploredPanel(): JSX.Element {
                           <li key={`${m.label}-${i}`} className={styles.chip}>
                             <span>{m.label}</span>
                             <span className={styles.chipKind}>
-                              {m.kind === 'not-applicable' ? 'Doesn’t apply' : 'Prefer not to say'}
+                              {m.kind === 'not-applicable'
+                                ? 'Doesn’t apply'
+                                : m.kind === 'prefer-not-to-say'
+                                  ? 'Prefer not to say'
+                                  : 'Paused'}
                             </span>
                           </li>
                         ))}

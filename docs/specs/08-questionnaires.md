@@ -4513,7 +4513,63 @@ true — both found by looking at the rendered card, not by a failing test.
 
 Still to come, in their own slice: the four skip-pipeline repairs and the 12-month `not-applicable` expiry.
 
-### 34.4 Guards
+### 34.4 The skip pipeline (slice 2b)
+
+A skip is only worth collecting if it changes what gets asked next. Four things stood between it and that,
+and one decision had to be made before any of them could land.
+
+**A decline is now about a TOPIC, not a wording.** `captureResponseFeedback` stamps `topicId` from the
+question's own `topicIds` (71 §5.3 tags it at write time; a hand-authored question still carries none and
+behaves exactly as before). Without it, "doesn't apply to me" stopped one question and not the subject — the
+avoid list could only ever match the identical prompt again — and the Explored panel had nothing to hang the
+mark on. That one change is what makes the rest of this section necessary.
+
+**Undoing is per-kind (owner, 2026-08-20).** The panel's "Start asking again" lifts the pause **that panel
+set**, and nothing else. Stamping a `topicId` would otherwise have handed it a much larger blast radius: the
+same tap would have wiped a standing "doesn't apply" and a 180-day "prefer not to say" boundary — both set
+somewhere else entirely, while answering a questionnaire. Note this **preserves** the old behaviour rather
+than changing it: declines had no `topicId` before, so the filter never matched them and the panel could not
+reach them either way. Lifting a decline is its own deliberate act, in the list where the decline is shown.
+
+**Every suppression lapses, on its own clock, in one place.** `isSuppressionLive` is the single definition of
+"does this mark still hold" — 90 days for a pause, 180 for a boundary, and **365 for "doesn't apply"**, which
+used to be forever. A year is long enough never to nag and short enough that the app is not permanently wrong
+about someone whose life has moved on. Both readers go through it: the one that steers generation
+(`buildFeedbackGuidance`) and the one that renders the mark to the person (`buildTransparencyView`). Two
+copies of "365" would drift, and the failure is invisible — the panel saying a mark has gone while the model
+still avoids the topic, or the reverse. A local `PREFER_NOT_COOLDOWN_DAYS = 180` that "mirrors the cooldown
+the engine uses" was already sitting in the view; it is gone.
+
+**A live mark always has a row somewhere.** `MarkedOffView.kind` stops collapsing `left-alone` into
+`not-applicable` and reports the true kind with its `lapsesAt`. Two things depended on that collapse and both
+broke the moment declines carried a topic: the area card derived its toggle from it, so a decline rendered a
+"Start asking again" that by design does not clear it; and the Left-alone list filtered out any mark whose
+topic had an area row — but an area row's paused state reads `left-alone` **only**, so a decline showed in
+neither place. The list now filters out only what the area row genuinely reflects.
+
+**An answer that arrives over a link is an answer.** The relay drain recorded declines and never outcomes, so
+a household member who used the emailed link taught the ask ledger nothing and the app went on re-mining
+ground they had visibly skipped — worse the more they preferred the link. `recordSubmissionOutcomes` now runs
+there too, best-effort, exactly as on the in-app submit.
+
+**Their own words reach the planner (owner, 2026-08-20 — the §24.5 bargain).** This turned out to mean
+something narrower and more useful than it first looked: a free-text reason classifies as `skipped`, and
+`skipped` steers nothing, so the prose someone took the trouble to type reached the planner **nowhere at
+all**. It now does, as its own section — and pointedly _not_ as an avoid list, because one skipped question
+with an explanation is a reason to ask better, not to drop the subject. The three **presets** are not quoted:
+their `reason` is just the preset string back again, which the section header already says. A
+`prefer-not-to-say` reason is never passed at all — the instruction there is already "leave it alone", so the
+prose changes no decision, and it is the most identifying thing in the ledger. The model is told, in the same
+block, never to quote, paraphrase or allude to any of it: these questions are read by the **sender**, and a
+question that hands back what someone typed while declining to answer is worse than the question they
+declined.
+
+The reason decorates the rendered line and never the label, because the label is a **key** — the
+productive-vein filter suppresses a vein by matching it against the avoid list, and a decorated label silently
+stops matching. That is not a formatting bug: it tells the model to go deeper on exactly the ground the person
+just marked off. It is guarded.
+
+### 34.5 Guards
 
 `summarizeSkips` / `isFullySkipped` / `skipKindOf` are pure and unit-tested, including that a summary of a
 reason reading _"I had a miscarriage in March"_ serialises **without that text**. A coreBridge test drives the
@@ -4533,6 +4589,14 @@ and asserts the facts come out unchanged — the shape assertions all stay green
 `isDefaultPrivate` to also match an empty array, so only this one catches the leak returning — and a coreBridge
 test builds the divergent two-send case in both directions (older send with a real answer; older send private
 while the newest is Standard).
+
+Slice 2b adds its own, all likewise **verified to FAIL when reverted**: not stamping `topicId` (the decline
+goes back to being about one wording); restoring the old `dropSuppression` (the panel toggle wipes a boundary
+set while answering); dropping the drain's outcome call (a link answer leaves every question `pending`
+forever); restoring the old Left-alone filter (the "Left alone" section does not render **at all** — the
+literal "no row anywhere" symptom); and keying the area toggle off `not-applicable` again (a decline offers an
+undo that does not undo it). The expiry is pinned at 11 months live / 13 months lapsed in **both** readers at
+once, and each kind's clock is asserted against the others so they cannot quietly converge.
 
 **Every one of these was verified to FAIL when reverted**, individually: dropping the `privacy === 'standard'`
 check makes the Private card offer the read (`Expected 0, Received 1`); trusting the model's `shareable` fails

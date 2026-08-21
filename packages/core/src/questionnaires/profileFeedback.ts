@@ -60,9 +60,17 @@ export async function captureResponseFeedback(
       continue;
     }
     if (!isDeclined(value)) continue;
+    // Stamp the ground the question covered (71 §5.3 tags it at write time), so a decline is a fact about a
+    // TOPIC and not only about one wording. Without it the avoid list could only ever match the exact prompt
+    // again, so "doesn't apply to me" stopped the question and not the subject — and the Explored panel had
+    // nothing to hang the mark on. A question may cover more than one topic; take the first, which is the
+    // primary ground the planner selected it for. Absent on a hand-authored or pre-71 question, and the
+    // prompt-level behaviour is unchanged there.
+    const topicId = q.topicIds?.[0]?.trim();
     profile = applyDecline(
       profile,
       {
+        ...(topicId ? { topicId } : {}),
         questionPrompt: q.prompt,
         ...(value.reason ? { reason: value.reason } : {}),
         assignmentId,

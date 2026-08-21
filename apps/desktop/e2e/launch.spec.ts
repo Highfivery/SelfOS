@@ -72,6 +72,7 @@ import {
   saveConversation,
 } from '@selfos/core/conversations';
 import { listChallenges } from '@selfos/core/challenges';
+import { applyDirectionalMarks, DIRTY_TALK, emptyLexicon, writeLexicon } from '@selfos/core/tests';
 import { listProfileSuggestions } from '@selfos/core/profile';
 import {
   getTogetherAttachment,
@@ -17974,6 +17975,176 @@ test('self-assessments (50 §8.1a): a skipped question is never stated as a find
     await expect(kinkCard.getByText('Sensual & sensory')).toBeVisible();
     // A category never opened floors to 0 → "little pull". It must appear nowhere.
     await expect(w.getByText('little pull')).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+/**
+ * 75 — "Say something to your partner" (Together → Desire), end to end through the real UI.
+ *
+ * Two states, because the second is the one the owner meets on his own vault today (§7.1): a partner with
+ * marks (generate → filter → keep → decrypt) and a partner with none (the EMPTY state, which is never
+ * silently absent).
+ */
+test('say something to your partner (75): writes lines, filters BOTH ways, keeps one — and says so when there is nothing to write from', async () => {
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  const fs = createNodeFileSystem(vault);
+  const key = (await loadMasterKey(createNodeSecretStore(userData, passthrough)))!;
+  const now = new Date();
+
+  // BOTH 18+ acks — the Desire tab exists only when both are set (58 §3.10).
+  for (const person of [ben, angel]) {
+    await writeEncryptedJson(
+      fs,
+      `people/${person}/guidance/prefs.enc`,
+      { schemaVersion: 1, adultAcknowledged: true },
+      key,
+    );
+  }
+  // A THIRD partner with a live edge and NO marks at all — the empty state (§3.4), on real data.
+  await savePerson(fs, key, {
+    id: 'robin-1',
+    schemaVersion: 1,
+    displayName: 'Robin',
+    isSubject: true,
+    tags: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+  // An ACCOUNT too — a partner is only offered in the picker when they are a subject with a login.
+  await setAccount(fs, key, { personId: 'robin-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'robin-1');
+  await writeEncryptedJson(
+    fs,
+    'people/robin-1/guidance/prefs.enc',
+    { schemaVersion: 1, adultAcknowledged: true },
+    key,
+  );
+  await saveRelationship(fs, key, {
+    id: 'rel-robin',
+    schemaVersion: 2,
+    fromPersonId: ben,
+    toPersonId: 'robin-1',
+    type: 'partner',
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+
+  // HER marks: one loved to HEAR, one she has ruled out hearing.
+  await writeLexicon(
+    fs,
+    key,
+    applyDirectionalMarks(
+      emptyLexicon(angel, now),
+      DIRTY_TALK.bank,
+      {
+        'names-praise:good-girl': { hear: 'love' },
+        'names-rough-heavy:manwhore': { hear: 'never' },
+      },
+      'take:1',
+      now,
+    ),
+  );
+  // HIS OWN side: one he has ruled out SAYING. A line here is said by him and heard by her, so BOTH
+  // boundary sets apply (§8.2) — this half is invisible to anything that reads only her lexicon.
+  await writeLexicon(
+    fs,
+    key,
+    applyDirectionalMarks(
+      emptyLexicon(ben, now),
+      DIRTY_TALK.bank,
+      { 'anatomy-her:cunt': { say: 'never' } },
+      'take:1',
+      now,
+    ),
+  );
+
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+    await openTogetherTab(w, 'Desire');
+
+    await expect(w.getByRole('heading', { name: 'Say something to Angel' })).toBeVisible();
+    await w.getByLabel('Anything particular? — optional').fill('tonight');
+    await w.getByRole('button', { name: 'Write me some lines' }).click();
+
+    // The two clean lines land; the two that touch a hard no NEVER do — one hers to hear, one his to say.
+    await expect(w.getByText('Round 1 — come here, good girl.')).toBeVisible();
+    await expect(w.getByText('Round 1 — you are mine tonight.')).toBeVisible();
+    await expect(w.getByText(/manwhore/)).toHaveCount(0);
+    await expect(w.getByText(/cunt/)).toHaveCount(0);
+
+    /*
+     * "Write more" APPENDS (§3.1) — the batch already on screen is never discarded. Asserted by COUNTING
+     * rather than by predicting the fake's round number: the fake varies its text by how many lines the
+     * exclude list carried, so the exact label is an artifact of the harness while the count is the promise.
+     */
+    const lineCards = w.getByRole('button', { name: /^Copy: / });
+    await expect(lineCards).toHaveCount(2);
+    await w.getByRole('button', { name: 'Write more' }).click();
+    await expect(lineCards).toHaveCount(4);
+    await expect(w.getByText('Round 1 — come here, good girl.')).toBeVisible(); // still there
+    await expect(w.getByText(/manwhore/)).toHaveCount(0); // filtered in the second batch too
+    await expect(w.getByText(/cunt/)).toHaveCount(0);
+
+    // Keep one → it persists into HIS own space, under the pair key, with the brief that produced it.
+    await w
+      .getByRole('button', { name: 'Keep this: Round 1 — come here, good girl.' })
+      .first()
+      .click();
+    await expect(w.getByText('Kept lines')).toBeVisible();
+    const keptPath = `people/${ben}/together/sayLines/${pairKeyFor(ben, angel)}.enc`;
+    await expect
+      .poll(async () => {
+        const store = (await readEncryptedJson(fs, keptPath, key)) as {
+          lines?: { text: string; brief?: string }[];
+          lastBrief?: string;
+        } | null;
+        return store?.lines?.[0];
+      })
+      .toMatchObject({ text: 'Round 1 — come here, good girl.', brief: 'tonight' });
+    // The brief is remembered so the box comes back filled (§11.1-10).
+    expect(((await readEncryptedJson(fs, keptPath, key)) as { lastBrief?: string }).lastBrief).toBe(
+      'tonight',
+    );
+    // Nothing was written into HER space — the generator reads her lexicon and never writes to it (§4).
+    expect(
+      await readEncryptedJson(
+        fs,
+        `people/${angel}/together/sayLines/${pairKeyFor(ben, angel)}.enc`,
+        key,
+      ),
+    ).toBeNull();
+
+    // §9 — at phone width the line row stacks so the tools drop UNDER the text, and nothing scrolls sideways.
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expect(w.getByText('Round 1 — you are mine tonight.')).toBeVisible();
+    expect(
+      await w
+        .getByText('Round 1 — you are mine tonight.')
+        .evaluate((el) => getComputedStyle(el.parentElement!).flexDirection),
+    ).toBe('column');
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    /*
+     * §3.4 / §7.1 — the state the owner will actually see. Robin has a live edge and both acks but no marks,
+     * so it is honest and offers the take. It is NEVER silently absent (the §7 DoD rule the relay link failed).
+     */
+    await w.getByLabel('Choose a partner').selectOption('robin-1');
+    await expect(w.getByRole('heading', { name: 'Say something to Robin' })).toBeVisible();
+    await expect(w.getByText('Robin hasn’t marked anything yet')).toBeVisible();
+    await expect(w.getByText(/Nothing you do here is shown to them/)).toBeVisible();
+    // No generator at all — no dead button whose only outcome is a failure.
+    await expect(w.getByRole('button', { name: 'Write me some lines' })).toHaveCount(0);
+    await expectNoInnerOverflow(w);
+    // One action, and it opens the take so you can show them what it asks (§11.1-7 — no nudge, no message).
+    await w.getByRole('button', { name: 'See what it asks' }).click();
+    await expect(w).toHaveURL(/tests\/dirty-talk\/take/);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

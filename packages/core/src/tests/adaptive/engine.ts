@@ -10,7 +10,7 @@ import {
   tolerantArray,
 } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
-import { SKIPPED_ANSWER } from '../../schemas';
+import { MAX_SAY_BRIEF, SKIPPED_ANSWER } from '../../schemas';
 import type {
   AdaptiveProfile,
   AdaptiveReading,
@@ -1101,8 +1101,6 @@ export function parseLines(text: string): string[] {
 
 /** 75 §3.1 — a batch is five. Enough to scan and pick from; small enough that "write more" is cheap. */
 export const SAY_LINES_PER_BATCH = 5;
-/** 75 §3.2 — the brief is free text, and bounded. */
-export const MAX_SAY_BRIEF = 400;
 
 /**
  * 75 — write lines for the person to SAY TO their partner, from what the partner marked as landing.

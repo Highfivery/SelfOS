@@ -561,6 +561,43 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-21 — **Build ("Say something to your partner" — the silent steer gets a front door; SPEC 75 BUILT
+  end to end; on `feat/say-something`).** 74 §5.8's `buildPartnerSteer` has always fed a partner's loved
+  language into the other partner's coach prompt, silently. This makes it askable — a brief, a batch of five
+  lines, keep the ones that worked — at **exactly the same exposure level** (§8.1): lines only, never "they
+  like X", never a source. Slice A (core) shipped first; this is the seam, the surface and the tests.
+  **The safety design is the asymmetry:** a line here is **said by him and heard by her**, so two boundary
+  sets apply and both are absolute — her `hearState: never` and his OWN `sayState: never`. Belt (both lists
+  in the prompt) and braces (`violatesBoundary` per line, per direction); each direction is **verified to
+  fail when reverted**, with the revert grepped for before believing it. **The gate is the bridge's**
+  (`together.own` + a live partner edge + both 18+ acks, re-derived per call), and a refused read returns
+  the SAME payload as a partner who has marked nothing (§5.1) — otherwise `ready` becomes a probe for
+  whether a gate exists rather than for whether there is anything to write from.
+  **Two defects the guards found, neither visible from reading the code.** (1) A **failed** generation folded
+  its payload back into the view, so any path returning an empty kept list — a refused gate does exactly
+  that — **wiped the person's kept lines off screen** while they sat safe on disk. (2) The kept list was
+  nested **inside** the ready branch, so a partner clearing their lexicon would have put the empty state over
+  the person's own saved content — which is precisely the scenario §11.1-9 decided those lines SURVIVE. Both
+  fixed, both guarded, both guards verified against a reverted build.
+  **Three as-built departures from the approved mockup, recorded in the spec rather than silently shipped:**
+  one write control instead of two (generation always appends, so a second button ran the identical operation
+  under a different name — the §7 redundant-control failure); "More like this" appends a steer to the brief
+  rather than taking a new IPC field (so §6's contract stands and `lastBrief` stays a sentence you can read
+  back); and the mockup's **"Ask `<name>` to try it" is deliberately NOT built** — any implementation of it
+  is a nudge to the partner, which §11.1-7 rules out.
+  **The empty state is the state the owner will actually meet** (measured: his partner holds 16 lexicon
+  entries and 0 marks), so it is built first-class — honest copy, the kept list intact, one link to the take,
+  and no dead generator button whose only outcome is a failure. Gate green: typecheck ×4, lint, format,
+  **2543 core + 13 relay + 1794 desktop** unit, and the full E2E (219 passed; the 3 that failed were bare 30s timeouts under a loaded machine and each passes in ~2s in isolation, with the trivial boot test as the control — the documented contention signature, not a regression). **Lessons: (1) a store that folds a
+  FAILURE's payload into its view will eventually meet a path that returns an empty one, and then the screen
+  lies about the person's own saved content — a failed call should mutate nothing it did not change. (2) When
+  a spec says data survives event X, check what the LAYOUT does in state X: "kept lines survive her clearing
+  her lexicon" was true of the storage and false of the screen, and only re-reading §8.3 against the JSX
+  caught it. (3) A mockup and an approved decision can disagree; the decision wins, and the disagreement gets
+  written into the spec so the next person does not re-add the button. (4) An E2E that predicts a fake's
+  round number is coupled to the harness — assert the promise (the count grew, the first batch is still
+  there), not the artifact.**
+
 - 2026-08-20 — **Release ops (a release PR has NO check, by construction — `--admin` is the path; owner-decided;
   SPEC 19 §7 + the `release` skill).** Publishing **v0.58.0** (the whole Dirty Talk arc, 15 features + ~25
   fixes) hit a wall the skill did not describe: `gh pr merge 494 --squash` failed with _"the base branch policy

@@ -1325,3 +1325,210 @@
 .suggestionRow:first-child {
   border-top: none;
 }
+
+/* ── Say something to your partner (75) ──────────────────────────────────────── */
+.sayCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.sayHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+/* Text, never a colour alone (§9). */
+.sayAdultBadge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+  border: 1px solid var(--color-warning);
+}
+.sayLabel {
+  display: block;
+  font-size: 0.78125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.sayChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.sayChip {
+  font: inherit;
+  font-size: 0.78125rem;
+  padding: 5px var(--space-3);
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.sayChip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+.sayChip:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.sayLines {
+  display: grid;
+  gap: var(--space-2);
+}
+.sayLine {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+/* The line is the content: serif, at reading size, the deck's treatment for a line (74 §3.6.4). */
+.sayLineText {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.sayTools {
+  display: flex;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+/*
+ * 75 §9 — below the small stop the tools drop UNDER the line. With Keep / Copy / More-like-this holding
+ * their width beside it, the line squeezed to one word per line: the §12 flexbox failure where the content
+ * loses to the controls. A line is the content here; the buttons are not entitled to the same row.
+ */
+@media (max-width: 560px) {
+  .sayLine {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  /*
+   * A GRID, not a wrap. Three actions cannot fit one row at 360px, and letting them flex-wrap leaves a
+   * ragged right-aligned pile — the §12 "wrapping is lazy, not a design" failure. Two equal columns with
+   * the long action spanning both fills the width and reads as intentional at every width below the stop.
+   */
+  .sayTools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+  .sayTools > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+.sayKept {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.sayKeptHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.71875rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+}
+.sayCount {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+}
+
+.sayFoot {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: 0.78125rem;
+  line-height: 1.5;
+}
+
+.sayEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+.sayEmptyHead {
+  margin: 0;
+  font-size: 0.96875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.sayProgress {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+.sayProgressTop {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.sayProgressTrack {
+  height: 5px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  overflow: hidden;
+}
+.sayProgressTrack span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-solid);
+  animation: sayProgressSlide 1.4s ease-in-out infinite;
+}
+@keyframes sayProgressSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sayProgressTrack span {
+    animation: none;
+    width: 100%;
+  }
+}

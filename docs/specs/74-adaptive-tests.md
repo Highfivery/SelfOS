@@ -2169,6 +2169,13 @@ like any other ask, so the planner treats the ground as worked-through and moves
   `contexts` travel. Boundary **reasons** and free-text **probe answers** never travel — those can carry history
   and narrative that has nothing to do with what she wants said in bed.
 
+**Amended 2026-08-21 ([`75`](75-say-something.md) §5.1).** The assembly this block renders was EXTRACTED to
+`partnerLandingSignal(fs, key, requesterId, partnerId, bothAdultAcked)`, which returns the signal or `null`,
+behind exactly these gates. `buildPartnerSteer` now renders that signal's own fields rather than recomputing
+from the lexicon, and spec 75's phase renders the same signal as generation input — because §3.6.39's lesson
+is that the same rule written twice diverges silently, with only one copy right. The steer's OUTPUT is
+unchanged; its existing tests are the proof.
+
 ### 5.8 Consumers
 
 | Consumer                        | Seam                                                                                                                                                                                                                                                                                                                                      |

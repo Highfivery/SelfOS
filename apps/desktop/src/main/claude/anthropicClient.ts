@@ -370,6 +370,25 @@ export function fakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 90, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      /*
+       * 75 — "say something to your partner". The fake deliberately writes TWO lines that touch a hard no,
+       * one in each direction (theirs to hear, the sender's to say), so the E2E's "no line contains a term
+       * either of them ruled out" assertion proves the FILTER, not that the fake happened to behave.
+       */
+      if (systemText.includes('complete lines they could send or say to their partner')) {
+        const round = (systemText.match(/^- /gm)?.length ?? 0) + 1;
+        return Promise.resolve({
+          text: JSON.stringify({
+            lines: [
+              `Round ${round} — come here, good girl.`,
+              `Round ${round} — you are mine tonight.`,
+              `Round ${round} — get over here, manwhore.`,
+              `Round ${round} — I want your cunt.`,
+            ],
+          }),
+          usage: { inputTokens: 90, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       if (systemText.includes('short questions about the WORDS')) {
         return Promise.resolve({
           text: JSON.stringify({

@@ -48,7 +48,15 @@ import {
   readProfile,
   writeProfile,
 } from '@selfos/core/questionnaires';
-import { getTest, readLexicon, suppressedTexts, writeLexicon } from '@selfos/core/tests';
+import {
+  applyDirectionalMarks,
+  DIRTY_TALK,
+  getTest,
+  readLexicon,
+  sayLinesPath,
+  suppressedTexts,
+  writeLexicon,
+} from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
@@ -67,6 +75,7 @@ import type {
   DeviceState,
   ImageGenProgress,
   Insight,
+  SayLinesProgress,
   StoryDraftProgress,
   TogetherChunk,
 } from './schemas';
@@ -143,6 +152,7 @@ function makeHost(): {
   memoryChunks: string[];
   booksProgress: StoryDraftProgress[];
   imageProgress: ImageGenProgress[];
+  sayLinesProgress: SayLinesProgress[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
 } {
@@ -169,6 +179,7 @@ function makeHost(): {
   const memoryChunks: string[] = [];
   const booksProgress: StoryDraftProgress[] = [];
   const imageProgress: ImageGenProgress[] = [];
+  const sayLinesProgress: SayLinesProgress[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
@@ -607,9 +618,11 @@ function makeHost(): {
     onVaultChanged: () => () => {},
     emitStoryProgress: (p) => booksProgress.push(p),
     emitImageProgress: (p) => imageProgress.push(p),
+    emitSayLinesProgress: (p) => sayLinesProgress.push(p),
     onStreamChunk: () => () => {},
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
+    onSayLinesProgress: () => () => {},
   };
   return {
     host,
@@ -621,6 +634,7 @@ function makeHost(): {
     memoryChunks,
     booksProgress,
     imageProgress,
+    sayLinesProgress,
     device: () => device,
     deviceSettings: () => deviceSettings,
   };
@@ -11966,5 +11980,231 @@ describe('household contributions (73)', () => {
 
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
     expect((await bridge.booksBookContributions({ bookId }))[0]?.status).toBe('accepted');
+  });
+});
+
+/**
+ * 75 — "say something to your partner". The gates are the point: every one of the four channels is
+ * `together.own` + a LIVE partner edge + BOTH 18+ acks, re-derived on every call, and the view that reaches
+ * the renderer carries no marks at all.
+ */
+describe('say something to your partner (75)', () => {
+  /** Ben (owner) ⇄ Angel, a live partner edge, both 18+ acked, and marks on both sides. */
+  const seedPair = async (): Promise<{
+    host: ReturnType<typeof makeHost>;
+    bridge: ReturnType<typeof createCoreBridge>;
+    ownerId: string;
+    angelId: string;
+    prompts: string[];
+  }> => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+
+    // BOTH acks — the ack is per-person, so each one is taken while that person is active.
+    await bridge.testsAcknowledgeAdult();
+    expect((await bridge.sessionSetActive({ personId: angel.id })).ok).toBe(true);
+    await bridge.testsAcknowledgeAdult();
+    const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+    // HER marks: loved to HEAR, plus one she has ruled out hearing.
+    await bridge.testsAdaptiveNames({
+      testId: 'dirty-talk',
+      resultId: started!.draft!.id,
+      marks: {
+        'names-praise:good-girl': { hear: 'love' },
+        'names-rough-heavy:manwhore': { hear: 'never' },
+      },
+      autosave: true,
+    });
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    // HIS OWN side: he has ruled out SAYING one word. A line here is said by him and heard by her, so both
+    // boundary sets apply (75 §8.2) — this is the half that would be missed by reading only her lexicon.
+    const ctx = (await host.host.vaultAndKey())!;
+    await writeLexicon(
+      ctx.fs,
+      ctx.key,
+      applyDirectionalMarks(
+        await readLexicon(ctx.fs, ctx.key, ownerId),
+        DIRTY_TALK.bank,
+        { 'anatomy-her:cunt': { say: 'never' } },
+        'take:1',
+        new Date(),
+      ),
+    );
+
+    // A model that writes one line per loved term it was handed, plus both banned words — so the filter is
+    // provably doing the work rather than the model happening to avoid them.
+    const prompts: string[] = [];
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const system = options.system ?? '';
+        const isSayLines = system.includes(
+          'complete lines they could send or say to their partner',
+        );
+        if (isSayLines) prompts.push(system);
+        const text = isSayLines
+          ? JSON.stringify({
+              lines: [
+                'Come here, good girl.',
+                'You are mine tonight.',
+                'Get over here, manwhore.',
+                'I want your cunt.',
+              ],
+            })
+          : 'hi';
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          // The APP's usage field names — omitting the cache fields writes a NaN cost that poisons the
+          // shard for every later read (74 §3.6.17).
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          stopReason: 'end_turn',
+        });
+      },
+    };
+    return { host, bridge, ownerId, angelId: angel.id, prompts };
+  };
+
+  it('writes lines, suppresses BOTH ways, keeps what you star — and the view never carries her marks', async () => {
+    const { host, bridge, ownerId, angelId, prompts } = await seedPair();
+
+    const state = await bridge.togetherSayLinesState({ partnerId: angelId });
+    expect(state.ready).toBe(true);
+    expect(state.partnerName).toBe('Angel');
+    expect(state.kept).toEqual([]);
+    /*
+     * 75 §6 — the load-bearing assertion. The view is what crosses the seam, so it is checked as the
+     * SERIALIZED payload rather than field by field: a mark leaking in through some future field would pass
+     * a field-by-field check and fail this one.
+     */
+    const serialized = JSON.stringify(state);
+    expect(serialized).not.toContain('good girl');
+    expect(serialized).not.toContain('manwhore');
+    expect(Object.keys(state).sort()).toEqual(['kept', 'partnerId', 'partnerName', 'ready']);
+
+    const result = await bridge.togetherSayLines({ partnerId: angelId, brief: 'tonight' });
+    expect(result.ok).toBe(true);
+    // Kept, because they touch nothing either of them ruled out.
+    expect(result.lines).toContain('Come here, good girl.');
+    expect(result.lines).toContain('You are mine tonight.');
+    // Dropped: HER hard no to hearing it.
+    expect(result.lines).not.toContain('Get over here, manwhore.');
+    // Dropped: HIS hard no to saying it — the direction the partner's lexicon alone cannot express.
+    expect(result.lines).not.toContain('I want your cunt.');
+    // Both hard-no lists reached the model as well (belt, with the filter as braces — 75 §8.2).
+    expect(prompts[0]).toContain('manwhore');
+    expect(prompts[0]).toContain('cunt');
+    // Realtime progress, not a spinner (75 §3.5).
+    expect(host.sayLinesProgress.map((p) => p.phase)).toEqual(['gathering', 'writing', 'done']);
+    expect(host.sayLinesProgress.every((p) => p.id === `sayLines:${angelId}`)).toBe(true);
+
+    // Star → kept, newest first, and persisted in HIS own space.
+    const kept = await bridge.togetherStarLine({
+      partnerId: angelId,
+      text: 'Come here, good girl.',
+      brief: 'tonight',
+    });
+    expect(kept.map((k) => k.text)).toEqual(['Come here, good girl.']);
+    expect(kept[0]!.brief).toBe('tonight');
+    // The brief is remembered, so the box comes back filled (§11.1-10).
+    const after = await bridge.togetherSayLinesState({ partnerId: angelId });
+    expect(after.lastBrief).toBe('tonight');
+    expect(after.kept).toHaveLength(1);
+
+    // Scoped to the REQUESTER: nothing was written into Angel's space.
+    const ctx = (await host.host.vaultAndKey())!;
+    expect(await ctx.fs.read(sayLinesPath(ownerId, pairKeyFor(ownerId, angelId)))).not.toBeNull();
+    expect(await ctx.fs.read(sayLinesPath(angelId, pairKeyFor(ownerId, angelId)))).toBeNull();
+
+    expect(await bridge.togetherUnstarLine({ partnerId: angelId, id: kept[0]!.id })).toEqual([]);
+  });
+
+  it('a non-partner, a missing ack and a Guest are all refused — and look identical to "nothing marked"', async () => {
+    const { bridge, ownerId, angelId } = await seedPair();
+
+    // A household member with NO partner edge: not ready, and generation refuses.
+    const cleo = await bridge.peopleSave({ displayName: 'Cleo', isSubject: true, tags: [] });
+    const noEdge = await bridge.togetherSayLinesState({ partnerId: cleo.id });
+    expect(noEdge.ready).toBe(false);
+    expect(noEdge.partnerName).toBe('');
+    expect((await bridge.togetherSayLines({ partnerId: cleo.id })).ok).toBe(false);
+    expect(await bridge.togetherStarLine({ partnerId: cleo.id, text: 'nope' })).toEqual([]);
+
+    // Yourself is not a partner.
+    expect((await bridge.togetherSayLinesState({ partnerId: ownerId })).ready).toBe(false);
+
+    /*
+     * The empty state must not be a probe. A refused read and a partner who has simply marked nothing are
+     * the SAME payload (75 §5.1) — otherwise `ready` reveals whether a gate exists rather than whether
+     * there is anything to write from.
+     */
+    const unmarked = await bridge.peopleSave({ displayName: 'Robin', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: unmarked.id,
+      type: 'partner',
+    });
+    const noMarks = await bridge.togetherSayLinesState({ partnerId: unmarked.id });
+    expect(noMarks.ready).toBe(false);
+    expect((await bridge.togetherSayLines({ partnerId: unmarked.id })).message).toBe(
+      (await bridge.togetherSayLines({ partnerId: cleo.id })).message,
+    );
+
+    // Removing the live edge re-gates on the very next call — no stale access.
+    const edge = (await bridge.relationshipsList()).find(
+      (r) => r.fromPersonId === ownerId && r.toPersonId === angelId,
+    );
+    await bridge.relationshipsDelete(edge!.id);
+    expect((await bridge.togetherSayLinesState({ partnerId: angelId })).ready).toBe(false);
+    expect((await bridge.togetherSayLines({ partnerId: angelId })).ok).toBe(false);
+
+    // A Guest holds no `together.own` — refused before any of the rest is even considered.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect((await bridge.togetherSayLinesState({ partnerId: angelId })).ready).toBe(false);
+    expect((await bridge.togetherSayLines({ partnerId: angelId })).ok).toBe(false);
+    expect(await bridge.togetherStarLine({ partnerId: angelId, text: 'x' })).toEqual([]);
+  });
+
+  it('$ is admin-only — a member never gets a cost figure back (the 06 boundary is the bridge)', async () => {
+    const { host, bridge, ownerId, angelId } = await seedPair();
+    // The owner holds `budgets.manage`.
+    const asOwner = await bridge.togetherSayLines({ partnerId: angelId });
+    expect(asOwner.ok).toBe(true);
+    expect(asOwner.costUsd).toBeGreaterThanOrEqual(0);
+
+    /*
+     * Give the OWNER something loved-to-hear as well, so Angel's call genuinely reaches generation. Without
+     * it `partnerLandingSignal` returns null for him and her call fails before any cost exists — which would
+     * make the assertion below pass for a reason that has nothing to do with the admin gate.
+     */
+    const ctx = (await host.host.vaultAndKey())!;
+    await writeLexicon(
+      ctx.fs,
+      ctx.key,
+      applyDirectionalMarks(
+        await readLexicon(ctx.fs, ctx.key, ownerId),
+        DIRTY_TALK.bank,
+        { 'names-praise:good-boy': { hear: 'love' } },
+        'take:1',
+        new Date(),
+      ),
+    );
+
+    // Angel is a Member: she is the owner's partner, so her own call is gated IN — only the $ is stripped.
+    expect((await bridge.sessionSetActive({ personId: angelId })).ok).toBe(true);
+    const asMember = await bridge.togetherSayLines({ partnerId: ownerId });
+    expect(asMember.ok).toBe(true); // it really generated — the assertion below is not vacuous
+    expect(asMember.lines.length).toBeGreaterThan(0);
+    expect(asMember.costUsd).toBeUndefined();
+    expect(JSON.stringify(asMember)).not.toContain('costUsd');
   });
 });

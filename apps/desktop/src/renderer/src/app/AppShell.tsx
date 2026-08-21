@@ -53,6 +53,7 @@ import { useAutoCheckinStore } from '../stores/autoCheckinStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDiscoveryStore } from '../stores/discoveryStore';
 import { togetherWaitingCount, useTogetherStore } from '../stores/togetherStore';
+import { useSayLinesStore } from '../stores/sayLinesStore';
 import { useImagePrefsStore } from '../stores/imagePrefsStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
@@ -198,6 +199,9 @@ export function AppShell(): JSX.Element {
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
+    // Per-person AND per-partner: the lines are written from ONE partner's marks, so a leftover batch
+    // under another account's name is the one thing this surface must never show (75 §5.1).
+    useSayLinesStore.getState().reset();
     useImagePrefsStore.getState().reset(); // image style/direction/toggle are per-person (image-settings amendment)
     useStoryStore.getState().reset(); // Your Story books are per-person (64 §5.7)
     useContributionStore.getState().reset(); // both halves of contributions are per-person (73 §4)

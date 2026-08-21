@@ -40,6 +40,10 @@ import type {
   StoryMemoryGetAttachmentInput,
   StoryDraftProgress,
   ImageGenProgress,
+  SayLinesView,
+  SayLinesResult,
+  SayLinesProgress,
+  StarredLine,
   StoryChapterRef,
   StoryCreateInput,
   StoryEditPassageInput,
@@ -631,6 +635,11 @@ export const IpcChannels = {
   togetherMyAgreements: 'together:myAgreements',
   togetherDoneCommitments: 'together:doneCommitments',
   togetherSetAgreementStatus: 'together:setAgreementStatus',
+  togetherSayLinesState: 'together:sayLinesState',
+  togetherSayLines: 'together:sayLines',
+  togetherStarLine: 'together:starLine',
+  togetherUnstarLine: 'together:unstarLine',
+  togetherSayLinesProgress: 'together:sayLinesProgress',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -2015,6 +2024,32 @@ export interface SelfosBridge {
   togetherJointChallenges(input: { partnerPersonId: string }): Promise<JointChallengeStatus[]>;
   /** The coach's SUGGESTION cards for a session (§5.6) — never auto-acts. Participant + edge. */
   togetherSuggestions(sessionId: string): Promise<TogetherSuggestion[]>;
+  /**
+   * 75 §6 — "say something to your partner". All four are gated `together.own` and RE-gated host-side on a
+   * live `partner` edge + both 18+ acks, every call; the bridge is the trust boundary, the UI gate is
+   * convenience.
+   *
+   * The view carries **no marks** — only whether there is anything to draw on. "Nothing marked" and "not
+   * entitled" are deliberately indistinguishable (75 §5.1), so an empty state cannot leak that a gate exists.
+   */
+  togetherSayLinesState(input: { partnerId: string }): Promise<SayLinesView>;
+  /** Write a batch of lines to say to a partner. `exclude` is what's already on screen, so "write more"
+   *  means more (74 §3.6.19). `costUsd` is admin-only, redacted in the bridge. */
+  togetherSayLines(input: {
+    partnerId: string;
+    brief?: string;
+    exclude?: string[];
+  }): Promise<SayLinesResult>;
+  /** Keep a line (75 §3.3). Idempotent on the text; returns the kept list, newest first. */
+  togetherStarLine(input: {
+    partnerId: string;
+    text: string;
+    brief?: string;
+  }): Promise<StarredLine[]>;
+  /** Stop keeping a line; returns the remaining kept list. */
+  togetherUnstarLine(input: { partnerId: string; id: string }): Promise<StarredLine[]>;
+  /** Subscribe to say-lines generation phases (75 §3.5); the counterpart to main's `emitSayLinesProgress`. */
+  onSayLinesProgress(listener: (progress: SayLinesProgress) => void): () => void;
   /**
    * Analyze a session → a shared report + per-partner twins + deduped action items; the INITIATOR is billed
    * (§3.8). `mode: 'reflect'` is a mid-session checkpoint (session stays open); `'wrapUp'` (default) also marks

@@ -458,6 +458,18 @@ const bridge: SelfosBridge = {
   togetherDoneCommitments: () => ipcRenderer.invoke(IpcChannels.togetherDoneCommitments),
   togetherSetAgreementStatus: (input) =>
     ipcRenderer.invoke(IpcChannels.togetherSetAgreementStatus, input),
+  togetherSayLinesState: (input) => ipcRenderer.invoke(IpcChannels.togetherSayLinesState, input),
+  togetherSayLines: (input) => ipcRenderer.invoke(IpcChannels.togetherSayLines, input),
+  togetherStarLine: (input) => ipcRenderer.invoke(IpcChannels.togetherStarLine, input),
+  togetherUnstarLine: (input) => ipcRenderer.invoke(IpcChannels.togetherUnstarLine, input),
+  onSayLinesProgress: (listener) => {
+    const handler = (_event: unknown, progress: unknown): void =>
+      listener(progress as Parameters<typeof listener>[0]);
+    ipcRenderer.on(IpcChannels.togetherSayLinesProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.togetherSayLinesProgress, handler);
+    };
+  },
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   assignmentsInbox: () => ipcRenderer.invoke(IpcChannels.assignmentsInbox),
   assignmentsSetFavorite: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSetFavorite, input),

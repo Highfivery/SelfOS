@@ -1,6 +1,6 @@
 # 75 — Say something to your partner
 
-> **Status:** Draft — awaiting approval
+> **Status:** Built — 2026-08-21 (core, seam, surface and tests; the live-model pass in §10 is still owed)
 > **Owner decisions taken:** 2026-08-21 (eleven, recorded in §11.1 — no open questions remain)
 > **Depends on:** [`74`](74-adaptive-tests.md) (the lexicon + the partner steer), [`58`](58-together-couples-sessions.md) (the
 > Together surface + the Desire tab), [`06`](06-ai-usage-and-budgets.md) (metering + budgets)
@@ -64,6 +64,19 @@ slowly`. The brief is what makes the owner's own examples work; the chips are sh
   and **More like this**. `LINES_PER_BATCH = 5`.
 - **Write more** appends a batch; it never replaces one (the §3.6.35 rule — a generated set you were shown is
   never silently discarded).
+
+**As built (2026-08-21), three things the mockup drew differently:**
+
+1. **One write control, not two.** The mockup showed "Write me some lines" and "Write more" side by side.
+   Because generation ALWAYS appends, a second button would run the identical operation under a different
+   name — a redundant control, which §7 of the DoD names as its own defect. Both labels survive; the single
+   primary button carries whichever one the state calls for.
+2. **"More like this" APPENDS a steer to the brief** (`More like this: "<line>"`) rather than taking a new
+   IPC field. That keeps §6's contract as written, keeps what was asked visible and editable, and keeps
+   `lastBrief` a sentence the person can read back (§11.1-10) instead of a hidden instruction.
+3. **The mockup's second empty-state button ("Ask `<name>` to try it") is NOT built.** Any implementation of
+   it is a nudge to the partner, which §11.1-7 rules out. §3.4's single link is the whole action.
+
 - **Footer, load-bearing:** _"Written from what `<name>` has marked. It never names a source, and she is never
   told you used this."_ It is honest to you about where the material comes from, and it is the sentence that
   states the boundary this feature is built to hold.
@@ -92,10 +105,22 @@ with a single **See what it asks** link that opens the Dirty Talk take so you ca
 §11.1-7 — no nudge, no notification, no outbound message). It is never silently absent; that is the §7 DoD
 rule the relay link failed.
 
+**The kept list still renders here.** This state is exactly what "she clears her lexicon" produces, and
+§8.3/§11.1-9 decide that lines you kept survive it. Rendering the list only in the ready state would put the
+empty state over the person's own saved content and tell them it was gone while it sat safe on disk — so the
+empty state replaces the GENERATOR, never the kept lines.
+
 ### 3.5 Progress
 
 Every generation shows a **phase label + elapsed + ETA** (the durable §12 rule; a bare spinner is
 unacceptable). Reuses the established progress-event pattern.
+
+**As built:** a dedicated `together:sayLinesProgress` event mirroring `image:progress`, with two phases —
+`gathering` (reading what lands for them) then `writing` (the model). `gathering` is a local decrypt and so
+passes in milliseconds; the honest reading is that the WAIT is the model call, and the live elapsed timer +
+ETA are what carry it, exactly as they do for the single-phase vision case in `ImageProgress`. The event id
+is keyed by **partner**, not by pairKey: the renderer knows the partner id and never sees a pairKey, and one
+id per partner already keeps two surfaces' progress apart.
 
 ---
 
@@ -184,6 +209,9 @@ call. The bridge is the trust boundary; the UI gate is convenience.
 | `together:starLine`      | `{ partnerId, text, brief? }`     | `StarredLine[]`              |
 | `together:unstarLine`    | `{ partnerId, id }`               | `StarredLine[]`              |
 
+Plus one event, `together:sayLinesProgress` → `SayLinesProgress` (§3.5), emitted by main for the duration of
+a generation and bound to that window's sender, exactly as `image:progress` is.
+
 `exclude` carries the lines already on screen so **Write more** means more, not the same five again (the
 §3.6.19 rule). `SayLinesView` never carries her marks — only `ready: boolean` and the partner's display name.
 
@@ -258,10 +286,13 @@ Standard wellness framing; the surface carries the app-wide not-therapy line.
 
 ## 9. Accessibility
 
-**A line row stacks below 560px.** Caught in the mockup: with Copy / More-like-this / star holding their
+**A line row stacks below 560px, and its tools become a GRID, not a wrap.** Caught in the mockup: with Copy / More-like-this / star holding their
 width beside the text, the line itself squeezed to one word per line — the §12 flexbox rule, where the
 content loses to the controls. Below the small stop the tools drop UNDER the line and the text takes the
-full width. A line is the content here; the buttons are not entitled to the same row.
+full width. A line is the content here; the buttons are not entitled to the same row. Three actions cannot
+fit one row at 360px, and letting them flex-wrap leaves a ragged right-aligned pile — the §12 "wrapping is
+lazy, not a design" failure — so below the stop they are two equal columns with the long action spanning
+both, which fills the width and reads as intentional (caught in visual QA, 2026-08-21).
 
 Lines are real text, copyable and selectable. Star is a labelled toggle with `aria-pressed`, not colour alone.
 Progress is a labelled `progressbar` with the phase and elapsed as text. The 18+ badge is text, not a colour.
@@ -319,3 +350,10 @@ None. Every fork is decided; this is ready to build on approval.
 - 2026-08-21 — Remaining forks closed (§11.1-9/10/11): starred lines are KEPT when her data goes (a
   deliberate exception to §3.6.11, consequence recorded in §4 + §8.3), the brief persists as `lastBrief`, and
   a batch is 5. No open questions remain.
+- 2026-08-21 — **BUILT** end to end: the core (slice A), the four-channel seam + the progress event, the
+  Together → Desire surface, and the tests. Three as-built departures from the mockup are recorded in §3.1,
+  and one gap the mockup's layout would have created is recorded in §3.4 — the kept list has to survive the
+  empty state, because the empty state is precisely what §11.1-9's scenario produces. Two defects were found
+  by writing the guards rather than by reading the code: a failed generation folded its (empty) payload back
+  into the view and wiped the kept list off screen, and the kept list was nested inside the ready branch.
+  Both are fixed and both guards were verified to fail when reverted.

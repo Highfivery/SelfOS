@@ -626,6 +626,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     booksGenerateFullDraft: () => Promise.resolve({ ok: false, reason: 'ERROR', message: '' }),
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
+    onSayLinesProgress: () => () => {},
     booksReadSharedImage: () => Promise.resolve(null),
     booksExportMarkdown: () => Promise.resolve(null),
     booksExportPdf: () => Promise.resolve(null),
@@ -737,6 +738,16 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     togetherMyAgreements: () => Promise.resolve([]),
     togetherDoneCommitments: () => Promise.resolve([]),
     togetherSetAgreementStatus: () => Promise.resolve(null),
+    togetherSayLinesState: (input) =>
+      Promise.resolve({
+        partnerId: input.partnerId,
+        partnerName: '',
+        ready: false,
+        kept: [],
+      }),
+    togetherSayLines: () => Promise.resolve({ ok: false, lines: [], kept: [], degraded: true }),
+    togetherStarLine: () => Promise.resolve([]),
+    togetherUnstarLine: () => Promise.resolve([]),
     assignmentsCreate: (input) =>
       Promise.resolve({
         assignment: {

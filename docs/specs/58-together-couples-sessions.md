@@ -207,7 +207,8 @@ mockup); the sections above are unchanged in behaviour, only regrouped.
      full-width without becoming enormously tall (the `LineChart` gained an optional `maxWidth` so a
      dashboard column can raise its 440px default), so capping + centering is both the §12 chart
      exception and what "don't make them span the full width" wants.
-  4. **🔒 Desire** — the full Desire & intimacy panel (YNM + the 3 adult practices). **The tab appears
+  4. **🔒 Desire** — "Say something to `<name>`" ([`75`](75-say-something.md), added 2026-08-21) over the
+     full Desire & intimacy panel (YNM + the 3 adult practices). **The tab appears
      ONLY once BOTH partners have acknowledged 18+ / enabled adult content** (`status.eligible`, the
      existing host-gated conjunction) — so the word "Desire" is never on screen over someone's
      shoulder until the pair is actually using it. Before that, the ack/opt-in prompt is the

@@ -1096,3 +1096,127 @@ export function parseLines(text: string): string[] {
    */
   return salvageJsonStringArrayField(text, 'lines');
 }
+
+// ── Phase: say something to your partner (75) ──────────────────────────────────────────────────────
+
+/** 75 §3.1 — a batch is five. Enough to scan and pick from; small enough that "write more" is cheap. */
+export const SAY_LINES_PER_BATCH = 5;
+/** 75 §3.2 — the brief is free text, and bounded. */
+export const MAX_SAY_BRIEF = 400;
+
+/**
+ * 75 — write lines for the person to SAY TO their partner, from what the partner marked as landing.
+ *
+ * Two lexicons, and the asymmetry is the whole safety design (75 §8.2). A line here is **said by them and
+ * heard by their partner**, so two different boundary sets apply and both are absolute:
+ *
+ * - the partner's `hearState: never` — they would be hearing it;
+ * - the requester's OWN `sayState: never` — it would be in their mouth.
+ *
+ * `violatesBoundary` takes the direction precisely so this can be expressed (74 §3.6.8); checking either
+ * lexicon direction-blind would refuse anything ruled out either way and gut the feature for the common case
+ * of a name loved one way and ruled out the other.
+ *
+ * The signal is PASSED IN rather than fetched, so this module never imports the steer (and the gates stay in
+ * one place, at the seam, where they are re-checked per call).
+ */
+export async function runSayLinesPhase(
+  deps: AiDeps,
+  /** Theirs — what lands, assembled by `partnerLandingSignal`. */
+  signal: {
+    lexicon: EroticLexicon;
+    hear: { text: string }[];
+    callThem: string[];
+    themes: string[];
+    registers: string[];
+    voice?: string;
+  },
+  /** The requester's own lexicon — for the say-side suppression only. */
+  own: EroticLexicon,
+  /** What they asked for, in their words. Optional. */
+  brief = '',
+  /** Lines already on screen, so "write more" means more (74 §3.6.19). */
+  writtenBefore: readonly string[] = [],
+): Promise<PhaseResult<string[]>> {
+  const askedFor = brief.trim().slice(0, MAX_SAY_BRIEF);
+  const theirNos = suppressedTexts(signal.lexicon, 'hear');
+  const ownNos = suppressedTexts(own, 'say');
+  const system = [
+    PERSONA,
+    SAFETY,
+    REGISTER,
+    theirNos.length > 0
+      ? `NEVER write any of these, in any form, however well it would fit — the person hearing this has ruled \
+them out: ${theirNos.join(' · ')}.`
+      : '',
+    ownNos.length > 0
+      ? `And never put any of these in their mouth — the person SAYING this has ruled them out: ${ownNos.join(
+          ' · ',
+        )}.`
+      : '',
+    whoBlock(signal.lexicon),
+    `Write exactly ${SAY_LINES_PER_BATCH} complete lines they could send or say to their partner RIGHT NOW — \
+the words themselves, not topics and not advice. Each one stands alone. Write for the person receiving them, \
+in the register that lands for them.
+
+What lands for the person receiving these: ${signal.hear
+      .slice(0, 20)
+      .map((e) => e.text)
+      .join(' · ')}.${
+      signal.callThem.length > 0
+        ? `\nWhat that person likes being called — use these by name: ${signal.callThem.slice(0, 20).join(' · ')}.`
+        : ''
+    }${signal.themes.length > 0 ? `\nWhat they respond to: ${signal.themes.join(' · ')}.` : ''}${
+      signal.registers.length > 0 ? `\n${signal.registers.join('\n')}` : ''
+    }${signal.voice ? `\nHow it should sound: ${signal.voice}` : ''}
+
+NEVER refer to a test, a profile, a source, or to knowing anything about what they like. These are the \
+sender's own words, not a report.${
+      writtenBefore.length > 0
+        ? `\n\nAlready written — do not repeat any of these, or a near-variant:\n${writtenBefore
+            .slice(-24)
+            .map((line) => `- ${line}`)
+            .join('\n')}`
+        : ''
+    } Return ONLY {"lines": string[]}.`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const out = await runClaude(
+    deps,
+    system,
+    askedFor === ''
+      ? 'No particular subject — anything that lands.'
+      : `They want to say: ${askedFor}`,
+    'together.sayLines',
+    1200,
+  );
+  if (!out.ok)
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: 0,
+      ...(out.reason ? { reason: out.reason } : {}),
+      ...(out.message ? { message: out.message } : {}),
+    };
+
+  const written = parseLines(out.text);
+  const seen = new Set(writtenBefore.map((l) => l.trim().toLowerCase()));
+  const lines = written
+    // Belt is the prompt above; this is braces, and it runs per direction (75 §8.2).
+    .filter((l) => !violatesBoundary(signal.lexicon, l, 'hear'))
+    .filter((l) => !violatesBoundary(own, l, 'say'))
+    .filter((l) => l.trim() !== '' && !seen.has(l.trim().toLowerCase()))
+    .slice(0, SAY_LINES_PER_BATCH);
+
+  return {
+    ok: lines.length > 0,
+    value: lines,
+    degraded: lines.length === 0,
+    costUsd: out.usage.costUsd,
+    // 74 §3.6.39 — "the model produced nothing" and "we filtered out everything it wrote" are opposite
+    // problems and must not reach the person as the same sentence.
+    ...(lines.length === 0 ? nothingUsable(out.text, 'lines', written.length > 0) : {}),
+  };
+}

@@ -32,6 +32,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'challenge.suggest': 'Challenge suggestion',
   'together.chat': 'Together — couples session',
   'together.analyze': 'Together — session summary',
+  'together.sayLines': 'Together — lines to say to your partner',
   'story.outline': 'Your Story — outline',
   'story.chapter': 'Your Story — chapter',
   'story.structure': 'Your Story — structure proposals',

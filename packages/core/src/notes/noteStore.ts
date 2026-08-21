@@ -93,10 +93,17 @@ export async function listNotesByAuthor(
   const out: Note[] = [];
   for (const name of await fs.list(notesDir(authorPersonId))) {
     if (!name.endsWith('.enc')) continue;
-    const raw = await readEncryptedJson(fs, `${notesDir(authorPersonId)}/${name}`, key);
-    if (!raw) continue;
-    const parsed = NoteSchema.safeParse(raw);
-    if (parsed.success) out.push(parsed.data);
+    try {
+      // Per-file. `readEncryptedJson` THROWS on a truncated or wrong-key envelope (`safeParse` only runs
+      // after it), so without this one bad record takes down the whole read — and the surface renders
+      // neither its rows nor its empty state. `listEmailActivity` quarantines a corrupt shard the same way.
+      const raw = await readEncryptedJson(fs, `${notesDir(authorPersonId)}/${name}`, key);
+      if (!raw) continue;
+      const parsed = NoteSchema.safeParse(raw);
+      if (parsed.success) out.push(parsed.data);
+    } catch {
+      continue;
+    }
   }
   return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }

@@ -356,6 +356,25 @@ export function fakeClaudeClient(): ClaudeClient {
        * what carries it (the user message is the lexicon digest).
        */
       const systemText = options.system ?? '';
+      // A note draft (76 §3.3). It MUST return the answer labels a question/suggestion carries, or the
+      // richest thing in the feature — the recipient tapping one — is unreachable offline and the whole
+      // tap path goes un-exercised (the 67 §3.3a fake-hides-the-delivered-path trap, exactly).
+      if (systemText.includes('It is sent BY SELFOS, not by a person')) {
+        const isAnnouncement = systemText.includes('This is an ANNOUNCEMENT');
+        return Promise.resolve({
+          text: JSON.stringify({
+            subject: 'A quick one',
+            body: 'Your books can have covers now.',
+            answers: isAnnouncement
+              ? []
+              : [
+                  { label: 'Time outside', stance: 'other' },
+                  { label: 'Quiet evenings', stance: 'other' },
+                ],
+          }),
+          usage: { inputTokens: 90, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       if (systemText.includes('complete lines someone could actually SAY in bed')) {
         // Distinct per round, so "write me more" can be seen to APPEND rather than replace.
         const round = (systemText.match(/^- /gm)?.length ?? 0) + 1;

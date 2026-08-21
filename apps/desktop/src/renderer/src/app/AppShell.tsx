@@ -85,7 +85,7 @@ export function AppShell(): JSX.Element {
   const conflicts = useVaultConflicts();
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
-  const canWriteNotes = useSessionStore((s) => s.can('notes.manage'));
+  const canWriteNotes = useSessionStore((s) => s.isOwner());
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
   const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));

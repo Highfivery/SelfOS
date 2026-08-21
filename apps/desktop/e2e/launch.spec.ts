@@ -9011,6 +9011,7 @@ test('relationship-scoped sharing: a partner-scoped fact reaches the partner, no
 
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
+  deviceSettingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
@@ -9025,6 +9026,11 @@ async function seedReadyVault(
     schemaVersion: 1,
     values: settingsValues,
   });
+  // Device-scoped settings live device-local, never in the vault (#555 moved appearance here).
+  await writeJson(join(userData, 'device-settings.json'), {
+    schemaVersion: 1,
+    values: deviceSettingsValues,
+  });
   const ownerId = await seedHousehold(userData, vault);
   await writeJson(join(userData, 'state.json'), {
     schemaVersion: 1,
@@ -9035,7 +9041,7 @@ async function seedReadyVault(
   return { userData, vault };
 }
 
-test('settings: changing the theme applies it and persists to the vault', async () => {
+test('settings: changing the theme applies it and persists device-local', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -9046,15 +9052,20 @@ test('settings: changing the theme applies it and persists to the vault', async 
     await w.getByRole('menuitemradio', { name: 'Dark' }).click();
     await expect(w.locator('html')).toHaveAttribute('data-theme', 'dark');
 
-    const settingsFile = join(vault, 'config', 'settings.json');
+    // Appearance is `scope: 'device'` (#555 — a member must be able to set their own theme without
+    // `settings.manage`), so it lands device-local and NOT in the synced vault.
     await expect
       .poll(async () => {
-        const parsed = JSON.parse(await readFile(settingsFile, 'utf8')) as {
-          values: Record<string, unknown>;
-        };
+        const parsed = JSON.parse(
+          await readFile(join(userData, 'device-settings.json'), 'utf8'),
+        ) as { values: Record<string, unknown> };
         return parsed.values['appearance.theme'];
       })
       .toBe('dark');
+    const vaultValues = JSON.parse(
+      await readFile(join(vault, 'config', 'settings.json'), 'utf8'),
+    ) as { values: Record<string, unknown> };
+    expect(vaultValues.values['appearance.theme']).toBeUndefined();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -9063,7 +9074,7 @@ test('settings: changing the theme applies it and persists to the vault', async 
 });
 
 test('settings: a persisted dark theme is applied on boot', async () => {
-  const { userData, vault } = await seedReadyVault({ 'appearance.theme': 'dark' });
+  const { userData, vault } = await seedReadyVault({}, { 'appearance.theme': 'dark' });
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
@@ -11672,11 +11683,12 @@ test('discoverability: Settings shows the device-vs-synced signal (41)', async (
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Settings' }).click();
-    // Appearance (the default section) is synced across devices.
-    await expect(w.getByText('Synced').first()).toBeVisible();
-    // About → "Check for updates automatically" is device-local.
-    await w.getByRole('button', { name: 'About', exact: true }).click();
+    // Appearance (the default section) is device-local — every one of its settings is `scope: 'device'`
+    // since #555, so a member can set their own theme without `settings.manage`.
     await expect(w.getByText('This device').first()).toBeVisible();
+    // Sessions carries vault-scoped settings, which say so.
+    await w.getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(w.getByText('Synced').first()).toBeVisible();
 
     // ~360px: no PAGE/`main` horizontal scrollbar (CLAUDE.md §12). The section nav's own pill-row scroll is
     // intentional (the responsive Settings design), so check main/doc width — matching the settings guard.
@@ -18163,7 +18175,10 @@ test('say something to your partner (75): writes lines, filters BOTH ways, keeps
  * and switches to the recipient to prove it reached their queue with no sender named.
  */
 test('notes (76): write a note to one person → decrypt the record → it lands in THEIR inbox, unattributed', async () => {
-  const { userData, vault } = await seedReadyVault();
+  // AI on: the SECOND note is AI-drafted so it carries answer labels, which is the only way a note
+  // becomes answerable at all.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
 
   // Seed Angel as a SUBJECT with a login — the picker offers people who have their own experience in
   // the app, and only a subject has an Inbox for a note to land in.
@@ -18209,6 +18224,7 @@ test('notes (76): write a note to one person → decrypt the record → it lands
     await expectNoInnerOverflow(w);
 
     // A SECOND note must not inherit the first one's mode and open on an empty screen (76 §3.2).
+    // It is also a QUESTION, so the recipient has something to tap — exercised below.
     await w.getByRole('button', { name: 'Write a note' }).click();
     await w.getByRole('radio', { name: /Angel/ }).click();
     await w.getByRole('button', { name: /Write for Angel/ }).click();
@@ -18219,25 +18235,95 @@ test('notes (76): write a note to one person → decrypt the record → it lands
     await expect(w.getByRole('heading', { name: 'A note for Angel' })).toBeVisible();
     await expectNoInnerOverflow(w);
     await w.setViewportSize({ width: 1280, height: 860 });
-    await w.getByRole('button', { name: 'Back' }).click();
-    await w.getByRole('button', { name: 'Notes' }).click();
+
+    // Draft it as a QUESTION so it carries answers — the thing the type picker exists to decide.
+    await w.getByRole('button', { name: 'Draft something' }).click();
+    await w.getByRole('radio', { name: /^Question/ }).click();
+    await w.getByLabel('What are you thinking?').fill('ask her what she wants more of');
+    await w.getByRole('button', { name: /Draft it for Angel/ }).click();
+    await expect(w.getByLabel('Subject')).toHaveValue('A quick one');
+    await w.getByRole('button', { name: /^Preview/ }).click();
+    // The answers must be in the EMAIL preview, because they are minted into the email itself.
+    await expect(w.getByText('Time outside')).toBeVisible();
+    await w.getByRole('button', { name: /Send to Angel/ }).click();
+    await expect(w.getByText(/on its way by email|SelfOS inbox/)).toBeVisible();
 
     // The record is on disk, ENCRYPTED, under the AUTHOR — then read back through the real service.
     const owner = (await listPeople(fs, key)).find((p) => p.displayName !== 'Angel')!;
     const notesDir = join(vault, 'people', owner.id, 'notes');
     const files = (await readdir(notesDir)).filter((f) => f.endsWith('.enc'));
-    expect(files).toHaveLength(1);
-    expect(await readFile(join(notesDir, files[0]!), 'utf8')).toContain('aes-256-gcm');
-    const note = await readNote(fs, key, owner.id, files[0]!.replace(/\.enc$/, ''));
-    expect(note?.recipientPersonId).toBe(angel.id);
-    expect(note?.subject).toBe('Covers are here');
-    expect(note?.emailedAt).toBeUndefined(); // reach failed; the note did not
+    expect(files).toHaveLength(2);
+    for (const f of files) {
+      expect(await readFile(join(notesDir, f), 'utf8')).toContain('aes-256-gcm');
+    }
+    const stored = await Promise.all(
+      files.map((f) => readNote(fs, key, owner.id, f.replace(/\.enc$/, ''))),
+    );
+    const announcement = stored.find((n) => n?.subject === 'Covers are here');
+    expect(announcement?.recipientPersonId).toBe(angel.id);
+    expect(announcement?.emailedAt).toBeUndefined(); // reach failed; the note did not
+    // Written by hand ⇒ nothing to tap ⇒ an announcement, whatever the picker last said.
+    expect(announcement?.type).toBe('announcement');
+    expect(announcement?.answers).toEqual([]);
+
+    // The AI-drafted one is a QUESTION and carries the labels the recipient will tap.
+    const question = stored.find((n) => n?.subject === 'A quick one');
+    expect(question?.type).toBe('question');
+    expect(question?.answers.map((a) => a.label)).toEqual(['Time outside', 'Quiet evenings']);
 
     // And it is in HER queue — naming the thing, never who sent it.
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: 'Inbox' }).click();
     await expect(w.getByText('Covers are here')).toBeVisible();
     await expect(w.getByText(/from tester/i)).toHaveCount(0);
+    // Not "From someone" either — a note has no sender, so inventing one is worse than naming one.
+    await expect(w.getByText(/from someone/i)).toHaveCount(0);
+
+    // OPENING it must reach a real surface. Asserting the row RENDERS proved nothing: the click used to
+    // land on a route that did not exist and bounced silently to Home.
+    // `.first()`: the row and its dismiss (X) button both carry the title in their accessible name.
+    await w
+      .getByRole('button', { name: /Covers are here/ })
+      .first()
+      .click();
+    await expect(w.getByRole('heading', { name: 'Covers are here' })).toBeVisible();
+    await expect(w.getByText('Your books can have covers now.')).toBeVisible();
+    await expectNoInnerOverflow(w);
+
+    // The second note is a QUESTION, so it is answerable — and answering it is the whole point of the
+    // type picker. Every green test before this one asserted the buttons RENDERED in the author's
+    // preview, which said nothing about whether anyone could ever tap one.
+    await w.getByRole('button', { name: 'Inbox' }).click();
+    await w
+      .getByRole('button', { name: /A quick one/ })
+      .first()
+      .click();
+    await expect(w.getByRole('heading', { name: 'A quick one' })).toBeVisible();
+    await w.setViewportSize({ width: 390, height: 780 });
+    await expect(w.getByRole('heading', { name: 'A quick one' })).toBeVisible();
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 860 });
+    await w.getByRole('button', { name: 'Time outside' }).click();
+    await expect(w.getByText('You answered:')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Time outside' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // Not left disabled by the save — changing your mind has to stay possible.
+    await expect(w.getByRole('button', { name: 'Quiet evenings' })).toBeEnabled();
+
+    // The answer is filed under the AUTHOR — which is why the owner can read it at all (76 §3.5).
+    const answers: string[] = [];
+    for (const name of await readdir(join(vault, 'people', owner.id, 'email', 'responses'))) {
+      if (!name.endsWith('.enc')) continue;
+      const parsed = (await readEncryptedJson(
+        fs,
+        `people/${owner.id}/email/responses/${name}`,
+        key,
+      )) as { answer?: string; noteId?: string; source?: string } | null;
+      if (parsed?.noteId) answers.push(`${parsed.answer}:${parsed.source}`);
+    }
+    expect(answers).toEqual(['Time outside:in-app']);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

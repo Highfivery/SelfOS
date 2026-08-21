@@ -22,8 +22,9 @@ import styles from './Notes.module.css';
  * Notes (76 §3) — the owner writes to ONE person, and the recipient is chosen before a word of it
  * exists, so everything after is written for them (the 08 §17 recipient-bound pattern).
  *
- * Owner-only: the route and the nav entry are both gated on `notes.manage`, and the bridge re-checks it
- * on every call — this surface is convenience, never the boundary.
+ * Owner-only, gated on the ROLE — the note pass reads the recipient's private record (§8.1), which
+ * only the Owner's existing full access justifies, so a grantable capability would be wrong. The bridge
+ * re-checks it on every call; this surface is convenience, never the boundary.
  */
 
 type Step = { kind: 'list' } | { kind: 'who' } | { kind: 'compose' } | { kind: 'preview' };
@@ -53,9 +54,9 @@ const when = (iso?: string): string =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
 export function Notes(): JSX.Element {
-  const canManage = useSessionStore((s) => s.can('notes.manage'));
+  const canManage = useSessionStore((s) => s.isOwner());
   const activePersonId = useSessionStore((s) => s.activePerson?.id);
-  const { rows, recipients, loaded, drafting, error, draft } = useNoteStore();
+  const { rows, recipients, loaded, drafting, sending, error, draft } = useNoteStore();
   const { load, loadRecipients, setDraft, requestDraft, send, setEmail, remove } = useNoteStore();
 
   const [step, setStep] = useState<Step>({ kind: 'list' });
@@ -64,7 +65,7 @@ export function Notes(): JSX.Element {
   const [mode, setMode] = useState<'ai' | 'self'>('ai');
   const [intent, setIntent] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
-  const [sent, setSent] = useState<{ emailed: boolean } | null>(null);
+  const [sent, setSent] = useState<{ emailed: boolean; failure?: string } | null>(null);
 
   // The STORE is reset centrally, in AppShell's per-person effect — that is the canonical place, and
   // `personScopedStores.test` fails if a resettable store is missing from it. This effect only owns the
@@ -95,13 +96,36 @@ export function Notes(): JSX.Element {
     setStep({ kind: 'who' });
   };
 
+  /**
+   * Changing the type after a draft exists would leave a `suggestion` carrying question-shaped answers
+   * with mismatched stances — the stored note and the buttons the recipient sees would disagree. So the
+   * answers are dropped and a fresh draft is asked for.
+   */
+  const changeType = (next: NoteType): void => {
+    setType(next);
+    if (draft && draft.answers.length > 0) setDraft({ ...draft, answers: [] });
+  };
+
   const doSend = async (): Promise<void> => {
     if (!recipientId) return;
-    const result = await send({ recipientPersonId: recipientId, type, drafted: mode });
+    // Writing it by hand produces no answer labels — there is no editor for them, because they are
+    // written FOR the body by the model. A note with nothing to tap IS an announcement, so calling it a
+    // question would put a type on the record that its content cannot support.
+    const result = await send({
+      recipientPersonId: recipientId,
+      type: mode === 'self' ? 'announcement' : type,
+      drafted: mode,
+    });
     if (result?.ok) {
-      setSent({ emailed: result.emailed });
+      // `emailFailure` distinguishes "they have no address" from "the send failed" — reporting the
+      // second as the first states something false about the recipient's record.
+      setSent({
+        emailed: result.emailed,
+        ...(result.emailFailure ? { failure: result.emailFailure } : {}),
+      });
       setStep({ kind: 'list' });
     }
+    // A failure keeps you on the preview with the draft intact; the store surfaces the reason.
   };
 
   // ── The list ────────────────────────────────────────────────────────────────────────────────────
@@ -113,6 +137,7 @@ export function Notes(): JSX.Element {
       { key: 'Opened', value: emailed.filter((r) => r.delivery?.openedAt).length },
       { key: 'Clicked', value: emailed.filter((r) => r.delivery?.clickedAt).length },
     ];
+    const anyOpened = emailed.some((r) => r.delivery?.openedAt);
 
     return (
       <div className={styles.page}>
@@ -136,7 +161,9 @@ export function Notes(): JSX.Element {
           <Banner tone="info">
             {sent.emailed
               ? 'Sent. It’s in their inbox and on its way by email.'
-              : 'Saved to their SelfOS inbox. No email went out — they have no address on file.'}
+              : sent.failure
+                ? 'Saved to their SelfOS inbox. The email didn’t go out this time — you can send it again.'
+                : 'Saved to their SelfOS inbox. No email went out — they have no address on file.'}
           </Banner>
         ) : null}
 
@@ -149,6 +176,16 @@ export function Notes(): JSX.Element {
               </div>
             ))}
           </div>
+        ) : null}
+
+        {/* §7.4 — an unqualified open count reads as attention it does not represent: it fires when an
+            image loads, which on an Apple-centric household is near-instant and often not a person
+            looking. Saying so is a product requirement, not a footnote. */}
+        {anyOpened ? (
+          <Text size="sm" tone="tertiary">
+            “Opened” is approximate — some mail apps load images automatically, which counts as an
+            open whether or not anyone read it.
+          </Text>
         ) : null}
 
         {loaded && rows.length === 0 ? (
@@ -322,7 +359,7 @@ export function Notes(): JSX.Element {
                       role="radio"
                       aria-checked={type === t}
                       className={`${styles.typeChip} ${type === t ? styles.typeChipOn : ''}`}
-                      onClick={() => setType(t)}
+                      onClick={() => changeType(t)}
                     >
                       {TYPE_LABEL[t]} · {TYPE_HINT[t]}
                     </button>
@@ -469,11 +506,19 @@ export function Notes(): JSX.Element {
         </Stack>
       </div>
 
+      {/* A refused or failed send happens HERE, so this is where its reason has to appear — otherwise
+          the Send button just looks dead. */}
+      {error ? (
+        <Banner tone="warning" role="alert">
+          {error}
+        </Banner>
+      ) : null}
+
       <Inline gap={2} justify="end" wrap>
         <Button variant="secondary" onClick={() => setStep({ kind: 'compose' })}>
           Keep editing
         </Button>
-        <Button onClick={() => void doSend()}>
+        <Button disabled={sending} onClick={() => void doSend()}>
           <Send size={15} aria-hidden="true" /> Send to {recipient?.displayName ?? 'them'}
         </Button>
       </Inline>

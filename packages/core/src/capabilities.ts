@@ -70,10 +70,6 @@ export const CAPABILITIES = [
   // email activity/responses. Member default ON. The household CONNECT + the owner Email-activity view are
   // gated on `settings.manage`/`people.manage` (owner), not this.
   'email.own',
-  // Notes (76-notes §5.6) — write a note to one household member. OWNER-ONLY: omitted from every
-  // non-owner role map, so the Owner gets it via the `roleAllows` full-access bypass. Not
-  // EXPLICIT_GRANT_ONLY — it is an ordinary owner ability, not a break-glass reveal.
-  'notes.manage',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -107,7 +103,6 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'together.own': 'Start & join Together sessions with a partner',
   'story.own': 'Write & share their own life story',
   'email.own': 'Manage their own email preferences',
-  'notes.manage': 'Write notes to people in the household',
 };
 
 /**

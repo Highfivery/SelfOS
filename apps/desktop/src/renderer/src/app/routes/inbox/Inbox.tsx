@@ -146,7 +146,10 @@ export function Inbox(): JSX.Element {
                         : item?.autoCheckin
                           ? 'Auto check-in · '
                           : ''}
-                      {entry.fromName ? `From ${entry.fromName}` : 'From someone'}
+                      {/* A note carries no sender BY DESIGN (76 §3.6), so an entry with no `fromName`
+                          must say nothing rather than fall back to "From someone" — which asserts a
+                          person sent it and is strictly worse than naming one. */}
+                      {entry.fromName ? `From ${entry.fromName}` : ''}
                       {item
                         ? ` · ${item.questionCount} ${item.questionCount === 1 ? 'question' : 'questions'}`
                         : entry.detail

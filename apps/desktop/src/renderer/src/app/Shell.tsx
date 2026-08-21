@@ -5,6 +5,7 @@ import { Home } from './routes/home/Home';
 import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';
 import { Inbox } from './routes/inbox/Inbox';
+import { NoteRead } from './routes/inbox/NoteRead';
 import { Memory } from './routes/memory/Memory';
 import { MemoryReview } from './routes/memory/MemoryReview';
 import { Goals } from './routes/goals/Goals';
@@ -44,11 +45,22 @@ import type { CapabilityKey } from '@shared/capabilities';
  * absent (always reachable; Settings filters its own admin-only sections). The map is verified against
  * the nav gating in AppShell.tsx.
  */
-const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.Element }[] = [
+const GUARDED_ROUTES: {
+  path: string;
+  capability: CapabilityKey | 'owner';
+  element: JSX.Element;
+}[] = [
   { path: 'onboarding', capability: 'intake.own', element: <Onboarding /> },
   { path: 'sessions', capability: 'sessions.own', element: <Sessions /> },
   { path: 'questionnaires', capability: 'questionnaires.create', element: <Questionnaires /> },
   { path: 'inbox', capability: 'questionnaires.answer', element: <Inbox /> },
+  // Reading a note written FOR you (76 §3.6). Its own route rather than the Inbox's detail pane: the
+  // pane is hard-wired to the questionnaire answering form, and a note is not a questionnaire.
+  {
+    path: 'inbox/note/:authorPersonId/:noteId',
+    capability: 'questionnaires.answer',
+    element: <NoteRead />,
+  },
   { path: 'memory', capability: 'memory.own', element: <Memory /> },
   // The dedicated one-at-a-time review screen (65 §3.3) — its own focused route, not inline on Memory.
   { path: 'memory/review', capability: 'memory.own', element: <MemoryReview /> },
@@ -69,7 +81,9 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'you/:testId', capability: 'tests.own', element: <LegacyTestRedirect /> },
   { path: 'people', capability: 'people.manage', element: <People /> },
   { path: 'roles', capability: 'roles.manage', element: <Roles /> },
-  { path: 'notes', capability: 'notes.manage', element: <Notes /> },
+  // Gated on the ROLE, not a capability: the note pass reads the recipient's private record
+  // (76 §8.1), which only the Owner's existing full access justifies.
+  { path: 'notes', capability: 'owner', element: <Notes /> },
   // Together (58 §5.3): gated by `together.own`; the finer live-partner-edge gating is enforced in the
   // screen + the bridge (the surface self-hides without a partner, and a direct route shows a calm state).
   // A splat so the home's tabs deep-link (`/together/practices`, …) + survive reload (58 §3.2a). The

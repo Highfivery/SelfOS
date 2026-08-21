@@ -3,6 +3,7 @@ import { uuid } from '../id';
 import {
   EmailResponseSchema,
   EmailTokenSchema,
+  type EmailAnswerStance,
   type EmailResponse,
   type EmailToken,
 } from '../schemas';
@@ -71,6 +72,62 @@ async function listTokens(
 export const isTakenUp = (r: EmailResponse): boolean =>
   r.stance === 'yes' || r.answer === 'im-game';
 
+/**
+ * Record an answer to a note (76 §3.5), under the note's AUTHOR.
+ *
+ * Both surfaces land here: the email tap arrives via `drainEmailTaps` carrying the token's `noteId`, and
+ * an in-app tap calls this directly with `source: 'in-app'`. One record shape either way, so "what they
+ * answered" has ONE definition and the owner's Notes list reads one place — rather than a second store
+ * that could disagree with the first depending on which surface the person happened to use.
+ *
+ * Filed under the author because that is who reads it. A note's delivery record is already the author's
+ * (§5.3 — the email reconcile is active-person-scoped, so anything filed under the recipient is only ever
+ * polled when THEY sign in); the answer follows the same reasoning.
+ *
+ * Idempotent per note: answering again REPLACES the previous answer rather than appending, because a note
+ * asks one question and a person may change their mind.
+ */
+export async function recordNoteAnswer(
+  fs: FileSystem,
+  key: Uint8Array,
+  authorPersonId: string,
+  input: {
+    noteId: string;
+    answer: string;
+    stance?: EmailAnswerStance;
+    source: 'relay-tap' | 'in-app';
+  },
+  now: Date,
+): Promise<EmailResponse> {
+  for (const existing of await listEmailResponses(fs, key, authorPersonId)) {
+    if (existing.noteId === input.noteId)
+      await fs.remove(responsePath(authorPersonId, existing.id));
+  }
+  const response: EmailResponse = {
+    id: uuid(),
+    schemaVersion: 1,
+    family: 'note',
+    noteId: input.noteId,
+    kind: 'note-answer',
+    answer: input.answer,
+    ...(input.stance ? { stance: input.stance } : {}),
+    sensitivity: 'standard',
+    respondedAt: now.toISOString(),
+    source: input.source,
+    edited: false,
+  };
+  await writeEncryptedJson(fs, responsePath(authorPersonId, response.id), response, key);
+  return response;
+}
+
+/** The answer recorded against a note, if any — the owner's Notes list reads this. */
+export function noteAnswerOf(
+  responses: readonly EmailResponse[],
+  noteId: string,
+): EmailResponse | null {
+  return responses.find((r) => r.noteId === noteId) ?? null;
+}
+
 /** Read a person's email responses, newest first (67 §3.6 — the own-only in-app history). */
 export async function listEmailResponses(
   fs: FileSystem,
@@ -80,10 +137,16 @@ export async function listEmailResponses(
   const out: EmailResponse[] = [];
   for (const name of await fs.list(responsesDir(personId))) {
     if (!name.endsWith('.enc')) continue;
-    const raw = await readEncryptedJson(fs, `${responsesDir(personId)}/${name}`, key);
-    if (!raw) continue;
-    const parsed = EmailResponseSchema.safeParse(raw);
-    if (parsed.success) out.push(parsed.data);
+    try {
+      // Per-file: `readEncryptedJson` THROWS on a truncated or wrong-key envelope, so one bad sibling
+      // would otherwise take down the whole read (the `listEmailActivity` quarantine rule).
+      const raw = await readEncryptedJson(fs, `${responsesDir(personId)}/${name}`, key);
+      if (!raw) continue;
+      const parsed = EmailResponseSchema.safeParse(raw);
+      if (parsed.success) out.push(parsed.data);
+    } catch {
+      continue;
+    }
   }
   return out.sort((a, b) => (a.respondedAt < b.respondedAt ? 1 : -1));
 }
@@ -229,6 +292,7 @@ export async function drainEmailTaps(
       ...(token.suggestionId ? { suggestionId: token.suggestionId } : {}),
       ...(token.questionId ? { questionId: token.questionId } : {}),
       ...(token.assignmentId ? { assignmentId: token.assignmentId } : {}),
+      ...(token.noteId ? { noteId: token.noteId } : {}),
       ...(token.sharedSuggestionKey ? { sharedSuggestionKey: token.sharedSuggestionKey } : {}),
       kind: token.kind,
       answer: token.answer,

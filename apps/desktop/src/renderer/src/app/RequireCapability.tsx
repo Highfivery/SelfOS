@@ -17,10 +17,17 @@ export function RequireCapability({
   capability,
   children,
 }: {
-  capability: CapabilityKey;
+  /**
+   * The gate. `'owner'` guards on the ROLE rather than a grantable capability — for a screen whose
+   * justification is the Owner's existing full access (76 §8.1), where a capability would be one
+   * Roles-matrix toggle away from anyone.
+   */
+  capability: CapabilityKey | 'owner';
   children: JSX.Element;
 }): JSX.Element {
-  const allowed = useSessionStore((s) => s.can(capability));
+  const allowed = useSessionStore((s) =>
+    capability === 'owner' ? s.isOwner() : s.can(capability),
+  );
   if (!allowed) return <Navigate to="/" replace />;
   return children;
 }

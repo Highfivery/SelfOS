@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DEFAULT_ROLES } from '@shared/capabilities';
+import type { NoteSendResult } from '@selfos/core/schemas';
 import { Notes } from './Notes';
 import { useNoteStore } from '../../../stores/noteStore';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -13,7 +14,7 @@ afterEach(() => {
   useSessionStore.setState({ activePerson: null, access: null });
 });
 
-/** Sign in as the Owner — `notes.manage` is owner-only, via the `roleAllows` full-access bypass. */
+/** Sign in as the Owner — the Notes surface gates on the ROLE, not a grantable capability (§8.1). */
 function asOwner(): void {
   useSessionStore.setState({
     activePerson: {
@@ -206,6 +207,73 @@ describe('Notes (76 §3)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Write it myself' }));
     expect(screen.getByLabelText('Subject')).toHaveValue('');
     expect(screen.getByLabelText('Body')).toBeInTheDocument();
+  });
+
+  it('a refused send SAYS so, and cannot be fired twice', async () => {
+    asOwner();
+    let resolveSend: (v: NoteSendResult) => void = () => {};
+    const notesSend = vi.fn(
+      () =>
+        new Promise<NoteSendResult>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    installMockBridge({
+      notesRecipients: () => Promise.resolve([ANGEL]),
+      notesList: () => Promise.resolve([]),
+      notesSend,
+    });
+
+    render(<Notes />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Write a note' }));
+    await userEvent.click(screen.getByRole('radio', { name: /Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Write for Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Write it myself' }));
+    await userEvent.type(screen.getByLabelText('Subject'), 'Mine');
+    await userEvent.type(screen.getByLabelText('Body'), 'Body.');
+    await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+
+    // Two clicks before the first send resolves must not send twice.
+    const sendButton = screen.getByRole('button', { name: /Send to Angel/ });
+    await userEvent.click(sendButton);
+    await userEvent.click(sendButton);
+    expect(notesSend).toHaveBeenCalledTimes(1);
+
+    // A refusal (they were deleted between choosing them and sending) must not be swallowed into a
+    // button that appears to do nothing.
+    resolveSend({ ok: false, reason: 'NO_RECIPIENT', message: 'That person is no longer here.' });
+    expect(await screen.findByText('That person is no longer here.')).toBeInTheDocument();
+    // …and the draft survives it — the subject is still rendered in the preview panes.
+    expect(screen.getAllByText('Mine').length).toBeGreaterThan(0);
+  });
+
+  it('does not claim "no address on file" when the EMAIL itself failed', async () => {
+    asOwner();
+    installMockBridge({
+      notesRecipients: () => Promise.resolve([ANGEL]),
+      notesList: () => Promise.resolve([]),
+      notesSend: () =>
+        Promise.resolve({
+          ok: true as const,
+          noteId: 'n1',
+          emailed: false,
+          emailFailure: 'NOT_CONFIGURED',
+        }),
+    });
+
+    render(<Notes />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Write a note' }));
+    await userEvent.click(screen.getByRole('radio', { name: /Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Write for Angel/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Write it myself' }));
+    await userEvent.type(screen.getByLabelText('Subject'), 'Mine');
+    await userEvent.type(screen.getByLabelText('Body'), 'Body.');
+    await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Send to Angel/ }));
+
+    // Angel HAS an address — saying otherwise states something false about her record.
+    expect(await screen.findByText(/didn’t go out this time/)).toBeInTheDocument();
+    expect(screen.queryByText(/no address on file/)).not.toBeInTheDocument();
   });
 
   it('shows delivery as a timeline, and says plainly when a note never emailed', async () => {

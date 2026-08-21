@@ -16,6 +16,7 @@ import type {
   OwnerEmailActivityEntry,
   NoteDraftInput,
   NoteDraftResult,
+  NoteForRecipient,
   NoteRecipient,
   NoteRow,
   NoteSendInput,
@@ -451,12 +452,15 @@ export const IpcChannels = {
   emailApplyIntimacyOffer: 'email:applyIntimacyOffer',
   emailActivity: 'email:activity',
 
-  // Notes (76) — an owner-authored note to ONE person. All gated `notes.manage` in the bridge.
+  // Notes (76) — an owner-authored note to ONE person. All gated on the OWNER ROLE in the bridge.
   notesRecipients: 'notes:recipients',
   notesDraft: 'notes:draft',
   notesSend: 'notes:send',
   notesList: 'notes:list',
   notesDelete: 'notes:delete',
+  // The recipient's side — reachable by anyone a note was written for, not just the owner.
+  notesGetForMe: 'notes:getForMe',
+  notesAnswer: 'notes:answer',
   peopleSetEmail: 'people:setEmail',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
@@ -1402,6 +1406,15 @@ export interface SelfosBridge {
   notesSend(input: NoteSendInput): Promise<NoteSendResult>;
   notesList(): Promise<NoteRow[]>;
   notesDelete(input: { noteId: string }): Promise<void>;
+  notesGetForMe(input: {
+    authorPersonId: string;
+    noteId: string;
+  }): Promise<NoteForRecipient | null>;
+  notesAnswer(input: {
+    authorPersonId: string;
+    noteId: string;
+    label: string;
+  }): Promise<NoteForRecipient | null>;
   /** Set a person's contact address — the address a note is emailed to (76 §3.2). Owner-gated. */
   peopleSetEmail(input: { personId: string; email: string }): Promise<Person | null>;
   /** The stored rendered content of one sent email (owner-only, 67 §3.7) — "see what was sent". */

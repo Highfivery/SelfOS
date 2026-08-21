@@ -18,7 +18,10 @@ export function memFileSystem(): FileSystem {
       return Promise.resolve();
     },
     list: (dir) => {
-      const prefix = `${dir}/`;
+      // `''` (and `'.'`) means the vault ROOT, matching the node host where `resolve('')` is the vault
+      // dir. Without this the fake returns [] for the root, which would make a root-enumerating caller
+      // (key rotation's content-root discovery) untestable in core.
+      const prefix = dir === '' || dir === '.' ? '' : `${dir}/`;
       const names = new Set<string>();
       for (const key of files.keys()) {
         if (!key.startsWith(prefix)) continue;

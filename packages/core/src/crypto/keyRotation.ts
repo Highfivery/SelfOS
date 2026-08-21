@@ -32,8 +32,39 @@ const JOURNAL_PATH = 'config/keyrotation.journal.json';
 const RECOVERY_PATH = 'config/recovery.enc';
 const INVITES_DIR = 'config/invites';
 const DEVICES_DIR = 'config/devices';
-/** Top-level vault dirs that hold every master-key-encrypted file (path-discovery, not a per-feature list). */
-const ROTATION_ROOTS = ['people', 'config', 'questionnaires'];
+/**
+ * The content roots rotation is KNOWN to need. This is a floor, not the list: the real set is
+ * discovered from the vault itself (`contentRoots`), so a feature that adds a new top-level root is
+ * covered without editing this file.
+ *
+ * It was previously the whole list, and the omission was silent and destructive: `relationships/`,
+ * `together/` (sessions, pairs, agreements, pair-owned books) and `story/contributions/` are all
+ * master-key encrypted and were never walked. Rotation re-encrypted everything else, promoted the new
+ * key and destroyed the old one — leaving the entire relationship graph and every Together session
+ * permanently unreadable. Reachable from Settings → Devices → "Revoke & re-key".
+ */
+const KNOWN_ROTATION_ROOTS = ['people', 'config', 'questionnaires'];
+
+/**
+ * Top-level names that never hold master-key-encrypted content. `.selfos` is excluded because it holds
+ * the rotation staging dir — walking it would re-encrypt this rotation's own staged output.
+ */
+const isContentRoot = (name: string): boolean => !name.startsWith('.');
+
+/**
+ * The roots to walk: whatever the vault actually contains, UNIONED with the known set. The union is
+ * deliberate — a host whose `list('')` cannot enumerate the vault root degrades to today's behaviour
+ * rather than silently re-encrypting nothing and then destroying the old key.
+ */
+async function contentRoots(fs: FileSystem): Promise<string[]> {
+  let discovered: string[] = [];
+  try {
+    discovered = (await fs.list('')).filter(isContentRoot);
+  } catch {
+    discovered = []; // fall back to the known set
+  }
+  return [...new Set([...discovered, ...KNOWN_ROTATION_ROOTS])];
+}
 /** Device-local temp slot holding the new master key during a rotation (for crash-resume on the rotator). */
 export const ROTATION_NEW_KEY_ID = 'selfos.rotation.newKey';
 
@@ -83,7 +114,7 @@ export async function enumerateEncryptedFiles(fs: FileSystem): Promise<string[]>
       else await walk(path); // a name without an extension is a sub-directory
     }
   };
-  for (const root of ROTATION_ROOTS) await walk(root);
+  for (const root of await contentRoots(fs)) await walk(root);
   // recovery.enc is rewrapped (not re-encrypted under the master key); invites are deleted. Exclude both.
   return out.filter((p) => p !== RECOVERY_PATH && !p.startsWith(`${INVITES_DIR}/`));
 }

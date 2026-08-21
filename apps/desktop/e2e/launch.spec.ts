@@ -41,8 +41,11 @@ import {
   listCoveredTopics,
   listQuestionnaires,
   listSavedSuggestions,
+  NOT_APPLICABLE_SKIP_REASON,
+  PREFER_NOT_TO_SAY_SKIP_REASON,
   saveQuestionnaire,
   submitResponse,
+  UNCLEAR_SKIP_REASON,
 } from '@selfos/core/questionnaires';
 import { getIntakeSession, intakeCatalogSnapshot } from '@selfos/core/intake';
 import { listEmailActivity, listEmailResponses, readEmailPrefs } from '@selfos/core/email';
@@ -6189,6 +6192,151 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     });
     expect(overflow.offenders).toEqual([]);
     expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('refusal read (08 §34.3): a Standard all-skipped send is readable; a Private one withholds it', async () => {
+  // AI on + a key so the read actually runs (through the offline fake). SELF check-ins keep this
+  // deterministic — sender/recipient scoping is proven in the coreBridge test. What this walks is the
+  // PRIVACY SPLIT, end to end through the real UI and into the encrypted vault.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const sentPanel = w.getByRole('tabpanel', { name: 'Sent questionnaires' });
+    const cardFor = (title: string) =>
+      sentPanel.locator('article').filter({
+        has: w.getByRole('button', { name: title, exact: true }),
+      });
+
+    // Author a two-question check-in and send it STANDARD, then refuse BOTH questions — with two
+    // DIFFERENT presets, so the counts are distinguishable rather than a single lump.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('How was your year?');
+    await w.getByLabel('Question 1', { exact: true }).fill('How was your year overall?');
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 2', { exact: true }).fill('What would you change about it?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /^How was your year\?/ }).click();
+    await w.getByRole('button', { name: /Skip this/ }).click();
+    await w.getByRole('button', { name: UNCLEAR_SKIP_REASON }).click();
+    await w.getByRole('button', { name: 'Next' }).click();
+    await w.getByRole('button', { name: /Skip this/ }).click();
+    await w.getByRole('button', { name: NOT_APPLICABLE_SKIP_REASON }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // The Sent card states the outcome, breaks it down by kind, and — because this send is STANDARD —
+    // offers the read. The ORDINARY analyze prompt must be gone: that is the dead button from part 1.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    const standardCard = cardFor('How was your year?');
+    await expect(standardCard.getByText('No answers · all 2 skipped')).toBeVisible();
+    await expect(standardCard.getByText('1 unclear')).toBeVisible();
+    await expect(standardCard.getByText('1 doesn’t apply')).toBeVisible();
+    await expect(
+      standardCard.getByRole('button', { name: /Analyze to see the insight/ }),
+    ).toHaveCount(0);
+
+    // Read it. The excerpt that comes back is the REFUSAL prompt's own text — the offline fake answers
+    // the two prompts differently on purpose, so this asserts which of them ran, not merely that
+    // something did.
+    await standardCard.getByRole('button', { name: /Read what this tells you/ }).click();
+    await expect(
+      standardCard.getByText(/asked for a verdict before they gave anything to react to/),
+    ).toBeVisible();
+
+    // …and reading it does not rewrite what happened. An all-skipped send stays all-skipped: the pill and
+    // the breakdown survive, and the card never claims the questionnaire was "Analyzed" or "Answered" —
+    // which is what it did when the skip state was derived from "submitted but not yet analysed", because
+    // that stops being true the instant the read writes its insight.
+    await expect(standardCard.getByText('No answers · all 2 skipped')).toBeVisible();
+    await expect(standardCard.getByText('1 unclear')).toBeVisible();
+    await expect(standardCard.getByText('Analyzed')).toHaveCount(0);
+    await expect(standardCard.getByText(/· Answered /)).toHaveCount(0);
+    await expect(standardCard.getByText(/· Came back /)).toBeVisible();
+
+    // A second check-in, sent PRIVATE, refused the same way. Here the recipient was promised the sender
+    // would not see their written answers — and a skip reason IS a written answer — so the counts are
+    // all the card may show. No read, at any point.
+    // (Already on the list — the card was read in place, so there is no builder to back out of.)
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Private year note');
+    await w.getByLabel('Question 1', { exact: true }).fill('Anything you want to flag?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click(); // Private is the default
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /^Private year note/ }).click();
+    await w.getByRole('button', { name: /Skip this/ }).click();
+    await w.getByRole('button', { name: PREFER_NOT_TO_SAY_SKIP_REASON }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    const privateCard = cardFor('Private year note');
+    await expect(privateCard.getByText('No answers · all 1 skipped')).toBeVisible();
+    await expect(privateCard.getByText('1 preferred not to say')).toBeVisible();
+    await expect(privateCard.getByRole('button', { name: /Read what this tells you/ })).toHaveCount(
+      0,
+    );
+    await expect(
+      privateCard.getByRole('button', { name: /Analyze to see the insight/ }),
+    ).toHaveCount(0);
+    // …and it does not nag, on the card or on Home. This send can never be analysed, so a "new response to
+    // review" counter that includes it can never reach zero — the dead button again, one counter over.
+    await expect(privateCard.getByText('1 new')).toHaveCount(0);
+    await w.getByRole('link', { name: 'Home', exact: true }).click();
+    await expect(w.getByText(/new answers? to review/)).toHaveCount(0);
+    await expect(w.getByText('A response to turn into insight')).toHaveCount(0);
+
+    // At rest: exactly ONE insight, for the Standard send, marked as a read of a refusal.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('refusal-read e2e: master key missing');
+    const assignments = await listAssignments(fs, key);
+    const standardSend = assignments.find((a) => a.privacy === 'standard');
+    const privateSend = assignments.find((a) => a.privacy === 'private');
+    if (!standardSend || !privateSend) throw new Error('expected both sends');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    expect(insights.map((i) => i.provenance.assignmentId).filter(Boolean)).toEqual([
+      standardSend.id,
+    ]);
+    const read = insights.find((i) => i.provenance.assignmentId === standardSend.id);
+    if (!read) throw new Error('expected the refusal read');
+    expect(read.provenance.refusalRead).toBe(true);
+
+    // Its facts are EXPLICITLY private. The fake returns `shareable: true` precisely so this fails if the
+    // service ever trusts the model here: these fact texts are drawn from the recipient's own words, and
+    // `shareable: false` ALONE is the shape the partner-share backfill treats as never-configured and
+    // stamps `['partner']` onto. The empty array is what survives it.
+    expect(read.facts.length).toBeGreaterThan(0);
+    for (const f of read.facts) {
+      expect(f.shareable).toBe(false);
+      expect(f.shareableTypes).toEqual([]);
+    }
+    // A refusal read never carries a crisis flag — there are no answers to derive one from, and a crisis
+    // signal read out of a silence is a guess. The fake returns `crisisFlag: true` on this prompt precisely
+    // so this fails if the service ever passes the model's through.
+    expect(read.crisisFlag).toBeFalsy();
+    expect(read.metrics).toBeUndefined();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

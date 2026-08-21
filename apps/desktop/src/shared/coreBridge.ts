@@ -5092,8 +5092,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         newResponses: number;
         answeredAt?: string; // most recent submission across sends
         analyzedAt?: string; // most recent analysis time across sends (latest analysed insight's updatedAt)
-        analyzable?: { at: string; id: string }; // latest submitted-but-un-analysed send
+        analyzable?: { at: string; id: string; privacy: PrivacyMode }; // latest submitted-but-un-analysed
         latestInsight?: { at: string; id: string; summary: string }; // latest analysed send's insight
+        // The latest submitted send WHETHER OR NOT it has been analysed. `analyzable` is not a substitute:
+        // it goes undefined the moment an insight exists, so deriving the skip state from it alone made an
+        // all-skipped send stop reporting itself as soon as its refusal was read (§34.3).
+        latestSubmitted?: { at: string; id: string; privacy: PrivacyMode };
       }
       const byQuestionnaire = new Map<string, Agg>();
       for (const a of sends) {
@@ -5142,6 +5146,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         if (answered && submittedAt) {
           agg.answeredAt =
             !agg.answeredAt || submittedAt > agg.answeredAt ? submittedAt : agg.answeredAt;
+          if (!agg.latestSubmitted || submittedAt > agg.latestSubmitted.at) {
+            agg.latestSubmitted = { at: submittedAt, id: a.id, privacy: a.privacy };
+          }
           const insight = insightByAssignment.get(a.id);
           if (insight) {
             // Track the most-recently-answered analysed send's insight for the card excerpt + deep-link.
@@ -5158,7 +5165,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             // Un-analysed → a "new response" (tallied over sends) + a candidate for one-tap Analyze.
             agg.newResponses += 1;
             if (!agg.analyzable || submittedAt > agg.analyzable.at) {
-              agg.analyzable = { at: submittedAt, id: a.id };
+              agg.analyzable = { at: submittedAt, id: a.id, privacy: a.privacy };
             }
           }
         }
@@ -5189,11 +5196,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // action that CANNOT succeed — the reported bug. Read only the one candidate send (bounded I/O), and
         // if it is fully skipped, replace the impossible action with a state that says so. The summary is
         // counts only, so it is the same shape whether the send was Standard or Private.
+        //
+        // WHICH send to probe is the whole subtlety. The state and the action have to describe the SAME
+        // send or the card asserts one thing and does another: probing the latest submitted while gating
+        // `analyzableAssignmentId` on `analyzable` diverges as soon as the newest send is analysed and an
+        // older one is not — reachable in one click of the card's own Analyze on a re-asked questionnaire —
+        // and the card then says "all skipped" over a response containing a real answer, or offers the read
+        // on a Private send (the dead button, back). So: the analysable send when there is one (that is what
+        // the action targets), else the latest submitted (so a read refusal keeps reporting itself rather
+        // than falling through to "Analyzed"). One send read per questionnaire either way.
+        const probe = agg.analyzable ?? agg.latestSubmitted;
         let skipped: SkipSummary | undefined;
-        if (agg.analyzable) {
+        let standardSkip = false;
+        if (probe) {
           const [snapshot, response] = await Promise.all([
-            getAssignmentSnapshot(ctx.fs, ctx.key, agg.analyzable.id),
-            getResponse(ctx.fs, ctx.key, agg.analyzable.id),
+            getAssignmentSnapshot(ctx.fs, ctx.key, probe.id),
+            getResponse(ctx.fs, ctx.key, probe.id),
           ]);
           if (snapshot && response?.submittedAt !== undefined) {
             const answers: AnswerMap = Object.fromEntries(
@@ -5201,15 +5219,29 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             );
             if (isFullySkipped(snapshot.questions, answers)) {
               skipped = summarizeSkips(snapshot.questions, answers);
+              // On a STANDARD send there IS something to read — the refusal itself (§34.3) — so the action
+              // stays, relabelled by the card. Only a Private send has nothing we are allowed to say, and
+              // only there is withholding it correct. Judge THAT send's own privacy, never the card-level
+              // `privacy` (derived from the latest send per recipient), which can read `standard` while the
+              // send the action targets is private.
+              standardSkip = probe.privacy === 'standard';
             }
           }
         }
+        // `newResponses` means "a response arrived that you still have something to do with" — it drives the
+        // card's "N new", Home's "N new answers to review →" and Home's needs-attention `toAnalyze`. A send
+        // whose action we just withheld has nothing to do with, and being un-analysable it can NEVER stop
+        // counting: that is the reported dead button again, arriving on Home through a different counter and
+        // saying "1 new answer to review" about a response with no answers in it. A STANDARD skip still
+        // counts — the refusal read is a real thing to do, and doing it clears this the ordinary way.
+        const deadNew = skipped && !standardSkip && agg.analyzable !== undefined;
+        const newResponses = Math.max(0, agg.newResponses - (deadNew ? 1 : 0));
         overview[questionnaireId] = {
           questionnaireId,
           lastSentAt: agg.lastSentAt,
           recipients,
           answeredCount,
-          newResponses: agg.newResponses,
+          newResponses,
           analyzed,
           ...(privacy ? { privacy } : {}),
           ...(agg.answeredAt ? { answeredAt: agg.answeredAt } : {}),
@@ -5217,7 +5249,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(analyzed && agg.latestInsight
             ? { insightSummary: agg.latestInsight.summary, insightId: agg.latestInsight.id }
             : {}),
-          ...(agg.analyzable && !skipped ? { analyzableAssignmentId: agg.analyzable.id } : {}),
+          ...(agg.analyzable && (!skipped || standardSkip)
+            ? { analyzableAssignmentId: agg.analyzable.id }
+            : {}),
           ...(skipped ? { skipped } : {}),
         };
       }

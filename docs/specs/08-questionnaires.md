@@ -4390,7 +4390,7 @@ supported width, so it passed with the fix reverted. It is deliberately a proper
 
 ## 34. A skipped-through response is an outcome, not a dead end (2026-08-20)
 
-**Status: BUILT (part 1 of 2).** Owner-reported: a questionnaire whose questions were all skipped _"gives the
+**Status: BUILT (parts 1 and 2).** Owner-reported: a questionnaire whose questions were all skipped _"gives the
 option to analyze to see the insight, but clicking on it doesn't do anything."_
 
 ### 34.1 Why it did nothing
@@ -4406,11 +4406,17 @@ the card re-offered the same impossible action forever.
 ### 34.2 What it does now
 
 `questionnairesSentOverview` reads the one candidate send (bounded I/O — only the send that would have been
-offered) and, when every visible question came back without an answer, **withholds `analyzableAssignmentId`**
-and returns a `SkipSummary` instead. The card gets a state of its own — _"No answers · all 5 skipped"_ — over a
-**"Why it didn't land"** breakdown. Two consequences worth naming: the send also leaves the nav badge, which
-counts `analyzableAssignmentId`, so the app stops nagging about something it cannot do; and a send with one
+offered) and, when every visible question came back without an answer, returns a `SkipSummary`. The card gets a
+state of its own — _"No answers · all 5 skipped"_ — over a **"Why it didn't land"** breakdown. A send with one
 real answer beside a skip is **still analysable** — only "nothing at all" is terminal.
+
+What happens to the _action_ on that card is decided by privacy, and part 2 is what split it (§34.3). On a
+**Private** send `analyzableAssignmentId` is **withheld**: there is nothing the app is allowed to say back, so
+the card shows the counts and stops, and the send leaves the nav badge (which counts `analyzableAssignmentId`)
+— the app stops nagging about something it cannot do. On a **Standard** send the id **stays** and the card
+relabels the action _"Read what this tells you →"_, because there the refusal itself is readable; that send
+correspondingly stays in the badge, since there is now something to do. Part 1 shipped the withholding for both
+modes, which was right while nothing could be read and became wrong the moment something could.
 
 **`SkipSummary` carries counts and never the recipient's words.** That is the load-bearing decision, not a
 detail: on a Private send the recipient was shown, verbatim, _"they won't see your written answers"_ — and a
@@ -4419,20 +4425,123 @@ can type. Counts by kind are the shape that is safe for either privacy mode, so 
 A blank counts as a skip too: the person saw the question and moved past it, which is the same signal for
 "why didn't this land".
 
-### 34.3 Still to come (part 2)
+### 34.3 The read of a refusal (part 2)
 
-- The **AI read of the refusal** (owner's choice) — Standard sends only, because the insight summary is the one
-  thing that _does_ cross to the sender on a Private send, so a model paraphrase of _why she refused_ would
-  breach the same promise the counts protect.
-- The **partial-skip block** in the analysis prompt, under the same split: full reasons on a Standard send,
-  kinds only on a Private one.
-- The four skip-pipeline repairs and the 12-month `not-applicable` expiry (own slice).
+The sender's real question about a questionnaire that came back empty is _"why didn't this land?"_, and that is
+answerable **from the refusals alone** — so on a Standard send `analyzeAssignment` no longer stops at `EMPTY`.
+It routes to `analyzeRefusal`, a second prompt whose whole subject is the **questions**.
+
+**The privacy split is the load-bearing part.** `tellReasons = assignment.privacy === 'standard'` gates the
+refusal data everywhere — the refusal read and the partial-skip block in the ordinary analysis both take the
+same flag. On a Private send the recipient was shown, verbatim, _"they won't see your written answers"_; a skip
+reason **is** a written answer; and the insight summary is the one thing that _does_ cross back to the sender.
+So a model paraphrase of why she refused would breach that promise exactly as surely as quoting it. A Private
+send therefore stays an honest `EMPTY` **with no spend at all**.
+
+**A Private send tells the model nothing about the refusal — not even which questions.** This went further than
+withholding the reasons, and it was decided rather than assumed (owner, 2026-08-20). Passing the per-question
+mapping — _"'How is your mother?' — they preferred not to say"_ — looked safe because the preset kind carries
+none of her words. But a private sender has **no route to that mapping anywhere else**: the bridge withholds
+the raw answers, the Results aggregate excludes private sends outright, and the card's `SkipSummary` is counts
+with no question attached. The summary crosses back. So it would have handed the sender the very thing the mode
+exists to keep from them, one paraphrase removed. Counts by kind on the card; nothing per question to the
+model. A Standard send gets the lot, which is where the reword signal was always meant to live.
+
+Three deliberate departures from the ordinary analysis, all following from the subject being the questionnaire
+rather than the person:
+
+1. **Facts are explicitly private** — `shareable: false` **and** `shareableTypes: []`. The empty array is not
+   belt-and-braces: `shareable: false` alone is byte-for-byte the shape `isDefaultPrivate` matches, so the
+   partner-share backfill would stamp `['partner']` onto fact texts derived from the recipient's own words. An
+   explicit empty scope is preserved by that backfill; an absent one reads as never-configured.
+2. **The prompt forbids inference.** `REFUSAL_ANALYSIS_SYSTEM` says a silence is not evidence about a person,
+   and the same clause was added to `ANALYSIS_SYSTEM` — it has to bind there too, because those facts are
+   partner-shared by default (the 2026-07-17 decision), so _"she wouldn't discuss her mother"_ must never become
+   one. That is precisely what §25.5 excludes declines from the Q&A to prevent.
+
+   **Named residual, accepted (owner, 2026-08-20):** on the ORDINARY path that mitigation is **prompt-only**.
+   Those facts go through `producedFactShare()`, so they are written partner-shared, and the analysis cannot
+   tell which of its facts came from the skip block — the refusal path could hardcode explicitly-private
+   because _every_ one of its facts is about refusals, and a mixed response has no such property. So a fact
+   naming which question went unanswered can reach the sender's **partner's** coaching context, held back by
+   the instruction alone. It applies to Standard sends only (a Private send now sends no skip data at all), and
+   there the sender can already see the skip and its reason in the raw answers — so the residual is not what
+   _they_ learn, it is what travels onward from them.
+
+3. **No `metrics`, no `crisisFlag`** — there are no answers to derive either from, and a crisis signal read out
+   of a silence is a guess.
+
+**A refusal read never overwrites a real analysis, and never spends finding that out.** `saveInsight` replaces
+the whole record, so reusing the id of a genuine analysis would destroy its metrics, crisis flag, shared facts
+and approved state — and with `autoAnalyze` on that would happen with **no user action at all** when someone
+withdraws answers and resubmits empty. `provenance.refusalRead` (additive-optional) marks a refusal read so a
+later one may replace it while a real analysis is left alone. The check runs **before** the model call, not
+after: left below it, that same `autoAnalyze` path bills a read on every re-open of the sender's Results and
+then throws the answer away. A valid-but-empty reply is likewise an honest `EMPTY` rather than the "unexpected
+shape" error, which reads as broken and invites a second billed retry. And per §5.8a the read carries the
+recipient's own suppression block — it is a path that writes prose a person reads, and it quotes their words
+into the prompt to do it.
+
+**Reading a refusal must not rewrite what happened**, and two counters had to be corrected before that was
+true — both found by looking at the rendered card, not by a failing test.
+
+- The skip state was derived from `agg.analyzable`, which means _submitted and not yet analysed_. That stops
+  being true the instant the read writes its insight, so the card lost its pill and its breakdown and fell
+  through to **"Analyzed"** over an **"Answered"** date — telling the sender their questionnaire had been
+  answered when every question in it was skipped. The meta line now also says **"Came back"** rather than
+  "Answered" whenever the send carries a skip summary, because "No answers" and "Answered" cannot both be true
+  on one card; and the stale-answers nudge is suppressed there, since _"these answers are 3 weeks old"_ is
+  nonsense when there were none.
+
+  **Which send to probe is the whole subtlety, and the obvious repair was wrong.** Simply switching to the
+  latest _submitted_ send made the state and the action describe **different sends**: a re-asked questionnaire
+  has more than one, and one click of the card's own Analyze leaves the newest analysed while an older one
+  waits. The card then said _"No answers · all 1 skipped"_ over a response that **contained an answer** and
+  pointed its read at that answer; or, with the analysable send private and the newer one Standard, offered the
+  read on a **Private** send — the dead button, in the mode part 1 existed to kill (card-level `privacy` is
+  derived from the latest send per recipient, so it read `standard` while the send being acted on was not). It
+  now probes **the analysable send when there is one** — that is what the action targets — and the latest
+  submitted otherwise, so a read refusal keeps reporting itself; and it judges **that send's own privacy**,
+  never the card-level value. Still one send read per questionnaire.
+
+- `newResponses` — which drives the card's "N new", Home's _"N new answers to review →"_ and Home's
+  needs-attention **"A response to turn into insight"** — counted a send whose action had just been withheld.
+  On a Private all-skipped send that send can never be analysed, so the count could **never reach zero**: the
+  originally-reported dead button, arriving on Home through a different counter and describing a response with
+  no answers in it as an answer to review. A withheld send no longer counts. A **Standard** skip still does —
+  the read is a real thing to do, and doing it clears the count the ordinary way.
+
+Still to come, in their own slice: the four skip-pipeline repairs and the 12-month `not-applicable` expiry.
 
 ### 34.4 Guards
 
 `summarizeSkips` / `isFullySkipped` / `skipKindOf` are pure and unit-tested, including that a summary of a
 reason reading _"I had a miscarriage in March"_ serialises **without that text**. A coreBridge test drives the
-full send → skip-everything → submit path and asserts `analyzableAssignmentId` is gone, the counts are right,
-and the overview does not contain the reason — plus that a partly-answered send is untouched. **Verified to
-FAIL when reverted** (`expected '<assignment-id>' to be undefined`). An RTL test asserts the card renders the
-state and the breakdown and offers no Analyze button.
+full send → skip-everything → submit path and asserts the counts are right, the overview does not contain the
+reason, a **Private** send's action is withheld, and a partly-answered send is untouched. An RTL test asserts
+the card renders the state and the breakdown.
+
+Part 2 adds four core unit tests — a Private send gets the kind but never the words; a Private all-skipped send
+stays `EMPTY` and **spends nothing**; a Standard one reads the refusal; and a refusal read never overwrites a
+real analysis — plus an **E2E** that walks both modes through the real UI into the encrypted vault: author →
+send → skip every question → the card states the outcome and its breakdown → Standard offers the read and shows
+the excerpt, Private offers nothing → at rest there is exactly one insight, stamped `refusalRead`, with
+`shareable: false` **and** `shareableTypes: []` on every fact, and no metrics or crisis flag.
+
+Two more pin what the review found: a core test runs the **actual partner-share backfill** over a refusal read
+and asserts the facts come out unchanged — the shape assertions all stay green if someone "tidies"
+`isDefaultPrivate` to also match an empty array, so only this one catches the leak returning — and a coreBridge
+test builds the divergent two-send case in both directions (older send with a real answer; older send private
+while the newest is Standard).
+
+**Every one of these was verified to FAIL when reverted**, individually: dropping the `privacy === 'standard'`
+check makes the Private card offer the read (`Expected 0, Received 1`); trusting the model's `shareable` fails
+the at-rest assertion (`Expected false, Received true`); disabling the refusal branch loses the excerpt;
+deriving the skip state from `analyzable` again loses the pill after reading; probing the latest submitted send
+reports "all skipped" over a response containing an answer; judging by card-level privacy offers the read on a
+Private send; loosening `isDefaultPrivate` to match `[]` breaks the backfill test **while leaving all the shape
+assertions green**; moving the overwrite check back below the model call bills a call that is thrown away; and
+restoring the dead "N new" makes the Private card nag (`Expected 0, Received 1`). The offline fake is deliberately hostile on the one that
+matters — it returns `shareable: true`, and answers the refusal prompt with **different text** from the
+ordinary analysis, so the E2E proves _which_ prompt ran rather than merely that something did. A fake returning
+`false` would have passed the reverted code.

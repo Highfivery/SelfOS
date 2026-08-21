@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
-import { listAllInsights, updateInsight } from '../insights';
+import {
+  backfillPartnerSharing,
+  listAllInsights,
+  listInsightsForPerson,
+  updateInsight,
+} from '../insights';
 import { createAssignment } from './assignmentService';
 import { saveQuestionnaire } from './questionnaireService';
 import { getResponse, saveResponse } from './responseService';
@@ -222,9 +227,76 @@ describe('analyzeAssignment', () => {
     const prompt = seen.join('\n');
     expect(prompt).toContain('How are we doing?'); // the answered question IS analyzed
     expect(prompt).toContain('Pretty well.');
-    expect(prompt).not.toContain('What secretly worries you most?'); // the skipped question is NOT
-    expect(prompt).not.toContain('Prefer not to say'); // and the skip reason never leaks to the model
-    expect(prompt).not.toContain('Skipped');
+    // The skipped question is NOT analyzed as an answer (§25.5 — a decline is never an inferred fact)…
+    expect(prompt).not.toContain('A: Prefer not to say');
+    // …but since §34.3 the model IS told what came back refused, under a framing that forbids reading
+    // anything about the PERSON into it. The question text is the sender's own, so it is always safe.
+    expect(prompt).toContain('What secretly worries you most?');
+    expect(prompt).toContain('NEVER infer a trait');
+    // This send is STANDARD — the sender may see the answers, so the recipient's own words may steer.
+    expect(prompt).toContain('Prefer not to say');
+  });
+
+  it('a PRIVATE send tells the model NOTHING about what was skipped (08 §34.2/§34.3)', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true },
+        { id: 'q2', type: 'shortText', prompt: 'How is your mother?', required: false },
+      ],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      // The promise the recipient was shown: "they won't see your written answers". A skip reason IS a
+      // written answer, and the insight summary this call produces is what crosses back to the sender.
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: a.id,
+      answers: [
+        { questionId: 'q1', value: 'Pretty well.' },
+        {
+          questionId: 'q2',
+          value: { declined: true, reason: 'she died in March and I can’t talk about it' },
+        },
+      ],
+      submittedAt: new Date().toISOString(),
+    });
+    const seen: string[] = [];
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        seen.push(JSON.stringify(options));
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await analyzeAssignment(deps(fs, client), { assignmentId: a.id });
+    expect(result.ok).toBe(true);
+    const prompt = seen.join('\n');
+    // Her words: never, obviously.
+    expect(prompt).not.toContain('she died in March');
+    // But not the mapping either. The sender has no route to "which question did she decline" on a private
+    // send — the bridge withholds the answers, the aggregate excludes the send, the card's summary is counts
+    // with no question attached — and the insight summary this call writes DOES reach them. So the refusal
+    // block must be absent entirely, not merely stripped of its reasons.
+    expect(prompt).not.toContain('QUESTIONS THEY DID NOT ANSWER');
+    expect(prompt).not.toContain('skipped it');
+    expect(prompt).not.toContain('preferred not to say');
+    // The answered question is still analysed as normal — this withholds the refusal, not the response.
+    expect(prompt).toContain('Pretty well.');
   });
 
   it('stamps NO about-person for a self check-in (recipient === sender) — it stays "about you"', async () => {
@@ -534,23 +606,147 @@ describe('analyzeAssignment', () => {
     expect(result.insight?.facts).toEqual([]); // the cut-off fact is dropped
   });
 
-  it('fails with EMPTY and spends NOTHING when every answer is blank/skipped (08 §3.7)', async () => {
+  it('a PRIVATE send with every answer skipped stays EMPTY and spends NOTHING (08 §34.3)', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: a.id,
+      answers: [{ questionId: 'q1', value: { declined: true, reason: 'Prefer not to say' } }],
+      submittedAt: new Date().toISOString(),
+    });
+    const stream = vi.fn();
+    const client: ClaudeClient = { send: () => Promise.resolve(''), stream };
+    const result = await analyzeAssignment(deps(fs, client), { assignmentId: a.id });
+    // There is nothing we are ALLOWED to say back to this sender, so we say nothing and charge nothing.
+    expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
+    expect(stream).not.toHaveBeenCalled();
+    expect(result.usage).toBeUndefined();
+  });
+
+  it('a STANDARD send with every answer skipped reads the REFUSAL, about the questions (08 §34.3)', async () => {
     const fs = memFileSystem();
     const assignmentId = await seedAnswered(fs);
-    // Overwrite the response so the only answer is a per-question decline (skipped) → no live Q&A. Feeding the
-    // model an empty questionnaire is what reliably produced the scary "unexpected shape" MALFORMED error.
+    const r = await getResponse(fs, key, assignmentId);
+    await saveResponse(fs, key, {
+      ...r!,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: 'Not clear — needs more context' } },
+      ],
+    });
+    const seen: string[] = [];
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        seen.push(JSON.stringify(options));
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await analyzeAssignment(deps(fs, client), { assignmentId });
+    expect(result.ok).toBe(true);
+    const prompt = seen.join('\n');
+    expect(prompt).toContain('every question came back unanswered');
+    expect(prompt).toContain('You are reading the QUESTIONS, not the person');
+    // The Insight this writes is about the QUESTIONNAIRE, so its facts must never ride the
+    // partner-shared default an ordinary analysis fact gets (producedFactShare).
+    expect(result.insight?.facts.every((f) => f.shareable === false)).toBe(true);
+    // EXPLICIT-private, not merely unscoped: `shareable:false` with no `shareableTypes` is exactly the shape
+    // the partner-share backfill promotes to ['partner'], and on a Standard send these texts come from the
+    // recipient's own words. An explicit [] is preserved by the backfill.
+    expect(result.insight?.facts.every((f) => f.shareableTypes?.length === 0)).toBe(true);
+    expect(result.insight?.approved).toBe(false);
+    expect(result.insight?.provenance.refusalRead).toBe(true);
+  });
+
+  it('a refusal read SURVIVES the partner-share backfill — the one thing the empty scope is for (08 §34.3)', async () => {
+    // The other tests assert the SHAPE (`shareableTypes: []`). None of them runs the thing that shape exists
+    // to defend against, so a later "tidy-up" of `isDefaultPrivate` that also matched an empty array would
+    // leave every one of them green while these facts — derived from the recipient's own words — silently
+    // became partner-shared on the sender's next Memory read.
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
     const r = await getResponse(fs, key, assignmentId);
     await saveResponse(fs, key, {
       ...r!,
       answers: [{ questionId: 'q1', value: { declined: true, reason: 'Prefer not to say' } }],
     });
-    const stream = vi.fn();
-    const client: ClaudeClient = { send: () => Promise.resolve(''), stream };
-    const result = await analyzeAssignment(deps(fs, client), { assignmentId });
-    expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
-    // Caught BEFORE any model call — no spend, no usage event.
-    expect(stream).not.toHaveBeenCalled();
-    expect(result.usage).toBeUndefined();
+    const result = await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId });
+    expect(result.ok).toBe(true);
+    const subject = result.insight!.subjectPersonId;
+
+    await backfillPartnerSharing(fs, key, subject);
+
+    const after = (await listInsightsForPerson(fs, key, subject)).find(
+      (i) => i.provenance.refusalRead === true,
+    );
+    expect(after).toBeDefined();
+    expect(after!.facts.length).toBeGreaterThan(0);
+    expect(after!.facts.every((f) => f.shareableTypes?.length === 0)).toBe(true);
+    expect(after!.facts.every((f) => f.shareable === false)).toBe(true);
+  });
+
+  it('a refusal read never overwrites a REAL analysis (08 §34.3)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    // A normal analysis first — this is the record with the sender's facts, metrics and approved state.
+    const first = await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId });
+    expect(first.ok).toBe(true);
+
+    // The recipient withdraws everything and resubmits empty; auto-analysis re-runs with no user action.
+    const r = await getResponse(fs, key, assignmentId);
+    await saveResponse(fs, key, {
+      ...r!,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: 'Not clear — needs more context' } },
+      ],
+    });
+    // …and it bails BEFORE spending. This runs on `autoAnalyze`, i.e. with no user action, every time the
+    // sender re-opens Results — so a guard that sits below the model call bills a read on each visit and
+    // throws the answer away. Count the calls: there must be none.
+    let calls = 0;
+    const counting: ClaudeClient = {
+      send: () => {
+        calls += 1;
+        return Promise.resolve(ANALYSIS);
+      },
+      stream: (_o, onDelta) => {
+        calls += 1;
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const second = await analyzeAssignment(deps(fs, counting), { assignmentId });
+    expect(second).toMatchObject({ ok: false, reason: 'EMPTY' });
+    expect(calls).toBe(0);
+    expect(second.usage).toBeUndefined();
+
+    // The earlier insight survives untouched — `saveInsight` replaces a whole record, so reusing its id
+    // would have silently destroyed it.
+    const all = await listAllInsights(fs, key);
+    const kept = all.find((i) => i.provenance.assignmentId === assignmentId);
+    expect(kept?.summary).toBe(first.insight?.summary);
+    expect(kept?.provenance.refusalRead).toBeUndefined();
   });
 
   it('gives the analysis real token headroom, not a tight ceiling (08 §3.7)', async () => {

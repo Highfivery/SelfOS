@@ -1,5 +1,6 @@
 import { categoryForKey, type IntimacyCategory } from '../intimacy/topics';
 import {
+  type SkipKind,
   LIFE_AREAS,
   SUGGESTABLE_ANSWER_TYPES,
   type RelationshipType,
@@ -532,14 +533,64 @@ export const ANALYSIS_SYSTEM = `${SAFETY}
 Turn a person's questionnaire answers into a durable coaching Insight. Return ONLY a JSON object:
 {"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "categories": 1-2 life-area tags from EXACTLY this list: ${LIFE_AREAS.join(', ')}, "crisisFlag": boolean}.
 Set "crisisFlag": true ONLY if the answers disclose risk of self-harm, abuse, or acute crisis. Never diagnose. Do not quote the raw answers back verbatim — synthesize.
-The "summary" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.`;
+The "summary" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.
+
+If you are shown questions the person did NOT answer: that is feedback about those QUESTIONS. Never infer a trait, a circumstance, a feeling, a boundary or a motive from a refusal, and never state or imply why someone might have declined beyond what they said themselves. A silence is not evidence about a person.`;
 
 export function buildAnalysisUserMessage(input: {
   title: string;
   qa: { prompt: string; answer: string }[];
+  /** Questions that came back refused, if any (08 §34.3). */
+  skips?: SkipLine[];
 }): string {
   const lines = input.qa.map((x) => `Q: ${x.prompt}\nA: ${x.answer}`).join('\n\n');
-  return `Questionnaire: "${input.title}"\n\nAnswers:\n${lines}\n\nProduce the Insight JSON.`;
+  const skipped = buildSkipBlock(input.skips ?? []);
+  return `Questionnaire: "${input.title}"\n\nAnswers:\n${lines}${skipped}\n\nProduce the Insight JSON.`;
+}
+
+/**
+ * One refused question as the analysis sees it. `reason` is the recipient's OWN words and is only ever set
+ * for a Standard send — on a Private send they were told the sender would not see their written answers, and
+ * a skip reason is a written answer (08 §34.2). `kind` is the preset it came from, which is safe either way.
+ */
+export interface SkipLine {
+  prompt: string;
+  kind: SkipKind;
+  reason?: string;
+}
+
+const SKIP_KIND_PHRASE: Record<SkipKind, string> = {
+  unclear: 'said it was not clear enough to answer',
+  'prefer-not-to-say': 'preferred not to say',
+  'not-applicable': 'said it does not apply to them',
+  other: 'skipped it',
+};
+
+/**
+ * Cap the block so a long questionnaire can't crowd out the answers it is supposed to be secondary to. On the
+ * REFUSAL path the skips are not secondary — they are the entire content being read — so that path passes its
+ * own, larger cap rather than truncating the thing it was asked to look at.
+ */
+const MAX_SKIP_LINES = 8;
+const MAX_REFUSAL_SKIP_LINES = 24;
+
+/**
+ * What the model is told about refusals (08 §34.3). The framing is the safety-bearing part, not the data:
+ * a refusal is feedback about the QUESTION, so the model is told in the same breath never to infer anything
+ * about the person from one. Without that, "she wouldn't discuss her mother" becomes a fact in an Insight
+ * that is partner-shared by default — precisely what §25.5 excludes declines from the Q&A to prevent.
+ */
+export function buildSkipBlock(skips: SkipLine[], max: number = MAX_SKIP_LINES): string {
+  if (skips.length === 0) return '';
+  const shown = skips.slice(0, max);
+  const lines = shown
+    .map(
+      (s) =>
+        `- "${s.prompt}" — they ${SKIP_KIND_PHRASE[s.kind]}${s.reason ? `: "${s.reason}"` : ''}`,
+    )
+    .join('\n');
+  const more = skips.length > shown.length ? `\n- …and ${skips.length - shown.length} more` : '';
+  return `\n\nQUESTIONS THEY DID NOT ANSWER — this is feedback about the QUESTIONS, not information about the person. Use it ONLY to judge which questions to rewrite or drop. NEVER infer a trait, a circumstance, a feeling or a boundary from the fact that someone declined to answer, and never state or imply anything about why they might have declined beyond what they said themselves:\n${lines}${more}`;
 }
 
 /**
@@ -765,4 +816,37 @@ export function buildGapFinderUserMessage(input: {
   }
   parts.push(`\nSuggest up to 3 questionnaires that would help them learn something useful next.`);
   return parts.join('\n');
+}
+
+/**
+ * Reading a questionnaire that came back entirely unanswered (08 §34.3). The whole prompt is about the
+ * QUESTIONS: the one thing it must never do is turn a silence into a claim about the person.
+ */
+export const REFUSAL_ANALYSIS_SYSTEM = `${SAFETY}
+
+Someone sent a questionnaire and every question came back unanswered — skipped, or left blank. You are
+helping the SENDER understand why it did not land, so they can ask better next time.
+
+You are reading the QUESTIONS, not the person. Absolute rules:
+- NEVER infer a trait, a circumstance, a feeling, a boundary or a motive from the fact that someone did not
+  answer. Silence is not evidence about them.
+- NEVER speculate about why they might have declined beyond the reason they gave in their own words.
+- Say nothing about the person at all. Every observation is about a question: what made it hard to answer,
+  what it assumed, what it should have asked instead.
+- If the reasons do not actually tell you much, say so plainly and briefly rather than inventing a pattern.
+
+Return ONLY a JSON object:
+{
+  "summary": "2-4 sentences to the sender about what these questions got wrong and what would work better",
+  "facts": [{ "text": "one concrete change to a question", "shareable": false }],
+  "confidence": "low" | "medium" | "high",
+  "categories": ["Other"],
+  "crisisFlag": false
+}`;
+
+export function buildRefusalUserMessage(input: { title: string; skips: SkipLine[] }): string {
+  return `Questionnaire: "${input.title}"\n\nEvery question came back unanswered.${buildSkipBlock(
+    input.skips,
+    MAX_REFUSAL_SKIP_LINES,
+  )}\n\nProduce the JSON.`;
 }

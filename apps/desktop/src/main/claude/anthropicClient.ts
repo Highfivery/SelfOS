@@ -576,6 +576,33 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The REFUSAL read (08 §34.3): a Standard send whose every question came back unanswered. Its user
+      // message ends "Produce the JSON." — NOT "Produce the Insight JSON" — so it must be matched before/
+      // apart from the ordinary analysis, and its summary is deliberately distinct so a test can tell which
+      // of the two prompts actually ran.
+      //
+      // `shareable: true` here is deliberate and load-bearing: the refusal read must NEVER trust the model
+      // on sharing, because these fact texts are derived from the recipient's own words. The service
+      // hardcodes `shareable: false` + an explicit `shareableTypes: []`, so a fake that returned `false`
+      // would pass even if that were regressed to `f.shareable`. This one fails.
+      if (userText.includes('Every question came back unanswered')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'These questions asked for a verdict before they gave anything to react to.',
+            facts: [
+              { text: 'Ask about one concrete moment instead of the whole year.', shareable: true },
+            ],
+            confidence: 'low',
+            categories: ['Other'],
+            // Also deliberate: a refusal read must never carry a crisis flag — there are no answers to
+            // derive one from, and a crisis signal read out of a silence is a guess. The service drops it;
+            // returning `false` here would let a regression that passed it through go unnoticed.
+            crisisFlag: true,
+          }),
+          usage: { inputTokens: 90, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // Questionnaire analysis + the context-only distillation (08 §3.7/§13.4/§16.2) ask to "Produce the
       // Insight JSON". Return a valid analysis object so the offline Analyze / contextOnly paths parse.
       if (userText.includes('Produce the Insight JSON')) {

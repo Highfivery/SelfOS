@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.60.1](https://github.com/Highfivery/SelfOS/compare/v0.60.0...v0.60.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* **app:** six defects found in the pre-Notes review ([#555](https://github.com/Highfivery/SelfOS/issues/555)) ([044b76b](https://github.com/Highfivery/SelfOS/commit/044b76b824a6bcbc2db504bf8bf6ac2407a77b3f))
+* **vault:** key rotation no longer orphans relationships/, together/ and story/ ([#553](https://github.com/Highfivery/SelfOS/issues/553)) ([f847c40](https://github.com/Highfivery/SelfOS/commit/f847c40b7f4db48e7763b7a8974669b77be965ad))
+
 ## [0.60.0](https://github.com/Highfivery/SelfOS/compare/v0.59.0...v0.60.0) (2026-08-21)
 
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.59.0](https://github.com/Highfivery/SelfOS/compare/v0.58.1...v0.59.0) (2026-08-21)
+
+
+### Features
+
+* **inbox:** one queue for everything waiting on you ([#548](https://github.com/Highfivery/SelfOS/issues/548)) ([d97ad90](https://github.com/Highfivery/SelfOS/commit/d97ad90ce2203c772840a8f433e8c1a5daacdc54))
+* **inbox:** the bell stops repeating the queue ([#549](https://github.com/Highfivery/SelfOS/issues/549)) ([07c8859](https://github.com/Highfivery/SelfOS/commit/07c88599573c92685c754209883aceefef9cffee))
+* **questionnaires:** everything you've left alone, in two groups you can undo ([#547](https://github.com/Highfivery/SelfOS/issues/547)) ([0e5403c](https://github.com/Highfivery/SelfOS/commit/0e5403cbeaa217e06d4323222db192b9c5c9ba87))
+
+
+### Bug Fixes
+
+* **questionnaires:** a skip changes what gets asked next ([#544](https://github.com/Highfivery/SelfOS/issues/544)) ([779d8e4](https://github.com/Highfivery/SelfOS/commit/779d8e46ccd762bc1aec973bab1324a825380724))
+
 ## [0.58.1](https://github.com/Highfivery/SelfOS/compare/v0.58.0...v0.58.1) (2026-08-21)
 
 

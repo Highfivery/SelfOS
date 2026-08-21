@@ -12,6 +12,13 @@ import { createNote, listNotesByAuthor, listNotesForRecipient, markNoteEmailed }
 import { collectInbox } from '../inbox';
 import { registerBuiltInInboxProviders } from '../inbox/providers';
 import { buildNoteEmail } from '../email/emailComposer';
+import {
+  drainEmailTaps,
+  listEmailResponses,
+  mintEmailToken,
+  noteAnswerOf,
+  recordNoteAnswer,
+} from '../email/emailResponse';
 
 const NOW = new Date('2026-08-21T12:00:00.000Z');
 
@@ -362,5 +369,151 @@ describe('notes — the recipient surfaces (76 §3.6)', () => {
     });
     expect(mail.text).toContain('Open SelfOS');
     expect(mail.html).toContain('Open SelfOS');
+  });
+});
+
+describe('answering a note (76 §3.5)', () => {
+  it('records ONE answer under the author whichever surface it came from, and replaces it on a change', async () => {
+    const { fs, key, owner } = await seed();
+    const note = await createNote(
+      fs,
+      key,
+      owner,
+      {
+        recipientPersonId: 'her',
+        type: 'question',
+        subject: 'A question',
+        body: 'Body.',
+        answers: [
+          { label: 'Yes', stance: 'yes' },
+          { label: 'Not now', stance: 'no' },
+        ],
+        drafted: 'ai',
+      },
+      NOW,
+    );
+
+    // In-app first.
+    await recordNoteAnswer(
+      fs,
+      key,
+      owner,
+      { noteId: note.id, answer: 'Yes', stance: 'yes', source: 'in-app' },
+      NOW,
+    );
+    let responses = await listEmailResponses(fs, key, owner);
+    expect(responses).toHaveLength(1);
+    expect(noteAnswerOf(responses, note.id)?.answer).toBe('Yes');
+    expect(noteAnswerOf(responses, note.id)?.source).toBe('in-app');
+
+    // Then a change of mind — REPLACES rather than appends, so the author reads one answer, not a log.
+    await recordNoteAnswer(
+      fs,
+      key,
+      owner,
+      { noteId: note.id, answer: 'Not now', stance: 'no', source: 'in-app' },
+      new Date('2026-08-21T13:00:00.000Z'),
+    );
+    responses = await listEmailResponses(fs, key, owner);
+    expect(responses).toHaveLength(1);
+    expect(noteAnswerOf(responses, note.id)?.answer).toBe('Not now');
+    expect(noteAnswerOf(responses, note.id)?.stance).toBe('no');
+
+    // A different note is untouched by either.
+    expect(noteAnswerOf(responses, 'some-other-note')).toBeNull();
+  });
+
+  it('an emailed tap drains into the SAME record shape, carrying the note id', async () => {
+    const { fs, key, owner } = await seed();
+    await mintEmailToken(fs, key, owner, {
+      token: 'tok-1',
+      schemaVersion: 1,
+      interactionId: 'int-1',
+      family: 'note',
+      noteId: 'note-7',
+      kind: 'note-answer',
+      answer: 'I’m in',
+      stance: 'yes',
+      mintedAt: NOW.toISOString(),
+    });
+
+    const drained = await drainEmailTaps(
+      fs,
+      key,
+      owner,
+      { drainTaps: async () => [{ token: 'tok-1', at: NOW.toISOString() }] },
+      NOW,
+    );
+
+    expect(drained).toHaveLength(1);
+    // The note id has to survive the drain, or the answer belongs to nothing.
+    expect(drained[0]?.noteId).toBe('note-7');
+    expect(drained[0]?.kind).toBe('note-answer');
+    expect(drained[0]?.stance).toBe('yes');
+    expect(noteAnswerOf(await listEmailResponses(fs, key, owner), 'note-7')?.answer).toBe('I’m in');
+  });
+
+  it('renders the answers as buttons in the email, and only when there are taps to mint', async () => {
+    const withTaps = buildNoteEmail({
+      subject: 'A question',
+      body: 'Body.',
+      answers: [{ label: 'Yes', url: 'https://relay.example/t/abc' }],
+    });
+    expect(withTaps.html).toContain('https://relay.example/t/abc');
+    expect(withTaps.text).toContain('Yes: https://relay.example/t/abc');
+    // With buttons the "open the app" closer would be redundant.
+    expect(withTaps.text).not.toContain('Open SelfOS to see it.');
+
+    // Without a relay there is nothing to mint, so it must not dead-end.
+    const without = buildNoteEmail({ subject: 'A question', body: 'Body.' });
+    expect(without.text).toContain('Open SelfOS to see it.');
+  });
+});
+
+describe('reading notes is resilient (76 §5.3)', () => {
+  it('a corrupt note does not take down the whole list', async () => {
+    const { fs, key, owner } = await seed();
+    await createNote(
+      fs,
+      key,
+      owner,
+      {
+        recipientPersonId: 'her',
+        type: 'announcement',
+        subject: 'Good one',
+        body: 'Body.',
+        answers: [],
+        drafted: 'self',
+      },
+      NOW,
+    );
+    // Not an envelope at all — `readEncryptedJson` THROWS on this, which used to blank the surface.
+    await fs.writeAtomic(
+      `people/${owner}/notes/broken.enc`,
+      new TextEncoder().encode('not-an-envelope'),
+    );
+
+    const notes = await listNotesByAuthor(fs, key, owner);
+    expect(notes.map((n) => n.subject)).toEqual(['Good one']);
+  });
+
+  it('refuses a crafted recipient id WITHOUT attempting a read', async () => {
+    const { fs, key } = await seed();
+    // The assertion has to be that no read is ATTEMPTED. An in-memory FS treats a path as an opaque
+    // string, so it can never reproduce the traversal itself — the node host's `join` is what normalizes
+    // `..`. Spying on the reads is the only thing that distinguishes "refused" from "happened to miss".
+    const reads: string[] = [];
+    const spy: FileSystem = { ...fs, read: (path) => (reads.push(path), fs.read(path)) };
+
+    const ctx = await buildNoteContext(spy, key, '../../config');
+    expect(ctx.digest).toBe('');
+    expect(ctx.recipientName).toBe('them');
+    expect(reads).toEqual([]);
+
+    // A legitimate id still reads, so the guard isn't refusing everything.
+    const { her } = await seed();
+    reads.length = 0;
+    await buildNoteContext(spy, key, her);
+    expect(reads.length).toBeGreaterThan(0);
   });
 });

@@ -26,6 +26,7 @@ import {
   upsertPerson,
   upsertRelationship,
 } from '@selfos/core/people';
+import { readNote } from '@selfos/core/notes';
 import { getGoal, saveGoal } from '@selfos/core/goals';
 import { hashPin } from '@selfos/core/crypto';
 import { queryUsage, recordUsage } from '@selfos/core/usage';
@@ -1797,7 +1798,8 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
     await w.getByRole('link', { name: 'People' }).click();
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Notes' }).click();
-    await w.getByLabel('Notes', { exact: true }).fill('enjoys cycling');
+    // Scoped to `main`: the Notes NAV LINK carries the same aria-label (the 2026-08-18 badge lesson).
+    await w.locator('main').getByLabel('Notes', { exact: true }).fill('enjoys cycling');
     // Lock the notes to this person only via the per-field ShareToggle.
     await w.getByRole('button', { name: /Notes: shared/i }).click();
     await w.getByRole('button', { name: 'Save' }).click();
@@ -1805,7 +1807,9 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
     // Reopen and confirm the merged field + the lock round-tripped through encryption.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Notes' }).click();
-    await expect(w.getByLabel('Notes', { exact: true })).toHaveValue('enjoys cycling');
+    await expect(w.locator('main').getByLabel('Notes', { exact: true })).toHaveValue(
+      'enjoys cycling',
+    );
     await expect(w.getByRole('button', { name: /Notes: private/i })).toBeVisible();
   } finally {
     await app.close();
@@ -9007,6 +9011,7 @@ test('relationship-scoped sharing: a partner-scoped fact reaches the partner, no
 
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
+  deviceSettingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
@@ -9021,6 +9026,11 @@ async function seedReadyVault(
     schemaVersion: 1,
     values: settingsValues,
   });
+  // Device-scoped settings live device-local, never in the vault (#555 moved appearance here).
+  await writeJson(join(userData, 'device-settings.json'), {
+    schemaVersion: 1,
+    values: deviceSettingsValues,
+  });
   const ownerId = await seedHousehold(userData, vault);
   await writeJson(join(userData, 'state.json'), {
     schemaVersion: 1,
@@ -9031,7 +9041,7 @@ async function seedReadyVault(
   return { userData, vault };
 }
 
-test('settings: changing the theme applies it and persists to the vault', async () => {
+test('settings: changing the theme applies it and persists device-local', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -9042,15 +9052,20 @@ test('settings: changing the theme applies it and persists to the vault', async 
     await w.getByRole('menuitemradio', { name: 'Dark' }).click();
     await expect(w.locator('html')).toHaveAttribute('data-theme', 'dark');
 
-    const settingsFile = join(vault, 'config', 'settings.json');
+    // Appearance is `scope: 'device'` (#555 — a member must be able to set their own theme without
+    // `settings.manage`), so it lands device-local and NOT in the synced vault.
     await expect
       .poll(async () => {
-        const parsed = JSON.parse(await readFile(settingsFile, 'utf8')) as {
-          values: Record<string, unknown>;
-        };
+        const parsed = JSON.parse(
+          await readFile(join(userData, 'device-settings.json'), 'utf8'),
+        ) as { values: Record<string, unknown> };
         return parsed.values['appearance.theme'];
       })
       .toBe('dark');
+    const vaultValues = JSON.parse(
+      await readFile(join(vault, 'config', 'settings.json'), 'utf8'),
+    ) as { values: Record<string, unknown> };
+    expect(vaultValues.values['appearance.theme']).toBeUndefined();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -9059,7 +9074,7 @@ test('settings: changing the theme applies it and persists to the vault', async 
 });
 
 test('settings: a persisted dark theme is applied on boot', async () => {
-  const { userData, vault } = await seedReadyVault({ 'appearance.theme': 'dark' });
+  const { userData, vault } = await seedReadyVault({}, { 'appearance.theme': 'dark' });
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
@@ -11668,11 +11683,12 @@ test('discoverability: Settings shows the device-vs-synced signal (41)', async (
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Settings' }).click();
-    // Appearance (the default section) is synced across devices.
-    await expect(w.getByText('Synced').first()).toBeVisible();
-    // About → "Check for updates automatically" is device-local.
-    await w.getByRole('button', { name: 'About', exact: true }).click();
+    // Appearance (the default section) is device-local — every one of its settings is `scope: 'device'`
+    // since #555, so a member can set their own theme without `settings.manage`.
     await expect(w.getByText('This device').first()).toBeVisible();
+    // Sessions carries vault-scoped settings, which say so.
+    await w.getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(w.getByText('Synced').first()).toBeVisible();
 
     // ~360px: no PAGE/`main` horizontal scrollbar (CLAUDE.md §12). The section nav's own pill-row scroll is
     // intentional (the responsive Settings design), so check main/doc width — matching the settings guard.
@@ -17625,7 +17641,6 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .first()
       .click();
     // `settle` is scoped to the per-step loop above; this is outside it.
-    await w.waitForTimeout(600);
     /*
      * The profile step WAITS to be asked (74 §3.6.9) — "Next: your profile" navigates to it and spends
      * nothing, which is the whole point of that change. Without this the walk sat on the step until its
@@ -18145,6 +18160,170 @@ test('say something to your partner (75): writes lines, filters BOTH ways, keeps
     // One action, and it opens the take so you can show them what it asks (§11.1-7 — no nudge, no message).
     await w.getByRole('button', { name: 'See what it asks' }).click();
     await expect(w).toHaveURL(/tests\/dirty-talk\/take/);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Notes (76) — the owner writes to ONE person, chosen before a word of the note exists.
+ *
+ * Drives the COMPLETE flow through the rendered UI (§7): the nav entry, the recipient step, the
+ * compose step, the preview, and the send — then decrypts the vault to prove the note record landed,
+ * and switches to the recipient to prove it reached their queue with no sender named.
+ */
+test('notes (76): write a note to one person → decrypt the record → it lands in THEIR inbox, unattributed', async () => {
+  // AI on: the SECOND note is AI-drafted so it carries answer labels, which is the only way a note
+  // becomes answerable at all.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+
+  // Seed Angel as a SUBJECT with a login — the picker offers people who have their own experience in
+  // the app, and only a subject has an Inbox for a note to land in.
+  const fs = createNodeFileSystem(vault);
+  const key = (await loadMasterKey(createNodeSecretStore(userData, passthrough)))!;
+  await upsertPerson(fs, key, { displayName: 'Angel', isSubject: true, tags: [] });
+  const angel = (await listPeople(fs, key)).find((p) => p.displayName === 'Angel')!;
+  await setAccount(fs, key, { personId: angel.id, roleId: 'member' });
+  await seedCompletedIntake(fs, key, angel.id); // else the member onboarding gate takes over her session
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // The Notes surface is owner-only and says so.
+    await w.getByRole('link', { name: 'Notes' }).click();
+    await expect(w.getByRole('heading', { name: 'Notes' })).toBeVisible();
+    await expect(w.getByText('Admin only')).toBeVisible();
+
+    await w.getByRole('button', { name: 'Write a note' }).click();
+
+    // Step 1 is the PERSON, before a word of the note exists.
+    await expect(w.getByRole('heading', { name: 'Who is this for?' })).toBeVisible();
+    await w.getByRole('radio', { name: /Angel/ }).click();
+    // No address yet — the surface says plainly that the note still lands, rather than failing later.
+    await expect(w.getByText(/reach their SelfOS inbox only/i)).toBeVisible();
+    await w.getByRole('button', { name: /Write for Angel/ }).click();
+
+    // Step 2 — written for her. The owner's own words; no AI needed for this walk.
+    await expect(w.getByRole('heading', { name: 'A note for Angel' })).toBeVisible();
+    await w.getByRole('button', { name: 'Write it myself' }).click();
+    await w.getByLabel('Subject').fill('Covers are here');
+    await w.getByLabel('Body').fill('Your books can have covers now.');
+
+    await w.getByRole('button', { name: /^Preview/ }).click();
+    await expect(w.getByText('In their email')).toBeVisible();
+    await expect(w.getByText('In their SelfOS inbox')).toBeVisible();
+
+    await w.getByRole('button', { name: /Send to Angel/ }).click();
+    await expect(w.getByText(/No email went out/i)).toBeVisible();
+    await expect(w.getByText(/In SelfOS only/i)).toBeVisible();
+
+    await expectNoInnerOverflow(w);
+
+    // A SECOND note must not inherit the first one's mode and open on an empty screen (76 §3.2).
+    // It is also a QUESTION, so the recipient has something to tap — exercised below.
+    await w.getByRole('button', { name: 'Write a note' }).click();
+    await w.getByRole('radio', { name: /Angel/ }).click();
+    await w.getByRole('button', { name: /Write for Angel/ }).click();
+    await expect(w.getByLabel('What are you thinking?')).toBeVisible();
+    await w.getByRole('button', { name: 'Write it myself' }).click();
+    await expect(w.getByLabel('Subject')).toBeVisible();
+    await w.setViewportSize({ width: 390, height: 780 });
+    await expect(w.getByRole('heading', { name: 'A note for Angel' })).toBeVisible();
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 860 });
+
+    // Draft it as a QUESTION so it carries answers — the thing the type picker exists to decide.
+    await w.getByRole('button', { name: 'Draft something' }).click();
+    await w.getByRole('radio', { name: /^Question/ }).click();
+    await w.getByLabel('What are you thinking?').fill('ask her what she wants more of');
+    await w.getByRole('button', { name: /Draft it for Angel/ }).click();
+    await expect(w.getByLabel('Subject')).toHaveValue('A quick one');
+    await w.getByRole('button', { name: /^Preview/ }).click();
+    // The answers must be in the EMAIL preview, because they are minted into the email itself.
+    await expect(w.getByText('Time outside')).toBeVisible();
+    await w.getByRole('button', { name: /Send to Angel/ }).click();
+    await expect(w.getByText(/on its way by email|SelfOS inbox/)).toBeVisible();
+
+    // The record is on disk, ENCRYPTED, under the AUTHOR — then read back through the real service.
+    const owner = (await listPeople(fs, key)).find((p) => p.displayName !== 'Angel')!;
+    const notesDir = join(vault, 'people', owner.id, 'notes');
+    const files = (await readdir(notesDir)).filter((f) => f.endsWith('.enc'));
+    expect(files).toHaveLength(2);
+    for (const f of files) {
+      expect(await readFile(join(notesDir, f), 'utf8')).toContain('aes-256-gcm');
+    }
+    const stored = await Promise.all(
+      files.map((f) => readNote(fs, key, owner.id, f.replace(/\.enc$/, ''))),
+    );
+    const announcement = stored.find((n) => n?.subject === 'Covers are here');
+    expect(announcement?.recipientPersonId).toBe(angel.id);
+    expect(announcement?.emailedAt).toBeUndefined(); // reach failed; the note did not
+    // Written by hand ⇒ nothing to tap ⇒ an announcement, whatever the picker last said.
+    expect(announcement?.type).toBe('announcement');
+    expect(announcement?.answers).toEqual([]);
+
+    // The AI-drafted one is a QUESTION and carries the labels the recipient will tap.
+    const question = stored.find((n) => n?.subject === 'A quick one');
+    expect(question?.type).toBe('question');
+    expect(question?.answers.map((a) => a.label)).toEqual(['Time outside', 'Quiet evenings']);
+
+    // And it is in HER queue — naming the thing, never who sent it.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: 'Inbox' }).click();
+    await expect(w.getByText('Covers are here')).toBeVisible();
+    await expect(w.getByText(/from tester/i)).toHaveCount(0);
+    // Not "From someone" either — a note has no sender, so inventing one is worse than naming one.
+    await expect(w.getByText(/from someone/i)).toHaveCount(0);
+
+    // OPENING it must reach a real surface. Asserting the row RENDERS proved nothing: the click used to
+    // land on a route that did not exist and bounced silently to Home.
+    // `.first()`: the row and its dismiss (X) button both carry the title in their accessible name.
+    await w
+      .getByRole('button', { name: /Covers are here/ })
+      .first()
+      .click();
+    await expect(w.getByRole('heading', { name: 'Covers are here' })).toBeVisible();
+    await expect(w.getByText('Your books can have covers now.')).toBeVisible();
+    await expectNoInnerOverflow(w);
+
+    // The second note is a QUESTION, so it is answerable — and answering it is the whole point of the
+    // type picker. Every green test before this one asserted the buttons RENDERED in the author's
+    // preview, which said nothing about whether anyone could ever tap one.
+    await w.getByRole('button', { name: 'Inbox' }).click();
+    await w
+      .getByRole('button', { name: /A quick one/ })
+      .first()
+      .click();
+    await expect(w.getByRole('heading', { name: 'A quick one' })).toBeVisible();
+    await w.setViewportSize({ width: 390, height: 780 });
+    await expect(w.getByRole('heading', { name: 'A quick one' })).toBeVisible();
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 860 });
+    await w.getByRole('button', { name: 'Time outside' }).click();
+    await expect(w.getByText('You answered:')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Time outside' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // Not left disabled by the save — changing your mind has to stay possible.
+    await expect(w.getByRole('button', { name: 'Quiet evenings' })).toBeEnabled();
+
+    // The answer is filed under the AUTHOR — which is why the owner can read it at all (76 §3.5).
+    const answers: string[] = [];
+    for (const name of await readdir(join(vault, 'people', owner.id, 'email', 'responses'))) {
+      if (!name.endsWith('.enc')) continue;
+      const parsed = (await readEncryptedJson(
+        fs,
+        `people/${owner.id}/email/responses/${name}`,
+        key,
+      )) as { answer?: string; noteId?: string; source?: string } | null;
+      if (parsed?.noteId) answers.push(`${parsed.answer}:${parsed.source}`);
+    }
+    expect(answers).toEqual(['Time outside:in-app']);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

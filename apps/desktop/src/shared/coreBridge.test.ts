@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '@selfos/core/host';
 import { loadMasterKey, MASTER_KEY_ID } from '@selfos/core/crypto';
 import { toBase64 } from '@selfos/core/encoding';
+import { CAPABILITIES } from '@selfos/core/capabilities';
 import type {
   ClaudeClient,
   EmailClient,
@@ -659,6 +660,20 @@ function analysisClaude(): ClaudeClient {
   };
 }
 
+/**
+ * Grant an account while signed in as the Owner. `accessSetAccount` is gated on `users.manage`, so a test
+ * that has already switched to a member cannot mint the next account from there — it has to come back
+ * first, and returning TO the Owner needs the Owner's own PIN.
+ */
+async function grantAsOwner(
+  bridge: ReturnType<typeof createCoreBridge>,
+  ownerId: string,
+  input: { personId: string; roleId: string; pin: string | null },
+): Promise<void> {
+  await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+  await bridge.accessSetAccount(input);
+}
+
 async function freshOwner(): Promise<{
   host: ReturnType<typeof makeHost>;
   bridge: ReturnType<typeof createCoreBridge>;
@@ -1071,6 +1086,66 @@ describe('createCoreBridge', () => {
     expect(queued.every((e) => e.fromName === undefined)).toBe(true);
     // The badge counts what needs her: a question does, an announcement does not.
     expect(queued.filter((e) => e.waiting)).toHaveLength(1);
+
+    // …and she can OPEN and ANSWER it. The queue navigates; this is the surface that owns the decision.
+    const question = rows.find((r) => r.note.type === 'question')!.note;
+    const read = await bridge.notesGetForMe({ authorPersonId: ownerId, noteId: question.id });
+    expect(read?.subject).toBe('One thing you would want more of?');
+    expect(read?.answers.map((a) => a.label)).toEqual(['Time outside', 'Quiet evenings']);
+    expect(read?.answered).toBeUndefined();
+
+    const answered = await bridge.notesAnswer({
+      authorPersonId: ownerId,
+      noteId: question.id,
+      label: 'Quiet evenings',
+    });
+    expect(answered?.answered).toBe('Quiet evenings');
+    // A label the author never offered is refused — a crafted payload can't invent an answer.
+    expect(
+      await bridge.notesAnswer({
+        authorPersonId: ownerId,
+        noteId: question.id,
+        label: 'Something else entirely',
+      }),
+    ).toBeNull();
+
+    // Back on the owner's side, the answer is THERE — filed under him, which is the whole reason the
+    // tokens and the activity live under the sender rather than the recipient (§5.3).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const afterAnswer = await bridge.notesList();
+    expect(afterAnswer.find((r) => r.note.id === question.id)?.answered).toBe('Quiet evenings');
+    expect(afterAnswer.find((r) => r.note.type === 'announcement')?.answered).toBeUndefined();
+  });
+
+  it('notes: a note is answerable ONLY by the person it was written for', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const her = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const other = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: her.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+
+    const sent = await bridge.notesSend({
+      recipientPersonId: her.id,
+      type: 'suggestion',
+      subject: 'Worth a try',
+      body: 'Something small.',
+      answers: [{ label: 'I’m game', stance: 'yes' }],
+      drafted: 'ai',
+    });
+    expect(sent.ok).toBe(true);
+    const noteId = sent.ok ? sent.noteId : '';
+
+    // Someone else in the household — holding a valid author id and note id — gets nothing, and can
+    // neither read it nor answer on her behalf.
+    expect((await bridge.sessionSetActive({ personId: other.id })).ok).toBe(true);
+    expect(await bridge.notesGetForMe({ authorPersonId: ownerId, noteId })).toBeNull();
+    expect(
+      await bridge.notesAnswer({ authorPersonId: ownerId, noteId, label: 'I’m game' }),
+    ).toBeNull();
+
+    // And nothing was recorded by the attempt.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.notesList()).find((r) => r.note.id === noteId)?.answered).toBeUndefined();
   });
 
   it('notes: a member is denied every note channel', async () => {
@@ -1096,6 +1171,74 @@ describe('createCoreBridge', () => {
     expect(
       await bridge.notesDraft({ recipientPersonId: her.id, type: 'announcement', intent: 'x' }),
     ).toMatchObject({ ok: false, reason: 'DENIED' });
+  });
+
+  it('notes: a member granted EVERY capability is still denied — the gate is the role (§8.1)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const her = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const member = await bridge.peopleSave({ displayName: 'Mo', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+
+    // The Owner turns EVERYTHING on for the Member role — the most permissive thing the Roles matrix can
+    // express. The note pass reads the recipient's private and `restricted` record, and the only thing
+    // that justifies that is the Owner's own full access, so no capability may unlock it.
+    const access = await bridge.accessGet();
+    const memberRole = access.roles.find((r) => r.id === 'member')!;
+    await bridge.accessSaveRole({
+      ...memberRole,
+      capabilities: Object.fromEntries(CAPABILITIES.map((c) => [c, true])),
+    });
+
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    expect(await bridge.notesRecipients()).toEqual([]);
+    expect(await bridge.notesList()).toEqual([]);
+    expect(
+      await bridge.notesDraft({ recipientPersonId: her.id, type: 'announcement', intent: 'x' }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
+    expect(
+      await bridge.notesSend({
+        recipientPersonId: her.id,
+        type: 'announcement',
+        subject: 'nope',
+        body: 'nope',
+        answers: [],
+        drafted: 'self',
+      }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
+    expect(await bridge.peopleSetEmail({ personId: her.id, email: 'x@y.z' })).toBeNull();
+    void ownerId;
+  });
+
+  it('access writes are gated, and nobody can mint a second Owner or revoke the first (04)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const member = await bridge.peopleSave({ displayName: 'Mo', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+
+    // These three decide who can do what. Ungated, a hand-crafted IPC call made every capability check
+    // downstream decorative — the caller could simply grant themselves the Owner role.
+    await expect(
+      bridge.accessSetAccount({ personId: member.id, roleId: 'owner', pin: null }),
+    ).rejects.toThrow(/permitted/);
+    await expect(bridge.accessRemoveAccount(ownerId)).rejects.toThrow(/permitted/);
+    const access = await bridge.accessGet();
+    await expect(
+      bridge.accessSaveRole({ ...access.roles.find((r) => r.id === 'member')! }),
+    ).rejects.toThrow(/permitted/);
+
+    // Even the OWNER may not hand the role to someone else: there is exactly one, minted at setup.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await expect(
+      bridge.accessSetAccount({ personId: member.id, roleId: 'owner', pin: null }),
+    ).rejects.toThrow(/permitted/);
+    // …nor revoke their own login, which would leave the household with no full-access role at all.
+    await expect(bridge.accessRemoveAccount(ownerId)).rejects.toThrow(/permitted/);
+
+    // Setting the Owner's OWN account still works — that is how their PIN is changed.
+    await bridge.accessSetAccount({ personId: ownerId, roleId: 'owner', pin: '4321' });
+    expect((await bridge.accessGet()).accounts.find((a) => a.personId === ownerId)?.hasPin).toBe(
+      true,
+    );
   });
 
   it('people: a member sees identity only; the owner still sees the full record', async () => {
@@ -4365,7 +4508,7 @@ describe('createCoreBridge', () => {
 
     // A Guest (no memory.own) is denied entirely.
     const guest = await bridge.peopleSave({ displayName: 'Gee', isSubject: false, tags: [] });
-    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await grantAsOwner(bridge, ownerId, { personId: guest.id, roleId: 'guest', pin: null });
     expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
     expect(
       (await bridge.memorySetScopeBatch({ types: ['partner'], factTargets: [], answerTargets: [] }))
@@ -5237,7 +5380,7 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: recipient.id });
     // recipient is a Member — Member HAS viewResults, so use a guest to prove the gate.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
-    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await grantAsOwner(bridge, ownerId, { personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.assignmentsResults(q.id)).toEqual([]);
   });
@@ -5442,7 +5585,7 @@ describe('createCoreBridge', () => {
 
     // A different member can't delete someone else's questionnaire either.
     const other = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
-    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+    await grantAsOwner(bridge, ownerId, { personId: other.id, roleId: 'member', pin: null });
     await bridge.sessionSetActive({ personId: other.id });
     await expect(bridge.questionnairesDelete(q.id)).rejects.toThrow(/permitted/);
 
@@ -6466,7 +6609,7 @@ describe('createCoreBridge', () => {
 
     // Gated on viewResults: a Guest (no viewResults) gets an empty overview even though sends exist.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
-    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await grantAsOwner(bridge, ownerId, { personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.questionnairesSentOverview()).toEqual({});
   });
@@ -6958,7 +7101,7 @@ describe('createCoreBridge', () => {
 
     // A Guest (no dreams.own) is denied entirely.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
-    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await grantAsOwner(bridge, ownerId, { personId: guest.id, roleId: 'guest', pin: null });
     expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
     expect(await bridge.dreamsList()).toEqual([]);
     await expect(

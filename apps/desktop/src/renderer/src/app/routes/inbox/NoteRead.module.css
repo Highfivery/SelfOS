@@ -1,0 +1,8 @@
+/* Reading a note (76 §3.6). Full width, no page cap (§12). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+}

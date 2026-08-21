@@ -315,6 +315,7 @@ import {
   type FetchLike,
   type RelayBundle,
 } from './relay/cloudflareDeployer';
+import { generateRelayToken } from '@selfos/core/relay';
 import { createRelayHttpClient } from './relay/relayHttpClient';
 import {
   clearRelayConfig,
@@ -489,6 +490,7 @@ import {
   type NoteDraftResult,
   type NoteRecipient,
   type NoteRow,
+  type NoteForRecipient,
   type NoteSendResult,
 } from '@selfos/core/schemas';
 import {
@@ -497,6 +499,7 @@ import {
   draftNote,
   listNotesByAuthor,
   markNoteEmailed,
+  readNote,
 } from '@selfos/core/notes';
 import { buildNoteEmail, sendNoteEmail } from '@selfos/core/email';
 import {
@@ -530,7 +533,10 @@ import {
   listEmailActivity,
   listEmailResponses,
   listIntimacyInventoryOffers,
+  mintEmailToken,
+  noteAnswerOf,
   readEmailPrefs,
+  recordNoteAnswer,
   reconcileEmailSchedule,
   resolveResendKey,
   scheduleQuestionnaireReminder,
@@ -2384,10 +2390,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   /** Build the deps for an AI authoring call, gated by `capability`; null if not permitted. */
   const aiUnavailableTitleMessage = 'Connect Claude in Settings → AI to use the title workshop.';
   const aiDeps = async (
-    capability: CapabilityKey = 'questionnaires.create',
+    /**
+     * The gate. A `CapabilityKey` is the usual case; **`'owner'`** gates on the ROLE instead, for the one
+     * pass whose justification is the Owner's existing full access rather than a grantable permission
+     * (76 §8.1 — a capability would be one Roles toggle away from a Member).
+     */
+    capability: CapabilityKey | 'owner' = 'questionnaires.create',
   ): Promise<AiDeps | null> => {
     const ctx = await host.vaultAndKey();
-    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, capability))) return null;
+    if (!ctx) return null;
+    const allowed =
+      capability === 'owner'
+        ? await activePersonIsOwner(ctx.fs, ctx.key)
+        : await activePersonCan(ctx.fs, ctx.key, capability);
+    if (!allowed) return null;
     const personId = await activePersonId();
     if (!personId) return null;
     return {
@@ -3143,22 +3159,50 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       return getAccessView(ctx.fs, ctx.key);
     },
+    // The three writes that decide WHO CAN DO WHAT. They had no gate at all: the only thing keeping a
+    // member off them was the renderer's route guard, so a hand-crafted IPC call could rewrite the role
+    // matrix or hand the caller the Owner role outright — which made every capability check downstream
+    // decorative. Gated here, at the trust boundary, like everything else.
     accessSaveRole: async (role): Promise<AccessView> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'roles.manage'))) {
+        throw new Error('Not permitted');
+      }
       await saveRole(ctx.fs, ctx.key, RoleSchema.parse(role));
       return getAccessView(ctx.fs, ctx.key);
     },
     accessSetAccount: async (input): Promise<AccessView> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
-      await setAccount(ctx.fs, ctx.key, SetAccountSchema.parse(input));
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'users.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const parsed = SetAccountSchema.parse(input);
+      // There is exactly ONE Owner, minted at setup (`householdSetup` already refuses a second). Assigning
+      // the role here is only ever legitimate for the person who ALREADY holds it — that is how the People
+      // editor sets the Owner's own PIN without demoting them. Anything else is an escalation.
+      if (parsed.roleId === OWNER_ROLE_ID) {
+        const access = await getAccessConfig(ctx.fs, ctx.key);
+        const current = access.accounts.find((a) => a.personId === parsed.personId);
+        if (current?.roleId !== OWNER_ROLE_ID) throw new Error('Not permitted');
+      }
+      await setAccount(ctx.fs, ctx.key, parsed);
       return getAccessView(ctx.fs, ctx.key);
     },
     accessRemoveAccount: async (personId): Promise<AccessView> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
-      await removeAccount(ctx.fs, ctx.key, PersonIdSchema.parse(personId));
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'users.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const parsedId = PersonIdSchema.parse(personId);
+      // Revoking the Owner's own login would leave the household with no full-access role and no way back.
+      const access = await getAccessConfig(ctx.fs, ctx.key);
+      if (access.accounts.find((a) => a.personId === parsedId)?.roleId === OWNER_ROLE_ID) {
+        throw new Error('Not permitted');
+      }
+      await removeAccount(ctx.fs, ctx.key, parsedId);
       return getAccessView(ctx.fs, ctx.key);
     },
 
@@ -6660,13 +6704,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return applyIntimacyInventoryOffer(ctx.fs, ctx.key, personId, actKey, new Date());
     },
     // ── Notes (76) ────────────────────────────────────────────────────────────────────────────────
-    // Owner-only, `notes.manage`-gated in the bridge (the trust boundary, never the renderer). Every
+    // Owner-only, gated on the ROLE in the bridge (the trust boundary, never the renderer). Every
     // handler resolves the ACTIVE person as the author, so an id in the payload can never write a note
     // as someone else.
+    //
+    // A CAPABILITY would be wrong here, and was tried first. §8.1 lets the note pass read the recipient's
+    // private and `restricted` record — the single exception in the app — and justifies it solely by the
+    // Owner already being able to read all of it. That justification does not survive one flip of a
+    // Roles-matrix toggle, which would hand a Member an unfiltered cross-person read that
+    // `factSharedWithViewer` / `isPersonFieldShared` / `summarizeForContext` otherwise forbid. So the gate
+    // is `activePersonIsOwner`, and the capability it replaced no longer exists.
 
     notesRecipients: async (): Promise<NoteRecipient[]> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return [];
+      if (!ctx || !(await activePersonIsOwner(ctx.fs, ctx.key))) return [];
       const me = await activePersonId();
       const people = await listPeople(ctx.fs, ctx.key);
       // A projection, never a full `Person` — the recipient step needs a name and an address, nothing
@@ -6682,7 +6733,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
 
     notesDraft: async (input): Promise<NoteDraftResult> => {
-      const deps = await aiDeps('notes.manage');
+      const deps = await aiDeps('owner');
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       return draftNote(deps, NoteDraftInputSchema.parse(input));
     },
@@ -6690,7 +6741,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     notesSend: async (input): Promise<NoteSendResult> => {
       const ctx = await host.vaultAndKey();
       const author = ctx ? await activePersonId() : null;
-      if (!ctx || !author || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) {
+      if (!ctx || !author || !(await activePersonIsOwner(ctx.fs, ctx.key))) {
         return { ok: false, reason: 'DENIED', message: 'Not available.' };
       }
       const parsed = NoteSendInputSchema.parse(input);
@@ -6707,10 +6758,44 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!address) return { ok: true, noteId: note.id, emailed: false };
 
       const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+
+      // One tap token per answer, so a question or suggestion is answerable FROM THE EMAIL and not just
+      // in the app. Without a relay there is nothing to mint and `buildNoteEmail` closes with its "Open
+      // SelfOS" prompt instead — the note still lands, it just isn't tappable from the inbox.
+      //
+      // The tokens are minted under the AUTHOR, not the recipient, for the same reason the delivery
+      // record is (§5.3): `drainEmailTaps` reads `people/<id>/email/tokens/` for whichever person's
+      // reconcile is running, and that reconcile is active-person-scoped. Filed under the recipient they
+      // would only ever drain when THEY signed in, and the answer would never reach the person who asked.
+      const relayConfig = await readRelayConfig(ctx.fs, ctx.key);
+      const endpoint = relayConfig?.endpointUrl.replace(/\/+$/, '');
+      const interactionId = uuid();
+      const tapTokens: string[] = [];
+      const answerButtons: { label: string; url: string }[] = [];
+      if (endpoint) {
+        for (const answer of note.answers) {
+          const token = generateRelayToken();
+          await mintEmailToken(ctx.fs, ctx.key, author, {
+            token,
+            schemaVersion: 1,
+            interactionId,
+            family: 'note',
+            noteId: note.id,
+            kind: 'note-answer',
+            answer: answer.label,
+            stance: answer.stance,
+            mintedAt: now.toISOString(),
+          });
+          tapTokens.push(token);
+          answerButtons.push({ label: answer.label, url: `${endpoint}/t/${token}` });
+        }
+      }
+
       const composed = buildNoteEmail({
         recipientName: recipient.displayName,
         subject: note.subject,
         body: note.body,
+        ...(answerButtons.length > 0 ? { answers: answerButtons } : {}),
       });
       const sent = await sendNoteEmail({
         fs: ctx.fs,
@@ -6721,6 +6806,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         recipientPersonId: note.recipientPersonId,
         toAddress: address,
         composed,
+        ...(tapTokens.length > 0 ? { tokens: tapTokens } : {}),
         sourceKey: `note:${note.id}`,
         now,
       });
@@ -6737,7 +6823,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     notesList: async (): Promise<NoteRow[]> => {
       const ctx = await host.vaultAndKey();
       const author = ctx ? await activePersonId() : null;
-      if (!ctx || !author || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return [];
+      if (!ctx || !author || !(await activePersonIsOwner(ctx.fs, ctx.key))) return [];
 
       const notes = await listNotesByAuthor(ctx.fs, ctx.key, author);
       const people = await listPeople(ctx.fs, ctx.key);
@@ -6746,12 +6832,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // readable here at all — and why the status poll keeps it fresh.
       const activity = await listEmailActivity(ctx.fs, ctx.key, author, { family: 'note' });
       const byEntry = new Map(activity.map((e) => [e.id, e]));
+      // The answer is filed under the author too (§3.5) — one record whether it arrived as an email tap
+      // or an in-app one, so this reads one place regardless of which surface they used.
+      const responses = await listEmailResponses(ctx.fs, ctx.key, author);
 
       return notes.map((note) => {
         const entry = note.emailEntryId ? byEntry.get(note.emailEntryId) : undefined;
+        const answered = noteAnswerOf(responses, note.id);
         return {
           note,
           recipientName: nameById.get(note.recipientPersonId) ?? 'Someone',
+          ...(answered ? { answered: answered.answer } : {}),
           ...(entry
             ? {
                 delivery: {
@@ -6766,10 +6857,74 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       });
     },
 
+    // ── The RECIPIENT's side ──────────────────────────────────────────────────────────────────────
+    // Not owner-gated: these are for the person the note was written FOR. Both resolve the active person
+    // and require them to BE the recipient, so an author id + note id in the payload can never open or
+    // answer someone else's note.
+
+    notesGetForMe: async (input): Promise<NoteForRecipient | null> => {
+      const ctx = await host.vaultAndKey();
+      const me = ctx ? await activePersonId() : null;
+      if (!ctx || !me) return null;
+      const { authorPersonId, noteId } = z
+        .object({ authorPersonId: z.string().min(1), noteId: z.string().min(1) })
+        .parse(input);
+      const note = await readNote(ctx.fs, ctx.key, authorPersonId, noteId);
+      if (!note || note.recipientPersonId !== me) return null;
+      const answered = noteAnswerOf(
+        await listEmailResponses(ctx.fs, ctx.key, authorPersonId),
+        note.id,
+      );
+      return {
+        id: note.id,
+        authorPersonId: note.authorPersonId,
+        subject: note.subject,
+        body: note.body,
+        answers: note.answers,
+        createdAt: note.createdAt,
+        ...(answered ? { answered: answered.answer } : {}),
+      };
+    },
+
+    notesAnswer: async (input): Promise<NoteForRecipient | null> => {
+      const ctx = await host.vaultAndKey();
+      const me = ctx ? await activePersonId() : null;
+      if (!ctx || !me) return null;
+      const { authorPersonId, noteId, label } = z
+        .object({
+          authorPersonId: z.string().min(1),
+          noteId: z.string().min(1),
+          label: z.string().min(1),
+        })
+        .parse(input);
+      const note = await readNote(ctx.fs, ctx.key, authorPersonId, noteId);
+      if (!note || note.recipientPersonId !== me) return null;
+      // The label must be one the AUTHOR offered — a crafted payload can't invent an answer, and the
+      // stance travels with it so the record means the same thing however it arrived.
+      const chosen = note.answers.find((a) => a.label === label);
+      if (!chosen) return null;
+      await recordNoteAnswer(
+        ctx.fs,
+        ctx.key,
+        authorPersonId,
+        { noteId: note.id, answer: chosen.label, stance: chosen.stance, source: 'in-app' },
+        new Date(),
+      );
+      return {
+        id: note.id,
+        authorPersonId: note.authorPersonId,
+        subject: note.subject,
+        body: note.body,
+        answers: note.answers,
+        createdAt: note.createdAt,
+        answered: chosen.label,
+      };
+    },
+
     notesDelete: async (input): Promise<void> => {
       const ctx = await host.vaultAndKey();
       const author = ctx ? await activePersonId() : null;
-      if (!ctx || !author || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return;
+      if (!ctx || !author || !(await activePersonIsOwner(ctx.fs, ctx.key))) return;
       const { noteId } = z.object({ noteId: z.string().min(1) }).parse(input);
       // Scoped to the ACTIVE person's own folder, so an id alone can never reach another author's note.
       await deleteNote(ctx.fs, author, noteId);
@@ -6777,7 +6932,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
 
     peopleSetEmail: async (input): Promise<Person | null> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return null;
+      if (!ctx || !(await activePersonIsOwner(ctx.fs, ctx.key))) return null;
       const { personId, email } = z
         .object({ personId: z.string().min(1), email: z.string().max(320) })
         .parse(input);

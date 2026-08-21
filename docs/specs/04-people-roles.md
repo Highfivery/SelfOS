@@ -211,6 +211,21 @@ interface Account {
   the vault was created and the `EXPLICIT_GRANT_ONLY` ones), **Member** (own data + own relationships +
   their own sessions), **Guest** (no capabilities yet — a login slot with nothing enabled until a
   Guest purpose is specced). Owner-editable matrix; the Owner column is locked all-on.
+- **The three writes that decide who can do what are gated in the BRIDGE** (2026-08-21). They previously
+  checked only that a vault existed, so a hand-crafted IPC call could rewrite the role matrix or grant the
+  caller the Owner role — which made every capability check downstream decorative, since the renderer's
+  route guard was the only thing keeping anyone off the Roles screen. `accessSaveRole` needs
+  `roles.manage`; `accessSetAccount` / `accessRemoveAccount` need `users.manage`. Two invariants ride
+  along: **nobody may mint a second Owner** (there is exactly one, minted at setup — assigning the role is
+  legitimate only for the person who already holds it, which is how their PIN is changed), and **nobody
+  may revoke the Owner's own login**, which would leave the household with no full-access role and no way
+  back.
+- **A capability is the wrong gate when the justification is "the Owner can already do this."** The Roles
+  matrix renders a toggle for every registered capability on every non-owner role, so such a
+  justification survives exactly until someone flips it. Gate on the ROLE instead —
+  `activePersonIsOwner` in the bridge, `isOwner()` in the renderer. Notes ([`76`](76-notes.md) §5.6) is
+  the first feature to do this, after shipping a `notes.manage` capability that would have handed a
+  Member an unfiltered cross-person read.
 
 ### 4.4 Vault layout
 

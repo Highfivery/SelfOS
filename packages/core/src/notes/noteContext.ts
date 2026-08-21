@@ -67,6 +67,13 @@ export async function buildNoteContext(
   key: Uint8Array,
   recipientPersonId: string,
 ): Promise<NoteContext> {
+  // The id comes from the renderer and lands in a path. `getPerson` has no guard of its own and the
+  // node FileSystem resolves with a bare `join`, which NORMALIZES `..` rather than refusing it — the
+  // 2026-08-14 `pathSafety` lesson. This is the one function that performs the unfiltered read, so it
+  // is the last place that should be trusting a caller-supplied segment.
+  if (!/^[A-Za-z0-9_-]+$/.test(recipientPersonId)) {
+    return { recipientName: 'them', digest: '' };
+  }
   const person = await safe(() => getPerson(fs, key, recipientPersonId), null);
   const recipientName = person?.displayName ?? 'them';
 

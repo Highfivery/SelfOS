@@ -435,6 +435,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.notesSend, bridge.notesSend);
   handle(IpcChannels.notesList, bridge.notesList);
   handle(IpcChannels.notesDelete, bridge.notesDelete);
+  handle(IpcChannels.notesGetForMe, bridge.notesGetForMe);
+  handle(IpcChannels.notesAnswer, bridge.notesAnswer);
   handle(IpcChannels.peopleSetEmail, bridge.peopleSetEmail);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);

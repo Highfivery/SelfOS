@@ -17,6 +17,7 @@ import {
   Heart,
   Settings,
   Share2,
+  NotebookPen,
   ShieldCheck,
   Sparkles,
   Users,
@@ -49,6 +50,7 @@ import { useQuestionnaireStore } from '../stores/questionnaireStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useSynthesisStore } from '../stores/synthesisStore';
+import { useNoteStore } from '../stores/noteStore';
 import { useAutoCheckinStore } from '../stores/autoCheckinStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDiscoveryStore } from '../stores/discoveryStore';
@@ -83,6 +85,7 @@ export function AppShell(): JSX.Element {
   const conflicts = useVaultConflicts();
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
+  const canWriteNotes = useSessionStore((s) => s.isOwner());
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
   const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));
@@ -196,6 +199,10 @@ export function AppShell(): JSX.Element {
     useAdaptiveTestStore.getState().reset();
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useAutoCheckinStore.getState().reset(); // auto check-ins config + run state is per-person (63 §5.2)
+    // Notes are the AUTHOR's (76 §5.5) — the list, the recipient projection and any in-flight draft all
+    // belong to whoever is signed in. An unsent draft especially: it is written from one recipient's full
+    // record, so carrying it across a switch would put one person's material in front of another.
+    useNoteStore.getState().reset();
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
@@ -538,6 +545,18 @@ export function AppShell(): JSX.Element {
               >
                 <Users size={18} aria-hidden="true" />
                 <span className={styles.label}>People</span>
+              </NavLink>
+            ) : null}
+            {canWriteNotes ? (
+              <NavLink
+                to="/notes"
+                className={navClass}
+                aria-label="Notes"
+                title={tip('Notes')}
+                onClick={closeDrawer}
+              >
+                <NotebookPen size={18} aria-hidden="true" />
+                <span className={styles.label}>Notes</span>
               </NavLink>
             ) : null}
             {canManageRoles ? (

@@ -3007,6 +3007,8 @@ export const EmailTokenKindSchema = z.enum([
   'intimacy-reaction',
   'checkin-answer',
   'tuning',
+  /** An answer tapped on an owner-authored note (76 §3.5) — from the email or from the Inbox. */
+  'note-answer',
 ]);
 export type EmailTokenKind = z.infer<typeof EmailTokenKindSchema>;
 
@@ -3025,6 +3027,8 @@ export const EmailTokenSchema = z.object({
   questionId: z.string().optional(),
   /** The auto check-in assignment an embedded check-in tap answers (67 §3.5, kind `checkin-answer`). */
   assignmentId: z.string().optional(),
+  /** The note this answers (76 §3.5, kind `note-answer`). */
+  noteId: z.string().optional(),
   kind: EmailTokenKindSchema,
   /** 'im-here'|'pause'|'more'|'less'|<answer value>. The suggestion families write a per-email answer
    *  label here and put its meaning in `stance` (67 §3.3a); 'im-game'|'maybe-later'|'not-for-me' are
@@ -3051,6 +3055,12 @@ export const EmailResponseSchema = z.object({
   questionId: z.string().optional(),
   /** The auto check-in assignment this answered (for a drained `checkin-answer` response, 67 §3.5). */
   assignmentId: z.string().optional(),
+  /**
+   * The note this answered (76 §3.5). Both surfaces write the SAME record under the note's AUTHOR — the
+   * email tap when it drains, and the in-app tap directly — so "what they answered" has one definition
+   * whichever way it arrived, and the owner's Notes list reads one place.
+   */
+  noteId: z.string().optional(),
   /** The couple-suggestion pairing key (for mutual green light — both partners' `im-game` on one key). */
   sharedSuggestionKey: z.string().optional(),
   kind: EmailTokenKindSchema,
@@ -3059,7 +3069,8 @@ export const EmailResponseSchema = z.object({
   stance: EmailAnswerStanceSchema.optional(),
   sensitivity: z.enum(['standard', 'restricted', 'intimacy']).default('standard'),
   respondedAt: z.string().datetime(),
-  source: z.enum(['relay-tap', 'deep-link']),
+  /** `in-app` is a tap made inside SelfOS rather than from an email (76 §3.6). */
+  source: z.enum(['relay-tap', 'deep-link', 'in-app']),
   edited: z.boolean().default(false),
 });
 export type EmailResponse = z.infer<typeof EmailResponseSchema>;
@@ -3175,6 +3186,24 @@ export interface NoteRow {
     clickedAt?: string;
   };
   /** What they tapped, once a tap has drained back (76 §3.5). */
+  answered?: string;
+}
+
+/**
+ * A note as the RECIPIENT sees it (76 §3.6) — what the Inbox opens.
+ *
+ * Carries NO author: a note is unattributed on both surfaces, so the field simply does not exist here
+ * rather than being set and then hidden by every consumer. `authorPersonId` is present only because the
+ * note lives in the author's folder and answering has to write back there.
+ */
+export interface NoteForRecipient {
+  id: string;
+  authorPersonId: string;
+  subject: string;
+  body: string;
+  answers: NoteAnswer[];
+  createdAt: string;
+  /** What this person already tapped, if anything — so the choice reads as made, not still open. */
   answered?: string;
 }
 

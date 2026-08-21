@@ -1,0 +1,281 @@
+/* Notes (76 §3) — the owner's note surface. Full width, no page cap (§12). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: var(--space-3);
+}
+
+.stat {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.statValue {
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.statKey {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+/* One note in the list. The type reads as FORM (stripe + chip), never colour alone (§9). */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.row + .row {
+  margin-top: var(--space-2);
+}
+
+.stripe {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--color-accent);
+  flex: none;
+}
+
+.rowMain {
+  /* The flexbox truncation footgun: without this the subject overflows its pane (§12). */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: 3px;
+}
+
+.timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.event {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.event b {
+  color: var(--color-text-heading);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A person in step 1. A radio, not a checkbox — single-select is structural (§4.2). */
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.person + .person {
+  margin-top: var(--space-2);
+}
+
+.person:hover {
+  border-color: var(--color-border-strong);
+}
+
+.person:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.personOn {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-subtle);
+}
+
+/* The radio itself. An unselected row is an empty ring; a selected one is filled. */
+.dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-strong);
+  flex: none;
+}
+
+.dotOn {
+  border-color: var(--color-accent-solid);
+  box-shadow: inset 0 0 0 3px var(--color-accent-solid);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  flex: none;
+}
+
+.who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.whoName {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.whoAddress {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The two rendered surfaces, side by side at desktop and stacked on a phone. */
+.twoUp {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .twoUp {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The email as it renders — its own warm ground, independent of the app theme. */
+.mailFrame {
+  background: #f6f1ea;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-4);
+}
+
+.mailCard {
+  background: #ffffff;
+  border: 1px solid #e7ddd0;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  color: #2e2a25;
+}
+
+.mailSubject {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #241f1a;
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.mailBody {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 0 0 var(--space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mailButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.mailButton {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: #4f7388;
+  color: #ffffff;
+}
+
+.mailFoot {
+  font-size: 0.7rem;
+  color: #948b7e;
+  margin: var(--space-3) 0 0;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A type choice. Wraps rather than scrolls — a control row must never scroll-x (§12). */
+.typeChip {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.typeChip:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.typeChipOn {
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-text);
+}

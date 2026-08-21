@@ -561,6 +561,78 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-21 — **Build (Notes — the owner writes to ONE person, and it goes out as SelfOS; SPEC 76 written,
+  approved, BUILT; #552 spec, #553 + #555 the fixes it surfaced, #556 core + seam, this the surface).** The
+  owner asked for a way to email members about new features, ask a questionnaire question, or suggest
+  something — with opens/clicks tracked and AI writing it from what they type. **A full read of the codebase
+  first showed ~70% already existed** (67's Resend layer, `sendFamilyEmail`, the tap relay, the activity log,
+  the Inbox registry), so the real scope was a ninth `EmailFamily`, a compose surface, one AI pass, and an
+  answer to where an address comes from. **The owner's decisions reverse three shipped rules, and the spec
+  names them (§1.1):** the note draws on **everything** SelfOS knows about the recipient **including private
+  and `restricted` data, and may reference it openly** (the §8.1 single unfiltered-read exception —
+  everywhere else the boundary holds); it is sent **as SelfOS with no sender on either surface**, so neither
+  the email nor the Inbox row ever names the owner; and there is **no opt-out**. The recipient is chosen
+  **FIRST**, before a word exists, so the whole compose step is written for them (the 08 §17 pattern).
+  **The seam's load-bearing choice: the activity log lives under the SENDER**, not the recipient — the email
+  reconcile is active-person-scoped, so a delivery record filed under the recipient would only ever be polled
+  when THEY signed in, and opens/clicks would never reach the person who sent it. **The voice rule is code,
+  not a prompt line:** `containsFirstPerson` rejects a draft that speaks as a person, because a model told to
+  write as an app will still say "I thought you'd like this" often enough to matter, and the owner never sees
+  the email before it sends. **Two defects the pre-work read found, neither introduced by this feature and
+  both fixed first:** re-keying the vault **permanently destroyed** `relationships/`, `together/` and
+  `story/` — `enumerateEncryptedFiles` walked a hard-coded three-root list while four more roots are
+  master-key encrypted, so rotation promoted the new key and destroyed the old one with those files never
+  re-encrypted (now discovered from the vault root, with the known roots as a floor); and `peopleList` had
+  **no capability gate at all**, returning healthNotes/faith/sexualOrientation/notes/birthday for every
+  household person to every caller — now an identity-only projection built by naming what is KEPT, so a field
+  added to `Person` later is private by default. Plus four smaller ones (a `clicked` that never stamped
+  `clickedAt`, a poll set that dropped `opened`, …). **A code review then found three BLOCKERS, all real.** (1) `notes.manage` was an ordinary
+  capability, and the Roles matrix renders a `Switch` for **every** capability on every non-owner role —
+  so §8.1's single unfiltered-read exception, whose entire justification is _"the Owner can already read
+  all of this"_, was one toggle away from handing a Member a cross-person read of a sibling's
+  `restricted` intake facts. The capability is **deleted**; the gate is `activePersonIsOwner` in the
+  bridge and `isOwner()` in the renderer, with `aiDeps('owner')` and a `RequireCapability` `'owner'` mode
+  for the two seams that needed one. (2) The type picker **changed nothing that shipped**: `notesSend`
+  never passed `answers` to the composer and never minted taps, so every note took the no-buttons branch
+  and the recipient got "Open SelfOS to see it." (3) That link went **nowhere** — the Inbox provider's
+  `openPath` named a route that does not exist, so the click bounced silently to Home. **(2) and (3) were
+  one gap**: the answers were minted, stored, and previewed to the author while being tappable on no
+  surface at all. Both doors now work and write the SAME record via one `recordNoteAnswer`, filed under
+  the AUTHOR for the same reason the delivery row is — tokens under the recipient only ever drain when
+  THEY sign in, so the answer would never reach the person who asked. **Chasing the blocker found a
+  worse one, unrelated to Notes:** `accessSaveRole` / `accessSetAccount` / `accessRemoveAccount` had **no
+  capability gate at all** — verified by reading them, not from the review — so a hand-crafted IPC call
+  could rewrite the role matrix or grant the caller the Owner role, which made every capability check in
+  the app decorative. Now gated, plus two invariants the ungated version could not hold: nobody may mint
+  a second Owner, and nobody may revoke the first. **Visual QA earned its keep — three defects a green
+  suite could not see:** starting a SECOND note reset the draft but not the mode, so a note written by hand
+  left the surface on `self` with the draft cleared, matching neither the AI card nor the editor — **the
+  compose step opened blank with no way forward**; the person row's name and address were bare spans in a
+  flex child and ran together on one line; and selection read as a background tint alone (§9). The E2E now
+  walks a second note through the real UI at 1280 and 390px, and the regression test is **verified to fail
+  against the original component**. Gate green: typecheck ×4, lint, format, **2560 core + 13 relay + 1805
+  desktop** unit, full E2E. **Three E2E were already failing on
+  pristine `origin/main`** before any of this — #555 moved the four appearance settings to
+  `scope: 'device'` and left three tests asserting they persist to the vault; CI runs lint/typecheck/unit
+  only, so it merged green. Confirmed against a worktree of `origin/main` rather than assumed, then fixed.
+  Gate green: typecheck ×4, lint, format, **2565 core + 13 relay + 1814 desktop** unit, full E2E. Every
+  new guard **verified to fail when reverted** — and one of them had to be rewritten first: the
+  path-traversal test passed against the reverted code because a missing person returns null either way,
+  so it now spies on the reads and asserts none was ATTEMPTED. **Lessons: (1) a feature request is worth
+  costing against the codebase before designing it — "email users with metrics and AI" read as a large build and was mostly a compose surface
+  over machinery that already shipped. (2) Where a derived record LIVES is a functional decision, not a
+  filing one: an activity log under the recipient is invisible to the sender when the poller is
+  active-person-scoped. (3) A hard-coded list of roots to walk is a data-loss bug waiting for the fourth
+  root — discover them, and keep the known list only as a floor. (4) A test that clicks a control from a
+  fresh state proves nothing about re-entry; the empty-screen bug lived entirely in the second visit, and
+  only a screenshot found it. (5) A capability is the wrong gate for anything justified by
+  “the Owner can already do this” — the Roles matrix makes every capability grantable, so the
+  justification evaporates the moment someone flips it; gate on the ROLE. (6) The reviewer's finding
+  about ungated access writes was worth verifying myself, because the real defect was bigger than
+  reported: it did not merely weaken the Notes gate, it made every capability check in the app bypassable.
+  (7) When a test is green against the reverted fix, it is not a guard — the traversal test needed a read
+  SPY, because “returns empty” is what a missing record does anyway.**
+
 - 2026-08-21 — **Build ("Say something to your partner" — the silent steer gets a front door; SPEC 75 BUILT
   end to end; on `feat/say-something`).** 74 §5.8's `buildPartnerSteer` has always fed a partner's loved
   language into the other partner's coach prompt, silently. This makes it askable — a brief, a batch of five

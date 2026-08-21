@@ -1,6 +1,6 @@
 # 76 — Notes (owner-authored, AI-drafted, sent as SelfOS)
 
-> **Status:** Draft — _last updated 2026-08-21_
+> **Status:** Built — _last updated 2026-08-21_
 >
 > An owner-only surface for writing a note to **one** household member. The owner picks the person
 > first, types a rough intent, and Claude drafts the note from **everything SelfOS knows about that
@@ -73,7 +73,7 @@ Three shipped rules change. They are listed here rather than buried because the 
 
 ## 3. UX & flows
 
-A new **owner-only top-level nav entry, "Notes"**, gated on `notes.manage` — hidden entirely from
+A new **owner-only top-level nav entry, "Notes"**, gated on the Owner ROLE — hidden entirely from
 members, like Roles and Devices. Mockup: the six-screen review approved 2026-08-21.
 
 ### 3.1 The Notes surface
@@ -91,7 +91,8 @@ A **radio** list of household people (`isSubject`, excluding the owner), each sh
 relationship, with a reachability chip. A person with no `Person.email` shows "SelfOS only" and an
 inline **add-address** affordance writing to their People profile.
 
-Single-select is structural, not a validation rule (§4.2).
+Single-select is structural, not a validation rule (§4.2). The selected row carries a filled **radio
+dot** as well as a tint — selection must read as form, never colour alone (§9).
 
 ### 3.3 Step 2 — compose
 
@@ -112,22 +113,51 @@ The draft renders as editable subject + body (+ answer labels for question/sugge
 again**. A banner restates the voice rule: _goes out as SelfOS — no sender, no signature, no first
 person._
 
+**Starting a second note resets the mode and type, not just the draft.** Carrying them forward is what
+made a note written by hand leave the surface on `self` with the draft cleared — matching neither the AI
+card nor the editor, so the compose step opened on nothing at all. The editor renders whenever the owner
+is writing it themselves _or_ a draft exists, so it can never be gated on state a button click alone
+seeds.
+
 ### 3.4 Step 3 — preview & send
 
-Two panes side by side: the email exactly as rendered by the existing
-`emailComposer.shell()`, and the Inbox entry. Actions: **Send a test to me**, **Schedule**, and
-**Send to `<name>`** — named, never a count.
+Two panes side by side: the email exactly as rendered by the existing `emailComposer.shell()`, and the
+Inbox entry. One action: **Send to `<name>`** — named, never a count.
+
+**As built, the other two actions in the original draft are deliberately NOT there** (§12 forbids
+scaffolding a control before it earns its place):
+
+- **Send a test to me** — the preview pane already renders the email through the real composer, so a
+  test copy shows the owner nothing new about the content; the only thing it would prove is that Resend
+  is configured, which Settings → Email's **Test connection** already answers. It would also mail one
+  person's private material to a second inbox for no gain.
+- **Schedule** — `scheduledAt` and `cancelScheduled` already exist so it is nearly free to wire, but at
+  one recipient per note there is no use case that "write it when you mean it" does not cover. Left
+  unbuilt rather than shipped as a control with nothing behind it.
 
 ### 3.5 How it landed
 
 A **timeline, not a dashboard** — at one recipient a rate is meaningless. Three events with times
-(Delivered / Opened / Tapped `<answer>`), plus a standing caveat that "opened" is approximate (§7.4),
-and two follow-ons: _Write another to `<name>`_ / _See their responses_.
+(Delivered / Opened / Tapped `<answer>`), plus a standing caveat that "opened" is approximate (§7.4).
+
+**One answer, two doors.** A question or suggestion is answerable from the email (a relay tap) _and_ from
+the Inbox, and both write the SAME `EmailResponse` under the note's AUTHOR via `recordNoteAnswer`. One
+record shape means "what they answered" has one definition regardless of which surface they used, and the
+owner's list reads one place. Filed under the author for the same reason the delivery row is (§5.3): the
+email reconcile is active-person-scoped, so tokens or responses filed under the recipient would only ever
+drain when THEY signed in — and the answer would never reach the person who asked.
 
 ### 3.6 What the recipient sees
 
 Both surfaces carry **no sender**. The email is SelfOS-branded, in the app's voice, with the type's
-affordance. The Inbox entry omits `fromName` and shows title + snippet + Open / Dismiss.
+affordance. The Inbox entry omits `fromName` and shows title + snippet + Open / Dismiss — and the row
+must render **nothing** where a sender would go, rather than falling back to "From someone", which
+asserts a person sent it and is strictly worse than naming one.
+
+Opening it goes to **`/inbox/note/:authorPersonId/:noteId`** — its own route, not the Inbox's detail
+pane, which is hard-wired to the questionnaire answering form. There the person reads the note and taps
+one of its answers. Tapping again replaces the answer; a note asks one question and a person may change
+their mind.
 
 ---
 
@@ -142,7 +172,7 @@ All reads/writes go through the vault service. No new vault file is introduced.
 | `people/<owner>/email/activity/<YYYY-MM>.enc` | `EmailActivityEntry[]` — one row per note (logged under the **owner**, §5.3) |
 | `people/<owner>/email/content/<entryId>.enc`  | `EmailContentSnapshot` — the rendered note                                   |
 | `people/<owner>/email/tokens/<token>.enc`     | `EmailToken` — a minted tap and what it means                                |
-| `people/<recipient>/email/responses/<id>.enc` | `EmailResponse` — a drained tap                                              |
+| `people/<owner>/email/responses/<id>.enc`     | `EmailResponse` — the answer, under the AUTHOR (§3.5)                        |
 | `people/<recipient>/inbox/dismissals.enc`     | existing Inbox dismissals                                                    |
 
 ### 4.2 Additive schema changes
@@ -160,6 +190,30 @@ export const NoteTypeSchema = z.enum(['announcement', 'question', 'suggestion'])
 // EmailActivityEntry gains ONE field. Additive-optional — no schemaVersion bump, no migration
 // (the `Person.email` / `Insight.dreamId` precedent).
 recipientPersonId: z.string().optional(),   // NEW — who it was for; the row is logged under the sender
+
+// EmailTokenKind gains a fifth kind, and both the token and the response gain the note they belong to.
+// Additive-optional throughout; an existing token or response is unaffected.
+export const EmailTokenKindSchema = z.enum([
+  'reaction', 'intimacy-reaction', 'checkin-answer', 'tuning',
+  'note-answer',                            // NEW
+]);
+noteId: z.string().optional(),              // NEW — on EmailToken AND EmailResponse
+source: z.enum(['relay-tap', 'deep-link', 'in-app']),  // 'in-app' is NEW — a tap made inside SelfOS
+```
+
+The recipient's view is a projection carrying **no author name** — the field does not exist on it, rather
+than existing and being hidden by every consumer:
+
+```ts
+export interface NoteForRecipient {
+  id: string;
+  authorPersonId: string; // only because the note lives in the author's folder
+  subject: string;
+  body: string;
+  answers: NoteAnswer[];
+  createdAt: string;
+  answered?: string; // so the choice reads as made, not still open
+}
 ```
 
 `Person.email` is **not** a schema change — it already exists and is parsed. It has simply never had a
@@ -193,7 +247,9 @@ export const NoteSendInputSchema = z.object({
 - **`noteContext.ts`** — assembles the recipient digest (§5.2).
 - **`noteSendService.ts`** — composes via a new `buildNoteEmail()` in `emailComposer.ts` and routes
   through the existing send tail (§5.3).
-- **`inboxProvider.ts`** — registers an `announcement` kind on the Inbox registry.
+- **`inboxProvider.ts`** — registers a `note` kind on the Inbox registry.
+- **`recordNoteAnswer` / `noteAnswerOf`** (in `email/emailResponse.ts`, where the record lives) — the
+  single writer + reader for an answer, whichever surface it came from (§3.5).
 
 ### 5.2 The draft context — deliberately unfiltered
 
@@ -231,9 +287,13 @@ breaks the framing completely, so it is checked in code, not merely instructed.
 Subject, body and every answer label also run `violatesBoundary` against the recipient's lexicon
 ([`74`](74-adaptive-tests.md) §5.8a) before sending — unrelated to this change, and it stays.
 
+**Writing it by hand produces an announcement.** There is no editor for answer labels — they are written
+_for_ a specific body by the model — so a self-written note carries none, and a note with nothing to tap
+IS an announcement. Sending it as a question would put a type on the record its content cannot support.
+
 ### 5.5 Renderer
 
-- Route `notes` + `notes/new` in `GUARDED_ROUTES`, capability `notes.manage`; nav entry likewise.
+- Route `notes` in `GUARDED_ROUTES` gated `'owner'`; nav entry likewise.
 - `noteStore` (Zustand), reset on active-person change (the per-person-state rule).
 - **`Person.email` gains its missing input** on the People profile — it is a dead field today.
 - The Step-1 picker uses a **name/address projection**, not `peopleList`, which currently returns full
@@ -241,14 +301,19 @@ Subject, body and every answer label also run `violatesBoundary` against the rec
 
 ### 5.6 Capability
 
-`notes.manage` — owner-only, omitted from every non-owner role map (the Owner gets it via the
-`roleAllows` bypass). Not `EXPLICIT_GRANT_ONLY`.
+**No capability.** The gate is the **Owner ROLE** (`activePersonIsOwner` in the bridge, `isOwner()` in
+the renderer). A `notes.manage` capability shipped first and was removed: §8.1 permits the note pass to
+read the recipient's private and `restricted` record — the single exception in the app — and justifies it
+solely by the Owner already being able to read all of it. That justification does not survive one flip of
+a Roles-matrix toggle, which renders a `Switch` for every capability on every non-owner role and would
+have handed a Member an unfiltered cross-person read that `factSharedWithViewer` / `isPersonFieldShared` /
+`summarizeForContext` otherwise forbid.
 
 ---
 
 ## 6. IPC / API contracts
 
-All gated on `notes.manage` and enforced **in the bridge**, not the renderer.
+All gated on the Owner ROLE and enforced **in the bridge**, not the renderer.
 
 | Channel            | Request                             | Response          | Notes                                                                                                |
 | ------------------ | ----------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------- |
@@ -256,8 +321,17 @@ All gated on `notes.manage` and enforced **in the bridge**, not the renderer.
 | `notes:draft`      | `{recipientPersonId, type, intent}` | `NoteDraftResult` | One metered `note.draft` pass; honest failure taxonomy                                               |
 | `notes:send`       | `NoteSendInput`                     | `EmailSendResult` | Writes the Inbox entry, then sends                                                                   |
 | `notes:list`       | `{from?, to?}`                      | `NoteRow[]`       | Owner's `note`-family activity + `recipientPersonId` resolved to a name                              |
-| `notes:get`        | `{entryId}`                         | `NoteDetail`      | Timeline + content snapshot + any drained response                                                   |
+| `notes:delete`     | `{noteId}`                          | `void`            | Scoped to the active person's own folder                                                             |
 | `people:setEmail`  | `{personId, email}`                 | `Person`          | Owner-gated; writes the contact address                                                              |
+
+Two more are **not** owner-gated, because they belong to the person a note was written FOR. Both resolve
+the active person and require them to BE the recipient, so an author id + note id in a payload can never
+open or answer someone else's note:
+
+| Channel          | Request                           | Response            | Notes                                            |
+| ---------------- | --------------------------------- | ------------------- | ------------------------------------------------ |
+| `notes:getForMe` | `{authorPersonId, noteId}`        | `NoteForRecipient?` | `null` unless the active person is the recipient |
+| `notes:answer`   | `{authorPersonId, noteId, label}` | `NoteForRecipient?` | The label must be one the AUTHOR offered         |
 
 The Resend and Claude keys are resolved host-side and **never cross IPC**
 ([`00`](00-architecture.md) §6.2).
@@ -379,14 +453,22 @@ the unfiltered context actually reaches the model.
 
 1. **PHQ-9 item 9** — does that single crisis trigger survive the app-wide removal (§8.2)? Independent
    of everything else; ~20 lines either way.
-2. **Which pre-existing bugs land alongside this?** Found during the 2026-08-21 review, none caused by
-   this feature:
+2. **RESOLVED — the pre-existing bugs found during the 2026-08-21 review**, none caused by this feature.
+   The first six were fixed before the feature was built ([#553] key rotation, [#555] the rest); the last
+   two remain open and belong to their own pass:
    - 🔴 **Key rotation destroys data.** `ROTATION_ROOTS = ['people','config','questionnaires']` omits
      `relationships/`, `together/` and `story/contributions/`, all master-key encrypted. Rotation
      promotes the new key and the old one is gone. Reachable from Settings → Devices. **Owner already
      approved fixing this as part of this work.**
    - 🟠 `peopleList` has no capability gate and returns full `Person` records (`healthNotes`, `faith`,
      `sexualOrientation`, `notes`, `birthday`) to any caller. §5.5 avoids it; it should still be narrowed.
+   - 🔴 **The three access WRITES had no gate at all** — found while building, fixed here.
+     `accessSaveRole` / `accessSetAccount` / `accessRemoveAccount` checked only that a vault existed, so
+     a hand-crafted IPC call could rewrite the role matrix or hand the caller the Owner role, making every
+     capability check downstream decorative. Now gated `roles.manage` / `users.manage`, with two
+     invariants the ungated version could not hold: nobody may mint a SECOND Owner (there is exactly one,
+     minted at setup), and nobody may revoke the first (it would leave the household with no full-access
+     role and no way back).
    - 🟠 `EmailSettingsPanel.tsx:180` tells members their tapped responses are _"Only you…"_ while the
      owner activity view shows exactly what was clicked. Already false today.
    - `clickedAt` / `clicks[]` are rendered but written by nothing (this spec wires them).
@@ -395,10 +477,11 @@ the unfiltered context actually reaches the model.
    - The Inbox's shared-book `openPath` targets a route that does not exist.
    - `resendClient.ts` has no test file.
    - E2E runs in neither CI nor the pre-push hook.
-3. **Schedule in v1?** `scheduledAt` + `cancelScheduled` already exist, so it is nearly free — but it is
-   the one thing in §3.4 with no strong use case yet at single-recipient scale.
-4. **Does "Write it myself" still go out as SelfOS?** Currently yes (§5.4 applies to both modes). An
-   owner writing in their own words may expect their own voice — but that would reintroduce a sender.
+3. **RESOLVED — schedule is not in v1.** See §3.4: nearly free to wire, no use case at single-recipient
+   scale, so it is not shipped as an empty control.
+4. **Does "Write it myself" still go out as SelfOS?** As built, **yes** — §5.4 applies to both modes, so
+   there is exactly one voice on both surfaces and no path that reintroduces a sender. An owner writing in
+   their own words may eventually expect their own voice; changing that is a product decision, not a bug.
 
 ---
 
@@ -410,3 +493,11 @@ the unfiltered context actually reaches the model.
   clicks + delivery tracked; Inbox is the record and email the reach layer; AI for informational
   registers with a blank composer for personal ones; no opt-out; no campaign record; crisis system
   removed app-wide; key-rotation fix bundled.
+- 2026-08-21 — **BUILT.** Core ([#556] `noteStore`, `noteContext`, `noteDraft`), the seam (the owner gate,
+  six channels, the ninth `EmailFamily`, the Inbox provider) and the surface. Two open questions resolved
+  against what shipped: **schedule is not in v1** and **"Send a test to me" is not built** (§3.4 — neither
+  earns a control at single-recipient scale); "Write it myself" goes out as SelfOS like every other note.
+  The six pre-existing defects the design review found landed first ([#553], [#555]). Three more were found
+  by **visual QA after the suite was green** — a second note opened on a blank compose step, the person
+  row's name and address ran together on one line, and selection read as colour alone (§9); all three are
+  fixed and guarded, with the regression test verified to fail against the original component.

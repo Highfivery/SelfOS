@@ -242,7 +242,7 @@ describe('Home — hierarchy & status grid', () => {
     expect(screen.getByRole('heading', { name: /what the coach knows/i })).toBeInTheDocument();
     // The compact Questionnaires bento card (60 §3.6) surfaces the unanswered inbox send as an action link.
     expect(screen.getByRole('heading', { name: 'Questionnaires' })).toBeInTheDocument();
-    expect(await screen.findByText(/1 waiting for you to answer/i)).toBeInTheDocument();
+    expect(await screen.findByText(/1 check-in to answer/i)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
   });
 

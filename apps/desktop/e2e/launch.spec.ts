@@ -6482,6 +6482,23 @@ test('inbox (08 §35): one queue for four kinds — it opens things, and never a
     // …while the invitation, which is not dismissible, is still there.
     await expect(list.getByText('How we talk about money')).toBeVisible();
 
+    // §36 — the bell says the queue exists ONCE, and never repeats what is in it. Before the dismissal there
+    // were two waiting items; the invitation is all that is left, so the row counts one.
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    await expect(center.getByText('Something is waiting for you')).toBeVisible();
+    // §36.2 — the Together invitation still EMAILS by name, but takes no bell row of its own: the queue is
+    // where it is accepted or declined, and a second announcement is just a second thing to clear.
+    await expect(center.getByText(/invited you to a Together session/)).toHaveCount(0);
+    await w.keyboard.press('Escape');
+
+    // §36.3 — the Inbox badge counts what OTHERS are waiting on from you; answering is no longer double-
+    // counted in the Questionnaires badge.
+    await expect(w.getByRole('link', { name: 'Inbox, 1 waiting for you' })).toBeVisible();
+    // …and ONLY the Inbox counts it. The Together badge counts live sessions (your turn, ready to wrap up),
+    // so an unaccepted invitation is one thing in one badge rather than the same thing in two.
+    await expect(w.getByRole('link', { name: 'Together', exact: true })).toBeVisible();
+
     // ~360px: the queue rows carry an icon, a title, a chip and a dismiss — the worst case for §12.
     await w.setViewportSize({ width: 360, height: 800 });
     await expectNoInnerOverflow(w);
@@ -7118,8 +7135,12 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     await expect(w.getByRole('tab', { name: /Sent/ })).toBeVisible();
     await expect(w.getByRole('tab', { name: /Received/ })).toBeVisible();
     await expect(w.getByRole('tab', { name: /Auto check-ins/ })).toBeVisible();
-    // The sidebar nav badge counts things needing YOU: 1 ready-to-analyze + 1 received-to-answer = 2.
-    await expect(w.getByRole('link', { name: /Questionnaires, 2 need you/ })).toBeVisible();
+    // The two nav badges split the work rather than both counting the same thing (08 §36.3): Questionnaires
+    // counts YOUR OWN work (1 ready to analyse), the Inbox counts everything waiting to be answered — the one
+    // from Angel AND the self check-in, which is real work on you and which nothing else counts now that
+    // §36 retired `auto-checkin-ready`. Before §36 answering was in BOTH badges, so neither was a to-do list.
+    await expect(w.getByRole('link', { name: /Questionnaires, 1 need you/ })).toBeVisible();
+    await expect(w.getByRole('link', { name: 'Inbox, 2 waiting for you' })).toBeVisible();
 
     // Sent tab (default): grouped by status, with rich per-recipient status + date·time + an Analyze affordance.
     const sent = w.getByRole('tabpanel', { name: 'Sent questionnaires' });
@@ -14923,16 +14944,18 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     expect(docxBytes.toString('latin1')).toContain('word/document.xml');
     await w.getByRole('button', { name: 'Close' }).click();
 
-    // The reader signs in: the first share raises a one-time notification + a "New" marker on the card (§3.6).
+    // The reader signs in: the first share puts the book in their Inbox queue + a "New" marker on the card
+    // (§3.6). Since 08 §36 the bell no longer announces it a second time — `story-shared` is email-only, so
+    // the ONE "waiting for you" row is the whole in-app nudge and the queue is where the book lives.
     await switchTogetherPerson(w, 'Reader');
     await openFirstBook(w);
     await expect(w.getByRole('heading', { name: 'Shared with you' })).toBeVisible();
     const card = w.getByRole('button', { name: /Shared Life/ });
     await expect(card.getByText('New')).toBeVisible();
     await w.getByRole('button', { name: /^Notifications/ }).click();
-    await expect(
-      w.getByRole('menu', { name: 'Notifications' }).getByText(/shared their story/),
-    ).toBeVisible();
+    const bell = w.getByRole('menu', { name: 'Notifications' });
+    await expect(bell.getByText(/waiting for you/)).toBeVisible();
+    await expect(bell.getByText(/shared their story/)).toHaveCount(0);
     await w.keyboard.press('Escape');
 
     // Open the book → the immersive reader front matter (title page), then Begin reading → the PUBLISHED
@@ -16507,21 +16530,25 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
 
     // --- Angel is told, and adds a memory --------------------------------------------------------
     await switchTogetherPerson(w, 'Angel');
-    // The invitation reaches her as a notification, and its action opens her contribute page.
-    await w.getByRole('button', { name: /notifications/i }).click();
+    // The invitation reaches her in her Inbox queue (08 §35), where it waits until she deals with it —
+    // rather than as a bell row that clears whether or not she did (§36). Opening it lands on her
+    // contribute page.
+    await w.getByRole('link', { name: /Inbox/ }).click();
     await w
-      .getByRole('menuitem', { name: /Ben asked you to add to their book/ })
-      .getByRole('button', { name: 'View' })
+      .getByRole('region', { name: 'Inbox' })
+      .getByText(/Ben asked you to add to their book/)
       .click();
     await expect(w.getByText(/Anything you remember about the Denver years/)).toBeVisible();
-    // She is never shown the book itself — only what she was asked.
+    // She is never shown the book itself — only what she was asked (73 §8.2 / 08 §35.2).
     await expect(w.getByText('The Weight of Quiet')).toHaveCount(0);
 
     await w
       .getByLabel('What you want to add')
       .fill('He rebuilt the porch that whole summer, alone.');
     await w.getByRole('button', { name: /Send it to Ben/ }).click();
-    await expect(w.getByRole('status')).toContainText('Sent');
+    // Scoped: the queue's own "waiting for you" toast (08 §36) is also a role=status, so a bare one is
+    // ambiguous — assert the confirmation itself.
+    await expect(w.getByRole('status').filter({ hasText: 'Sent' })).toBeVisible();
     await expect(w.getByText('waiting for them to read it')).toBeVisible();
     await w.setViewportSize({ width: 360, height: 900 });
     await expectNoInnerOverflow(w);
@@ -16578,10 +16605,12 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
 
     // --- She takes it back, and it leaves his book ----------------------------------------------
     await switchTogetherPerson(w, 'Angel');
-    await w.getByRole('button', { name: /notifications/i }).click();
+    // Back in through the queue again (§35/§36): the invitation is a standing grant, so it stays there
+    // until she is done with it, which is exactly why it outlived a bell row that clears on a tap.
+    await w.getByRole('link', { name: /Inbox/ }).click();
     await w
-      .getByRole('menuitem', { name: /Ben asked you to add to their book/ })
-      .getByRole('button', { name: 'View' })
+      .getByRole('region', { name: 'Inbox' })
+      .getByText(/Ben asked you to add to their book/)
       .click();
     await w.getByRole('button', { name: 'Take it back' }).click();
     // The row leaves the actionable list and is summarised — it isn't something she can act on any more.

@@ -165,3 +165,64 @@ describe('useEmailTransactional (67 §3.2 / Phase 2)', () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe('email-only candidates still email, by name (08 §36.2)', () => {
+  it('sends a Together invitation that the bell deliberately never shows', async () => {
+    // This is the guarantee that let the bell row be retired: a bell competes with the queue three inches
+    // away, but an email is the only thing that reaches someone who has not opened SelfOS in days, and there
+    // "Angel invited you…" is worth far more than "3 things are waiting". If anyone ever "optimises" this by
+    // dropping the candidate at its source instead of filtering it at resolve time, the email goes silently
+    // dead — so assert the SEND, not the shape of a locally-built array.
+    const send = vi.fn(() => Promise.resolve({ ok: true as const, entryId: 'e1' }));
+    installMockBridge({
+      emailStatus: () => Promise.resolve(READY),
+      emailGetPrefs: () => Promise.resolve(PREFS),
+      emailSendTransactional: send,
+    });
+    signIn();
+    useNotificationStore.setState({
+      candidates: [
+        {
+          kind: 'together-invite',
+          coalesceKey: 'together-invite:s1',
+          signature: 's1',
+          title: 'Angel invited you to a Together session',
+          inApp: false, // never a bell row…
+        },
+      ],
+    });
+    render(<Harness />);
+
+    // …and still an email, naming her.
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'together-invite',
+        title: 'Angel invited you to a Together session',
+      }),
+    );
+  });
+
+  it('does NOT email the queue row itself — "3 things are waiting" is the message this rejects', async () => {
+    const send = vi.fn(() => Promise.resolve({ ok: true as const, entryId: 'e1' }));
+    installMockBridge({
+      emailStatus: () => Promise.resolve(READY),
+      emailGetPrefs: () => Promise.resolve(PREFS),
+      emailSendTransactional: send,
+    });
+    signIn();
+    useNotificationStore.setState({
+      candidates: [
+        {
+          kind: 'inbox-waiting',
+          coalesceKey: 'inbox-waiting',
+          signature: 'a,b,c',
+          title: '3 things are waiting for you',
+        },
+      ],
+    });
+    render(<Harness />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(send).not.toHaveBeenCalled();
+  });
+});

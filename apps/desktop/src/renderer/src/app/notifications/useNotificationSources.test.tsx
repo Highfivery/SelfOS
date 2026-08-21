@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import type { Person } from '@shared/schemas';
-import type { IntakeState } from '@shared/channels';
+import type { InboxEntry, IntakeState } from '@shared/channels';
 import { useNotificationSources } from './useNotificationSources';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useIntakeStore } from '../../stores/intakeStore';
+import { useInboxStore } from '../../stores/inboxStore';
+import { useTogetherStore } from '../../stores/togetherStore';
 import { clearMockBridge, installMockBridge } from '../../test-utils/bridge';
 
 const ME: Person = {
@@ -39,6 +41,8 @@ afterEach(() => {
   clearMockBridge();
   useNotificationStore.getState().reset();
   useIntakeStore.getState().reset();
+  useInboxStore.getState().reset();
+  useTogetherStore.setState({ sessions: [] });
   useSessionStore.setState({ activePerson: null, access: null });
 });
 
@@ -329,38 +333,34 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
 });
 
 describe('useNotificationSources — auto check-ins (63)', () => {
-  const autoInboxItem = {
-    assignmentId: 'a1',
-    title: 'A quick check-in',
-    type: 'general',
-    questionCount: 3,
-    status: 'sent' as const,
-    privacy: 'standard' as const,
-    senderName: 'Ben',
-    createdAt: 'now',
-    favorite: false,
-    answerable: true,
-    hasDraft: false,
-    fromSelf: true,
-    autoCheckin: {
-      targetId: 't-self',
-      intent: 'deepen' as const,
-      rationale: 'why',
-      generatedAt: 'now',
-    },
-  };
-
-  it('surfaces "a new reflection is ready" for a waiting auto check-in, linking to the Inbox', async () => {
-    installMockBridge({ assignmentsInbox: () => Promise.resolve([autoInboxItem]) });
+  it('no longer rings its own bell for a waiting check-in — the queue counts it (08 §36)', async () => {
+    installMockBridge({});
     asOwner();
     await useNotificationStore.getState().load();
+    // The check-in reaches the bell through the QUEUE now, not a per-item fetch: the hook stopped reading
+    // `assignmentsInbox` entirely, so seeding it here would prove nothing.
+    useInboxStore.setState({
+      entries: [
+        {
+          id: 'check-in:a1',
+          kind: 'check-in',
+          title: 'A quick check-in',
+          at: '2026-06-23T10:00:00.000Z',
+          dismissible: false,
+          waiting: true,
+        },
+      ],
+      loaded: true,
+    });
     render(<Harness />);
+
     await waitFor(() => {
-      const n = useNotificationStore
-        .getState()
-        .notifications.find((x) => x.coalesceKey === 'auto-checkin-ready');
-      expect(n?.title).toBe('A new reflection is ready');
-      expect(n?.action).toEqual({ type: 'navigate', to: '/inbox' });
+      const items = useNotificationStore.getState().notifications;
+      // The ONE row is there…
+      expect(items.some((x) => x.coalesceKey === 'inbox-waiting')).toBe(true);
+      // …and the retired fan-out row is not. (`kind` no longer HAS that member, so key off the coalesceKey —
+      // which is also what a stale dismissal from before the retirement would have been stored under.)
+      expect(items.some((x) => x.coalesceKey === 'auto-checkin-ready')).toBe(false);
     });
   });
 
@@ -426,9 +426,8 @@ describe('useNotificationSources — auto check-ins (63)', () => {
     ).toBeUndefined();
   });
 
-  it('does NOT fire the seed notice once turned off, nor the ready notice with nothing waiting', async () => {
+  it('does NOT fire the seed notice once turned off', async () => {
     installMockBridge({
-      assignmentsInbox: () => Promise.resolve([]),
       autoCheckinsGetConfig: () =>
         Promise.resolve({
           schemaVersion: 1,
@@ -440,57 +439,10 @@ describe('useNotificationSources — auto check-ins (63)', () => {
     asOwner();
     await useNotificationStore.getState().load();
     render(<Harness />);
-    // Let the effects settle, then assert neither candidate exists.
+    // Let the effects settle, then assert the seed notice never appears.
     await waitFor(() => expect(useNotificationStore.getState().notifications).toBeDefined());
     const keys = useNotificationStore.getState().notifications.map((n) => n.coalesceKey);
     expect(keys).not.toContain('auto-checkin-enabled');
-    expect(keys).not.toContain('auto-checkin-ready');
-  });
-});
-
-describe('useNotificationSources — story-checkin (64 §18.5, #298)', () => {
-  const biographerInboxItem = {
-    assignmentId: 'sc1',
-    title: 'A question from your biographer',
-    type: 'general',
-    questionCount: 2,
-    status: 'sent' as const,
-    privacy: 'standard' as const,
-    senderName: 'Ben',
-    createdAt: 'now',
-    favorite: false,
-    answerable: true,
-    hasDraft: false,
-    fromSelf: true,
-    fromBiographer: true,
-  };
-
-  it('surfaces "your biographer has a question" for a waiting interview check-in, linking to the Inbox', async () => {
-    installMockBridge({ assignmentsInbox: () => Promise.resolve([biographerInboxItem]) });
-    asOwner();
-    await useNotificationStore.getState().load();
-    render(<Harness />);
-    await waitFor(() => {
-      const n = useNotificationStore
-        .getState()
-        .notifications.find((x) => x.coalesceKey === 'story-checkin');
-      expect(n?.title).toBe('Your biographer has a question');
-      expect(n?.action).toEqual({ type: 'navigate', to: '/inbox' });
-    });
-  });
-
-  it('does not fire when the only biographer item is already answered', async () => {
-    installMockBridge({
-      assignmentsInbox: () =>
-        Promise.resolve([{ ...biographerInboxItem, answerable: false, answeredAt: 'now' }]),
-    });
-    asOwner();
-    await useNotificationStore.getState().load();
-    render(<Harness />);
-    await waitFor(() => expect(useNotificationStore.getState().notifications).toBeDefined());
-    expect(useNotificationStore.getState().notifications.map((n) => n.coalesceKey)).not.toContain(
-      'story-checkin',
-    );
   });
 });
 
@@ -508,19 +460,24 @@ describe('useNotificationSources — story-shared (64 §3.6)', () => {
     ...over,
   });
 
-  it('surfaces a one-time notification for a NEVER-opened shared book, keyed per book', async () => {
+  it('is EMAIL-ONLY for a NEVER-opened shared book — named in the email, no bell row (§36.2)', async () => {
     installMockBridge({ booksSharedBooks: () => Promise.resolve([sharedBook()]) });
     asOwner();
     await useNotificationStore.getState().load();
     render(<Harness />);
     await waitFor(() => {
-      const n = useNotificationStore
+      // Still a candidate, so the transactional email names Angel and the book — that specificity is the
+      // whole reason this one outlived its bell row. The queue carries the "shared with you" row instead.
+      const c = useNotificationStore
         .getState()
-        .notifications.find((x) => x.coalesceKey === 'story-shared:auth1:b1');
-      expect(n).toBeDefined();
-      expect(n?.title).toBe('Angel shared their story');
-      expect(n?.action).toEqual({ type: 'navigate', to: '/books' });
+        .candidates.find((x) => x.coalesceKey === 'story-shared:auth1:b1');
+      expect(c).toBeDefined();
+      expect(c?.title).toBe('Angel shared their story');
+      expect(c?.inApp).toBe(false);
     });
+    expect(
+      useNotificationStore.getState().notifications.some((n) => n.kind === 'story-shared'),
+    ).toBe(false);
   });
 
   it('does NOT notify once the book has been opened (updated marker only, never re-notifies)', async () => {
@@ -534,5 +491,98 @@ describe('useNotificationSources — story-shared (64 §3.6)', () => {
     await waitFor(() => expect(useNotificationStore.getState().notifications).toBeDefined());
     const keys = useNotificationStore.getState().notifications.map((n) => n.coalesceKey);
     expect(keys.some((k) => k.startsWith('story-shared:'))).toBe(false);
+  });
+});
+
+describe('useNotificationSources — the Inbox queue is ONE row (08 §36)', () => {
+  const entry = (id: string, over: Partial<InboxEntry> = {}): InboxEntry => ({
+    id,
+    kind: 'check-in',
+    title: id,
+    at: '2026-06-23T10:00:00.000Z',
+    openPath: '/inbox',
+    dismissible: false,
+    waiting: true,
+    ...over,
+  });
+
+  it('replaces the per-item fan-out with a single count that opens the queue', async () => {
+    installMockBridge({});
+    asOwner();
+    await useNotificationStore.getState().load();
+    useInboxStore.setState({
+      entries: [
+        entry('a'),
+        entry('b', { kind: 'together-invitation' }),
+        entry('c', { kind: 'shared-book' }),
+      ],
+      loaded: true,
+    });
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      const items = useNotificationStore.getState().notifications;
+      const row = items.find((n) => n.coalesceKey === 'inbox-waiting');
+      expect(row?.title).toBe('3 things are waiting for you');
+      expect(row?.action).toEqual({ type: 'navigate', to: '/inbox' });
+      // The signature is the SET of waiting ids, never the count: a queue's count oscillates as you work
+      // through it, so "back up to 2" after reading at 2 would land silently under a count.
+      expect(row?.signature).toBe('a,b,c');
+      // The whole point: no per-item bell rows beside it — the queue is the record.
+      expect(items.filter((n) => n.coalesceKey.startsWith('together-invite'))).toHaveLength(0);
+    });
+  });
+
+  it('counts only what is WAITING — an answered check-in stays listed but nudges nobody', async () => {
+    installMockBridge({});
+    asOwner();
+    await useNotificationStore.getState().load();
+    useInboxStore.setState({
+      entries: [entry('a'), entry('answered', { waiting: false })],
+      loaded: true,
+    });
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      const row = useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'inbox-waiting');
+      expect(row?.title).toBe('Something is waiting for you');
+    });
+  });
+
+  it('a Together invitation takes no bell row — it is email-only now (§36.2)', async () => {
+    installMockBridge({});
+    asOwner();
+    useTogetherStore.setState({
+      sessions: [
+        {
+          id: 's1',
+          status: 'invited',
+          initiatorPersonId: 'partner-1',
+          participants: [
+            { personId: 'partner-1', displayName: 'Angel' },
+            { personId: ME.id, displayName: 'Ben' },
+          ],
+          createdAt: '2026-06-23T10:00:00.000Z',
+          yourTurn: false,
+          unread: 0,
+          readyToWrapUp: false,
+        } as never,
+      ],
+    });
+    await useNotificationStore.getState().load();
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      const state = useNotificationStore.getState();
+      // Still a CANDIDATE, so the transactional email names Angel...
+      expect(state.candidates.some((c) => c.kind === 'together-invite')).toBe(true);
+      // ...but never a bell row.
+      expect(state.notifications.some((n) => n.kind === 'together-invite')).toBe(false);
+    });
   });
 });

@@ -52,6 +52,13 @@ export interface InboxEntry {
   openPath?: string;
   /** Whether the person may remove it from their queue without acting on it. */
   dismissible: boolean;
+  /**
+   * Whether this still needs the person. The queue LISTS more than it counts: an answered check-in stays,
+   * because reviewing and editing your own answers happens here (§56), but nothing is waiting on you for it.
+   * The badge and the single "waiting for you" notification both count this and nothing else, which is what
+   * keeps one number meaning one thing.
+   */
+  waiting: boolean;
 }
 
 /**
@@ -86,6 +93,21 @@ export function listInboxProviders(): InboxProvider[] {
 /** Drop every provider — for tests that exercise one in isolation. */
 export function resetInboxProviders(): void {
   providers.length = 0;
+}
+
+/**
+ * The entries that still need the person — the ONE derivation every surface that counts the queue reads.
+ * The badge takes its length; the "waiting for you" notification takes its ids for a signature (08 §36).
+ * Both go through here rather than re-filtering `waiting` inline, because a second inline copy is exactly
+ * how two counts of the same thing come to disagree.
+ */
+export function waitingEntries(entries: readonly InboxEntry[]): InboxEntry[] {
+  return entries.filter((e) => e.waiting);
+}
+
+/** How many entries still need the person — the number the nav badge shows. */
+export function waitingCount(entries: readonly InboxEntry[]): number {
+  return waitingEntries(entries).length;
 }
 
 /**

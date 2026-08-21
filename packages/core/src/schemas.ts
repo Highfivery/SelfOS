@@ -53,6 +53,12 @@ export type SettingsFile = z.infer<typeof SettingsFileSchema>;
 
 /** The kinds migrated in v1. Extensible — add a literal here + a registry entry in the renderer. */
 export const NOTIFICATION_KINDS = [
+  // One row for everything sitting in the Inbox queue (08 §36). It replaced five per-item bell rows —
+  // together-invite, auto-checkin-ready, story-checkin, contribution-invited, story-shared — which each
+  // announced one thing that was already in the queue. A bell that can be dismissed without acting is the
+  // wrong home for work; the queue is the record, and this is the one nudge that reaches someone not
+  // looking at it. (Retiring a bell row is safe: read/dismissed state is keyed by coalesceKey, not by kind.)
+  'inbox-waiting',
   'update-available',
   'profile-freshness',
   'responses-arrived',
@@ -63,16 +69,18 @@ export const NOTIFICATION_KINDS = [
   'challenge-followup', // 52-challenge-sessions §3.5 — a gentle "how did your challenge go?" check-in
   'onboarding-updated', // 55-onboarding-attention §3.1 — completed onboarding has new/unanswered questions
   'answers-updated', // 56-answer-review-edit §3.2 — a recipient edited answers after the sender analyzed them
-  'together-invite', // 58-together §3.11 — a partner invited you to a Together session
+  // Two kinds outlived their bell row because they also EMAIL (family B below): a Together invitation and a
+  // book someone opened to you are the two queue items that reach a person who may not open SelfOS for days,
+  // and an email that names who invited you is worth far more there than "3 things are waiting". Their
+  // candidates are still derived — they just carry `inApp: false`, so the email cadence sees them and the
+  // notification center does not (08 §36.2).
+  'together-invite', // 58-together §3.11 — email-only; the queue is where you accept or decline
+  'story-shared', // 64 §3.6 — email-only; the queue carries the "shared with you" row
   'together-turn', // 58-together §3.11 — your turn in a Together session (coalesced per session, projection signature)
   'together-wrapup', // 58-together §3.8 — the coach signalled a natural close; a gentle "wrap up & reflect?" nudge
   'together-private', // 58-together §3.14 Part B — the coach left a private note just for you in a Together session
-  'auto-checkin-ready', // 63-auto-checkins §6.4 — an auto-generated check-in is waiting in the inbox
   'auto-checkin-enabled', // 63-auto-checkins §5.1 — the one-time "Auto check-ins is now on" seed notice
   'auto-checkin-incoming', // 63 §3.3a — someone set up recurring check-ins for you (fires once per new sender)
-  'story-shared', // 64-your-story §3.6 — someone shared their Story book with you (fires once, on first share)
-  'story-checkin', // 64-your-story §18.5 — your biographer has an interview check-in (a "gap" prompt) waiting
-  'contribution-invited', // 73 §3.1 — someone asked you to add what you remember to their book
   'contribution-received', // 73 §3.3 — someone sent something for your book to consider
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);

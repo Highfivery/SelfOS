@@ -11,7 +11,8 @@ const FOCUS_THROTTLE_MS = 30 * 60 * 1000;
  * #298 — the spec-39/40 precedent). Previously these mounted only on the `/story` route, so a book only refreshed
  * or minted an interview check-in while the person was already looking at it. Mounted at AppShell, they run for
  * EVERY book the active person owns with `autoRefresh` on — on mount, on window focus/resume, and on a person
- * switch — so gap/refresh prompts surface globally (the gap surfaces via the `story-checkin` notification).
+ * switch — so gap/refresh prompts surface globally (the minted check-in lands in the Inbox queue, where the
+ * one "waiting for you" row counts it — the per-item `story-checkin` bell row was retired in 08 §36).
  *
  * The bridge owns the real gates (device-local daily throttle, weekly cap, crisis suppressor, the ≤1-open
  * back-off, budget) and no-ops when not warranted, so this hook just nudges each eligible book; the in-memory

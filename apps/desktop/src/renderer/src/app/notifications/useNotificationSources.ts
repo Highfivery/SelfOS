@@ -8,16 +8,17 @@ import type {
 import type {
   CoachingSynthesis,
   Goal,
-  ContributionInviteView,
   IncomingAutoCheckinStream,
   SharedBookSummary,
 } from '@shared/schemas';
 import { checkInDueChallenge } from '@selfos/core/challenges';
+import { waitingEntries } from '@selfos/core/inbox';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
 import { useIntakeStore } from '../../stores/intakeStore';
 import { useTogetherStore } from '../../stores/togetherStore';
+import { useInboxStore } from '../../stores/inboxStore';
 import { attentionFromIntakeState } from '../routes/onboarding/progress';
 import { togetherNotificationCandidates } from '../routes/together/notifications';
 import { stalestGoal } from './goalFollowup';
@@ -39,12 +40,14 @@ export function useNotificationSources(conflicts: string[]): void {
   const canSessions = useSessionStore((s) => s.can('sessions.own'));
   const canChallenges = useSessionStore((s) => s.can('challenges.own'));
   const canTogether = useSessionStore((s) => s.can('together.own'));
-  const canAnswer = useSessionStore((s) => s.can('questionnaires.answer'));
   const canAutoCheckin = useSessionStore((s) => s.can('questionnaires.autoCheckin'));
   const canStory = useSessionStore((s) => s.can('story.own'));
   // Together sessions are loaded + reset per active person by AppShell (58 §5.3) — derive the invite/turn
   // notifications from the projection-computed summaries (no extra fetch, no message content, §3.11).
   const togetherSessions = useTogetherStore((s) => s.sessions);
+  // The Inbox queue is loaded + reset per active person by AppShell (08 §35), so the one "waiting for you"
+  // row derives from it with no extra read — the same no-extra-fetch shape as the Together summaries.
+  const inboxEntries = useInboxStore((s) => s.entries);
   const setCandidates = useNotificationStore((s) => s.setCandidates);
   // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
   const update = useUpdateStore((s) => s.result);
@@ -62,16 +65,10 @@ export function useNotificationSources(conflicts: string[]): void {
   // The life-areas covered by active DEPTH invitations — a synthesis observation for the same area yields
   // to the more specific, actionable nudge (§3.7).
   const [freshnessAreas, setFreshnessAreas] = useState<string[]>([]);
-  // Auto check-ins (63): how many auto-generated check-ins are waiting to answer + the one-time seed marker.
-  const [autoPending, setAutoPending] = useState(0);
-  // Your Story (64 §18.5): biographer interview check-ins waiting to answer — the "gap" prompt, surfaced
-  // globally now the living-book cadence runs at AppShell (not only on /story). Counted from the same inbox
-  // read as auto check-ins; the two provenances never overlap (a story check-in has no `autoCheckin`).
-  const [storyPending, setStoryPending] = useState(0);
+  // Auto check-ins (63): the one-time "it's now on" seed marker.
   const [autoSeededAt, setAutoSeededAt] = useState<string | null>(null);
-  // Household contributions (73): books opened to the active person, and offerings waiting on them as an
-  // author. Both are derived reads — nothing is pushed, so a dismissal stays dismissed until it changes.
-  const [invitations, setInvitations] = useState<ContributionInviteView[]>([]);
+  // Household contributions (73 §3.4): offerings waiting on the active person AS AN AUTHOR — a derived read,
+  // so a dismissal stays dismissed until it changes. (Invitations TO you live in the Inbox queue, 08 §36.)
   const [contributionsPending, setContributionsPending] = useState(0);
   // Streams others have set up targeting the active person (§3.3a) — the first-time "someone set up
   // check-ins for you" notice. Not capability-gated (a person can be targeted without holding the capability).
@@ -91,61 +88,41 @@ export function useNotificationSources(conflicts: string[]): void {
     setChallenges([]);
     setSynthesis(null);
     setFreshnessAreas([]);
-    setAutoPending(0);
-    setStoryPending(0);
     setAutoSeededAt(null);
     setIncomingStreams([]);
     setSharedBooks([]);
-    setInvitations([]);
     setContributionsPending(0);
     void (async () => {
-      const [
-        sugg,
-        resp,
-        edits,
-        rem,
-        gls,
-        chs,
-        syn,
-        inbox,
-        autoConfig,
-        incoming,
-        shared,
-        myInvitations,
-        shelf,
-      ] = await Promise.all([
-        canIntake
-          ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canViewResults
-          ? (window.selfos?.notificationsResponsesArrived() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canViewResults
-          ? (window.selfos?.notificationsAnswersUpdated() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canViewResults
-          ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
-        canChallenges
-          ? (window.selfos?.challengesList() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canSessions
-          ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
-          : Promise.resolve(null),
-        canAnswer
-          ? (window.selfos?.assignmentsInbox() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canAutoCheckin
-          ? (window.selfos?.autoCheckinsGetConfig() ?? Promise.resolve(null))
-          : Promise.resolve(null),
-        window.selfos?.autoCheckinsIncomingStreams() ?? Promise.resolve([]),
-        canStory ? (window.selfos?.booksSharedBooks() ?? Promise.resolve([])) : Promise.resolve([]),
-        canStory
-          ? (window.selfos?.booksMyInvitations() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canStory ? (window.selfos?.booksShelf() ?? Promise.resolve([])) : Promise.resolve([]),
-      ]);
+      const [sugg, resp, edits, rem, gls, chs, syn, autoConfig, incoming, shared, shelf] =
+        await Promise.all([
+          canIntake
+            ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canViewResults
+            ? (window.selfos?.notificationsResponsesArrived() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canViewResults
+            ? (window.selfos?.notificationsAnswersUpdated() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canViewResults
+            ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
+          canChallenges
+            ? (window.selfos?.challengesList() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canSessions
+            ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
+            : Promise.resolve(null),
+          canAutoCheckin
+            ? (window.selfos?.autoCheckinsGetConfig() ?? Promise.resolve(null))
+            : Promise.resolve(null),
+          window.selfos?.autoCheckinsIncomingStreams() ?? Promise.resolve([]),
+          canStory
+            ? (window.selfos?.booksSharedBooks() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canStory ? (window.selfos?.booksShelf() ?? Promise.resolve([])) : Promise.resolve([]),
+        ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
       setFreshnessAreas(sugg.map((s) => s.lifeArea).filter((a): a is string => Boolean(a)));
@@ -155,13 +132,10 @@ export function useNotificationSources(conflicts: string[]): void {
       setGoals(gls);
       setChallenges(chs);
       setSynthesis(syn);
-      setAutoPending(inbox.filter((i) => i.autoCheckin && i.answerable).length);
-      setStoryPending(inbox.filter((i) => i.fromBiographer && i.answerable).length);
       // The one-time seed notice only while it's still on (turning it off = they've engaged, no notice).
       setAutoSeededAt(autoConfig?.enabled ? (autoConfig.seededAt ?? null) : null);
       setIncomingStreams(incoming);
       setSharedBooks(shared);
-      setInvitations(myInvitations);
       // Counted across the author's own books, so the bell says something is waiting without them having to
       // open each book to find out which.
       const perBook = await Promise.all(
@@ -182,7 +156,6 @@ export function useNotificationSources(conflicts: string[]): void {
     canMemory,
     canSessions,
     canChallenges,
-    canAnswer,
     canAutoCheckin,
     canStory,
   ]);
@@ -347,59 +320,36 @@ export function useNotificationSources(conflicts: string[]): void {
       }
     }
 
+    // ONE row for everything waiting in the Inbox (08 §36) — it replaced five per-item kinds, each of which
+    // announced something already sitting in the queue. It states the count and nothing else: the queue itself
+    // says what each thing is, and naming one item here would just re-create the fan-out.
+    //
+    // The signature is the SET of waiting ids (resolved by `onNewMember`), not the count — see the registry:
+    // a count oscillates as you work through a queue, so a re-arrival at an already-read count would land
+    // silently. Sorted so a stable set always produces a stable signature.
+    const waiting = waitingEntries(inboxEntries);
+    if (waiting.length > 0) {
+      candidates.push({
+        kind: 'inbox-waiting',
+        coalesceKey: 'inbox-waiting',
+        signature: waiting
+          .map((e) => e.id)
+          .sort()
+          .join(','),
+        title:
+          waiting.length === 1
+            ? 'Something is waiting for you'
+            : `${waiting.length} things are waiting for you`,
+        body: 'Check-ins, invitations, and anything else people sent you.',
+        action: { type: 'navigate', to: '/inbox' },
+      });
+    }
+
     // Together invitations + your-turn nudges (58 §3.11), derived from the projection-computed summaries.
     if (canTogether) {
       candidates.push(...togetherNotificationCandidates(togetherSessions, activePersonId));
     }
 
-    // Auto check-ins (63): a gentle "a reflection is ready" + the one-time "it's now on" seed notice.
-    if (autoPending > 0) {
-      candidates.push({
-        kind: 'auto-checkin-ready',
-        coalesceKey: 'auto-checkin-ready',
-        signature: String(autoPending), // a new one → higher count → re-surfaces; answering some never re-pops
-        title:
-          autoPending === 1
-            ? 'A new reflection is ready'
-            : `${autoPending} new reflections are ready`,
-        body: 'SelfOS created a check-in for you from what it’s learned.',
-        action: { type: 'navigate', to: '/inbox' },
-      });
-    }
-    // Your biographer has an interview check-in waiting (64 §18.5) — a "gap" prompt, surfaced globally now the
-    // cadence runs app-wide. onIncrease by count; answering some never re-pops. Links to the Inbox where the
-    // biographer check-in is answered (its card carries the "Your biographer" eyebrow).
-    if (canStory && storyPending > 0) {
-      candidates.push({
-        kind: 'story-checkin',
-        coalesceKey: 'story-checkin',
-        signature: String(storyPending),
-        title:
-          storyPending === 1
-            ? 'Your biographer has a question'
-            : `Your biographer has ${storyPending} questions`,
-        body: 'A check-in is waiting to help write your story.',
-        action: { type: 'navigate', to: '/inbox' },
-      });
-    }
-    // Someone opened their book to you (73 §3.1). One row for all of them; the action opens the newest,
-    // since the common case is a single invitation.
-    if (invitations.length > 0 && invitations[0]) {
-      candidates.push({
-        kind: 'contribution-invited',
-        coalesceKey: 'contribution-invited',
-        signature: invitations
-          .map((i) => i.id)
-          .sort()
-          .join(','),
-        title:
-          invitations.length === 1
-            ? `${invitations[0].authorName} asked you to add to their book`
-            : `${invitations.length} people asked you to add to their books`,
-        body: 'Share a memory, a question, or something they said.',
-        action: { type: 'navigate', to: `/contribute/${invitations[0].id}` },
-      });
-    }
     // Something is waiting on the author's accept/decline (73 §3.4).
     if (contributionsPending > 0) {
       candidates.push({
@@ -456,6 +406,9 @@ export function useNotificationSources(conflicts: string[]): void {
         title: `${book.authorName} shared their story`,
         body: `“${book.title}” is ready for you to read.`,
         action: { type: 'navigate', to: '/books' },
+        // Email-only (08 §36.2): the queue carries the "shared with you" row, but a book someone opened to
+        // you is worth an email that NAMES them — "3 things are waiting" would not get anyone to open it.
+        inApp: false,
       });
     }
 
@@ -475,8 +428,7 @@ export function useNotificationSources(conflicts: string[]): void {
     intake,
     canTogether,
     togetherSessions,
-    autoPending,
-    storyPending,
+    inboxEntries,
     canStory,
     autoSeededAt,
     incomingStreams,

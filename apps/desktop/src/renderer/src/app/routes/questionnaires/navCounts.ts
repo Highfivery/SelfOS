@@ -1,11 +1,14 @@
-import type { InboxItem, QuestionnaireSentOverview } from '@shared/channels';
+import type { QuestionnaireSentOverview } from '@shared/channels';
 
 /**
- * Nav-badge counts for the Questionnaires sidebar link (08 §3.1). The badge aggregates the two things that
- * need the SIGNED-IN person's action — never passive "waiting on them" — so it reads as a to-do count:
- *   • responses ready to analyze (a submitted-but-un-analysed send you can turn into an Insight)
- *   • questionnaires received (from someone else) that you still have to answer
- * Passive "awaiting their response" is deliberately excluded — there's nothing for you to do there.
+ * The nav-badge count for the Questionnaires sidebar link (08 §3.1 / §36.3). Each of the two nav badges owns
+ * one side of the divide the redesign draws: the INBOX badge counts what other people are waiting on from you
+ * (check-ins, invitations, books shared with you — everything in the queue), and this one counts YOUR OWN
+ * work in Questionnaires. Answering used to be counted twice, once in each badge, which made the two numbers
+ * describe overlapping things and neither of them a to-do list.
+ *
+ * So it is exactly one thing: responses that came back and are ready for you to analyse. Passive "awaiting
+ * their response" is still deliberately excluded — there is nothing for you to do there.
  */
 
 /** How many sent questionnaires have a submitted response waiting for you to analyse. */
@@ -13,15 +16,7 @@ export function readyToAnalyzeCount(overview: Record<string, QuestionnaireSentOv
   return Object.values(overview).filter((o) => o.analyzableAssignmentId !== undefined).length;
 }
 
-/** How many received questionnaires (sent to you by someone else) you still have to answer. */
-export function receivedToAnswerCount(items: InboxItem[]): number {
-  return items.filter((i) => i.answerable && !i.fromSelf).length;
-}
-
-/** The single aggregate for the sidebar badge (§3.1): analyze-waiting + answer-waiting. */
-export function questionnaireNavCount(
-  overview: Record<string, QuestionnaireSentOverview>,
-  items: InboxItem[],
-): number {
-  return readyToAnalyzeCount(overview) + receivedToAnswerCount(items);
+/** The sidebar badge (§3.1): responses ready to analyse. Answering is counted by the Inbox badge (§36.3). */
+export function questionnaireNavCount(overview: Record<string, QuestionnaireSentOverview>): number {
+  return readyToAnalyzeCount(overview);
 }

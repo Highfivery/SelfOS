@@ -88,7 +88,10 @@ export function QuestionnairesCard({
           ) : null}
           {inboxCount > 0 ? (
             <button type="button" className={styles.cardLink} onClick={() => navigate('/inbox')}>
-              {inboxCount} waiting for you to answer →
+              {/* Names what it counts — CHECK-INS. It links to the Inbox, whose badge counts the whole
+                  queue (invitations and shared books too, 08 §36.3), so a bare "N waiting for you" here
+                  would read as the same number and disagree with the badge three inches away. */}
+              {inboxCount} check-in{inboxCount === 1 ? '' : 's'} to answer →
             </button>
           ) : null}
         </Stack>

@@ -188,11 +188,11 @@ describe('togetherWaitingCount (§3.1/§3.8)', () => {
     // session needs BOTH partners' attention to wrap up, so both should count.
     const addressed = view('a', { yourTurn: true, readyToWrapUp: true });
     const other = view('b', { yourTurn: false, readyToWrapUp: true });
-    expect(togetherWaitingCount([addressed], ME)).toBe(1);
-    expect(togetherWaitingCount([other], ME)).toBe(1);
+    expect(togetherWaitingCount([addressed])).toBe(1);
+    expect(togetherWaitingCount([other])).toBe(1);
   });
 
   it('does not count a plain their-turn active session', () => {
-    expect(togetherWaitingCount([view('c', { yourTurn: false })], ME)).toBe(0);
+    expect(togetherWaitingCount([view('c', { yourTurn: false })])).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -15,6 +15,7 @@ import type { Person } from '@shared/schemas';
 import { Inbox } from './Inbox';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useNotificationStore } from '../../../stores/notificationStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
 const renderInbox = (): ReturnType<typeof render> =>
@@ -42,6 +43,7 @@ const checkInEntry = (item: InboxItem): InboxEntry => ({
   ...(item.senderName ? { fromName: item.senderName } : {}),
   at: item.createdAt,
   dismissible: false,
+  waiting: item.answerable,
 });
 
 /** Set the active person's role so the empty-state's capability-gated action reflects it. */
@@ -457,6 +459,7 @@ describe('Inbox', () => {
         fromName: 'Ben',
         at: '2026-08-01T00:00:00.000Z',
         dismissible: false,
+        waiting: true,
       },
       {
         id: 'together-invitation:s1',
@@ -467,6 +470,7 @@ describe('Inbox', () => {
         at: '2026-08-04T00:00:00.000Z',
         openPath: '/together/session/s1',
         dismissible: false,
+        waiting: true,
       },
       {
         id: 'contribution-invitation:i1',
@@ -477,6 +481,7 @@ describe('Inbox', () => {
         at: '2026-08-03T00:00:00.000Z',
         openPath: '/contribute/i1',
         dismissible: true,
+        waiting: true,
       },
       {
         id: 'shared-book:ben:b1',
@@ -487,6 +492,7 @@ describe('Inbox', () => {
         at: '2026-08-02T00:00:00.000Z',
         openPath: '/books/shared/ben/b1',
         dismissible: true,
+        waiting: true,
       },
     ];
     installMockBridge({
@@ -546,6 +552,7 @@ describe('Inbox', () => {
             at: '2026-08-03T00:00:00.000Z',
             openPath: '/contribute/i1',
             dismissible: true,
+            waiting: true,
           },
           {
             id: 'together-invitation:s1',
@@ -554,6 +561,7 @@ describe('Inbox', () => {
             at: '2026-08-04T00:00:00.000Z',
             openPath: '/together/session/s1',
             dismissible: false,
+            waiting: true,
           },
         ]),
       inboxDismiss: dismissEntry,
@@ -812,5 +820,49 @@ describe('Inbox', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(await screen.findByText(/there’s no report for this one/i)).toBeInTheDocument();
     expect(screen.queryByText('Your shared report')).not.toBeInTheDocument();
+  });
+});
+
+describe('Inbox quiets the bell it raised (08 §36)', () => {
+  it('marks the "waiting for you" row read on open, so working the queue does not toast at you', async () => {
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([]),
+      inboxList: () =>
+        Promise.resolve([
+          {
+            id: 'together-invitation:s1',
+            kind: 'together-invitation' as const,
+            title: 'How we talk about money',
+            at: '2026-08-04T00:00:00.000Z',
+            openPath: '/together/session/s1',
+            dismissible: false,
+            waiting: true,
+          },
+        ]),
+    });
+    useNotificationStore.setState({
+      loaded: true,
+      persisted: { read: {}, dismissed: {} },
+      candidates: [
+        {
+          kind: 'inbox-waiting',
+          coalesceKey: 'inbox-waiting',
+          signature: 'together-invitation:s1',
+          title: 'Something is waiting for you',
+        },
+      ],
+    });
+    useNotificationStore.getState().setCandidates(useNotificationStore.getState().candidates);
+    expect(useNotificationStore.getState().notifications[0]?.read).toBe(false);
+
+    renderInbox();
+
+    // Looking at the queue IS seeing it. Without this the row stays unread over a queue just looked at —
+    // and because its signature is the SET of waiting ids, every action mints a new id and toasts again.
+    await waitFor(() =>
+      expect(useNotificationStore.getState().persisted.read['inbox-waiting']).toBe(
+        'together-invitation:s1',
+      ),
+    );
   });
 });

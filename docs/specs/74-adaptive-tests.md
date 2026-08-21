@@ -1918,11 +1918,23 @@ wrong fails OPEN on a hard no. This one fails to a sentence reading oddly.
 This is **§3.6.36 one level down**: that fixed WHICH DIRECTION a mark was made in, and left what that direction
 MEANS for the family it came from.
 
-**2) One bad element sank a whole pass.** **2 of 4 live open-ended probe passes returned MALFORMED — every one
-`end_turn`**, complete replies, not truncated and not refused. The model wrote one question with raw inner
-quotes (`"question": "When she says "my big cock" — …"`) while the other five escaped theirs correctly, and
+**2) One bad element sank a whole pass.** A live open-ended probe pass returned MALFORMED **`end_turn`** — a
+complete reply, not truncated and not refused. The model wrote one question with raw inner quotes
+(`"question": "When she says "my big cock" — …"`) while the other five escaped theirs correctly, and
 `extractJsonObject` returned null for the lot. This is the phase most exposed to it in the whole take, because
 its entire job is to quote the person's own marked terms back at them.
+
+**How often is NOT known, and the first figure recorded here was wrong.** This originally read "2 of 4 passes",
+which was a true count and a misleading statistic: 4 samples cannot estimate a rate. Re-measured after the fix
+over **8 fresh passes: 0 failed, and the strict parse succeeded on all 8** — the salvage did no work in that
+sample. The premise for this ambiguity is byte-identical before and after §3.6.39 (the owner's four loved terms
+there are all names, so the register fix does not touch it), so nothing in this change made the model behave
+better; the first sample was simply unlucky. Combined: **2 failures in 12 observed passes**, with the two
+samples inconsistent enough that no rate should be quoted.
+
+**The fix does not rest on a frequency.** A real reply did arrive in this shape and cost all six questions; the
+salvage recovers 5 of them from that exact captured reply, guarded by a test that fails when reverted, and
+costs nothing on a pass that parses. That is the whole justification — a net that was needed at least once.
 
 `tolerantArray` is already per-element tolerant, but that only helps once the OBJECT parses — the §3.6.34
 lesson, in the sibling phase that never got the fix. The scenario phase was given `salvageJsonObjectArrayField`
@@ -1962,7 +1974,11 @@ will disagree with it silently for as long as nobody reads them side by side; ex
 time, not the third. (3) A helper exported "for tests" with zero callers is not dead weight but a live
 divergence — the production path had been quietly stricter than the code written to describe it. (4) Two
 salvagers built for opposite failures are not interchangeable, and picking the wrong one is worse than picking
-neither: check which failure a helper was written for before reaching for it.
+neither: check which failure a helper was written for before reaching for it. (5) **A count is not a rate.**
+"2 of 4" was recorded here as the justification and read like a ~50% failure rate; 8 further passes failed 0.
+The defect was real either way — a captured reply proves it — but a small sample written into a spec becomes a
+number future readers reason from, so state the sample size, and re-measure before letting a count stand as a
+frequency.
 
 ## 4. Data model
 

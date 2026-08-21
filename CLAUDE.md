@@ -600,10 +600,14 @@ A running log of durable decisions and feedback captured into the project config
   name is a vocative", and `frozen`, six lines below the split, already said "love **hearing**". Three copies
   of one rule; the two that mattered disagreed. Now one exported `isNameFamily` all three read. This is
   **§3.6.36 one level down**: that fixed WHICH DIRECTION a mark was made in, and left what that direction MEANS
-  for the family it came from. **(2) One bad element sank a whole pass:** **2 of 4 live open-ended probe passes
-  returned MALFORMED, every one `end_turn`** — complete replies where the model wrote ONE question with raw
-  inner quotes while the other five escaped theirs correctly. The phase whose entire job is to quote their own
-  marked terms is the one most exposed to it. `tolerantArray` is per-element tolerant but only once the OBJECT
+  for the family it came from. **(2) One bad element sank a whole pass:** a live open-ended probe pass returned
+  MALFORMED **`end_turn`** — a complete reply where the model wrote ONE question with raw inner quotes while
+  the other five escaped theirs correctly. The phase whose entire job is to quote their own marked terms is the
+  one most exposed to it. **(Frequency unknown, and the figure first recorded here was wrong: it read "2 of 4",
+  a true count that reads as a ~50% rate. Re-measured after the fix over 8 fresh passes — 0 failed, strict
+  parse fine on all 8, salvage did no work; the premise is byte-identical before/after, so nothing here made
+  the model better and the first sample was unlucky. Combined 2 in 12, too inconsistent to quote a rate. The
+  fix rests on the captured reply, not a frequency.)** `tolerantArray` is per-element tolerant but only once the OBJECT
   parses (the §3.6.34 lesson, in the sibling that never got the fix); the scenario got
   `salvageJsonObjectArrayField` for exactly this and the probe had only the one-string salvage from §3.6.15,
   which predates the six-questions-per-pass shape. Measured on the REAL captured reply: `extractJsonObject` →
@@ -627,7 +631,12 @@ A running log of durable decisions and feedback captured into the project config
   callers is not dead weight, it is a live divergence: the production path was quietly stricter than the code
   written to describe it. (4) Two salvagers built for OPPOSITE failures are not interchangeable — check which
   failure a helper was written for before reaching for it, because picking the wrong one is worse than picking
-  neither.**
+  neither. (5) **A COUNT IS NOT A RATE, and a small sample written into a spec becomes a number people reason
+  from.** I recorded "2 of 4 passes returned MALFORMED" as the justification for a fix; 8 further passes failed
+  0, and the strict parse was fine on all 8. The defect was real either way — a captured reply proves it — but
+  the figure implied a ~50% failure rate that does not exist. State the sample size, and re-measure before
+  letting a count stand as a frequency; a fix should rest on the reproduced failure, not on how often it
+  happened to appear in four tries.**
 
 - 2026-08-20 — **Feedback (never run E2E with `pnpm dev` up — and it is NOT the single-instance lock; CLAUDE.md
   §6 step 7).** An hour was lost to this: with the owner's dev app running, **every** Playwright-Electron test

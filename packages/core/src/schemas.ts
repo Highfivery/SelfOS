@@ -5555,6 +5555,8 @@ export interface ContributionInviteView {
   authorPersonId: string;
   authorName: string;
   note?: string;
+  /** When the author invited them — the Inbox queue is chronological (§35). Says nothing about the book. */
+  invitedAt: string;
   /** Whether this book is shared with them — `correction` is only offered when it is (§3.2). */
   canRead: boolean;
 }

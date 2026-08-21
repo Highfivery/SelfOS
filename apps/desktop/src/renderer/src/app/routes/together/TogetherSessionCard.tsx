@@ -142,7 +142,12 @@ export function TogetherSessionCard({
             {hint}
           </div>
         ) : null}
-        {session.lastMessageSnippet ? (
+        {/* Never before it is accepted (58 §3.4). An invitation can already carry the initiator's opening
+            message and a coach reply, and every other surface withholds them — the notification header states
+            the rule outright, the Home card shows only "X invited you", and the invitation screen itself
+            shows only the topic. This card was the one place message text appeared to someone who had not
+            yet seen the rules of the room or agreed to them. */}
+        {session.lastMessageSnippet && session.status !== 'invited' ? (
           <div className={styles.sessionExcerpt}>“{session.lastMessageSnippet}”</div>
         ) : null}
         <div className={styles.sessionFoot}>

@@ -195,3 +195,47 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+
+/* ── The cross-domain queue (08 §35) ───────────────────────────────────────── */
+
+/* A row plus its dismiss affordance. The row keeps the whole width; the ✕ overlays its trailing edge, so a
+   dismissible entry and a non-dismissible one line up exactly. */
+.rowWrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.dismiss {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+.dismiss:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+.dismiss:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* The kind icon sits inline with the title; `min-width: 0` keeps a long title ellipsising rather than
+   pushing the status chip out of the row (§12). */
+.rowName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}

@@ -703,6 +703,13 @@ import {
   setAutoCheckinConfig,
 } from '@selfos/core/auto-checkins';
 import {
+  collectInbox,
+  dismissInboxEntry,
+  readInboxDismissals,
+  registerBuiltInInboxProviders,
+  type InboxEntry,
+} from '@selfos/core/inbox';
+import {
   type AnswerValue,
   type AnswerMap,
   summarizeSkips,
@@ -1844,6 +1851,8 @@ const ADAPTIVE_UNAVAILABLE = 'This test isn’t available right now.';
 const NOT_ENOUGH_MARKED = 'There isn’t enough marked yet for this to be worth running.';
 
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
+  // The queue's non-check-in kinds (08 §35.2). Idempotent by kind, so re-creating a bridge is harmless.
+  registerBuiltInInboxProviders();
   const activePersonId = async (): Promise<string | null> =>
     (await host.readDeviceState()).activePersonId ?? null;
 
@@ -2534,7 +2543,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     adultAcknowledged: false,
   });
 
-  return {
+  // Named so a handler can compose another (the queue reuses `assignmentsInbox` rather than
+  // rebuilding the check-in read). Returned unchanged below.
+  const bridge: SelfosBridge = {
     // --- Platform-specific (forwarded to the host) ---
     getBootState: () => host.getBootState(),
     refreshBootState: () => host.refreshBootState(),
@@ -9564,6 +9575,68 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       return items;
     },
+    /**
+     * The cross-domain queue (08 §35): everything waiting for the signed-in person, newest first.
+     *
+     * Check-ins are assembled here rather than by a registered provider, because they are the one kind
+     * ANSWERED in the Inbox — the route needs the whole `InboxItem`, not the queue's slim entry — so this
+     * maps the list it already builds into entries and lets the registry supply the rest.
+     *
+     * Own-scoped like every read here: the active person's own queue, and each provider is handed only that
+     * person's id. Capability-wise the queue is deliberately NOT gated on `questionnaires.answer` — three of
+     * its four kinds have nothing to do with questionnaires — so each provider is responsible for returning
+     * nothing it should not, and the check-in half keeps its own gate.
+     */
+    inboxList: async (): Promise<InboxEntry[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const device = await host.readDeviceState();
+      const dismissals = await readInboxDismissals(ctx.fs, ctx.key, personId);
+      const entries = await collectInbox(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          personId,
+          now: new Date(),
+          // The viewer's own device-local read progress, so a book they have already read is not still
+          // queued as new (64 §3.6).
+          readAt: device.storyReadProgress?.[personId] ?? {},
+        },
+        dismissals.ids,
+      );
+      // Check-ins, from the list the answering pane already uses.
+      //
+      // EVERY non-dismissed one, answered included. Filtering to `answerable` looked right — a queue is things
+      // waiting for you — and quietly broke §56: reviewing, editing and resending a submitted answer happens
+      // in the Inbox, so dropping submitted rows removed the only way back to your own answers. What is
+      // outstanding is the status chip's job to say, and the badge's job to count.
+      const checkIns: InboxEntry[] = (await bridge.assignmentsInbox())
+        .map((i) => ({
+          id: `check-in:${i.assignmentId}`,
+          kind: 'check-in' as const,
+          title: i.title,
+          ...(i.senderName ? { fromName: i.senderName } : {}),
+          at: i.createdAt,
+          // No `openPath`: a check-in is answered in place, where it always has been.
+          dismissible: false,
+        }))
+        .filter((e) => !dismissals.ids.includes(e.id));
+      return [...entries, ...checkIns].sort((a, b) =>
+        a.at < b.at ? 1 : a.at > b.at ? -1 : a.id.localeCompare(b.id),
+      );
+    },
+    /** Remove one entry from the active person's own queue (08 §35.3). Own-scoped; vault-stored. */
+    inboxDismiss: async (entryId): Promise<InboxEntry[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const id = z.string().min(1).max(400).parse(entryId);
+      await dismissInboxEntry(ctx.fs, ctx.key, personId, id, new Date());
+      return bridge.inboxList();
+    },
     assignmentsSetFavorite: async ({ assignmentId, favorite }): Promise<void> => {
       // A personal, device-local pin on a received questionnaire (08 §3.3). Recipient-scoped: only the active
       // person can favourite their own Inbox items, and it never syncs or leaks across personas.
@@ -11588,6 +11661,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     updatesGetState: async (): Promise<UpdateCheckResult | null> =>
       (await host.readDeviceState()).lastUpdateCheckResult ?? null,
   };
+  return bridge;
 }
 
 /** Keep only the entries whose key is in `keys` (the app-global notification split, 36 §11). */

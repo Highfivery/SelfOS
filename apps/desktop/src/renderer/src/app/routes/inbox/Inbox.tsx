@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ClipboardList, Inbox as InboxIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  ClipboardList,
+  Handshake,
+  Inbox as InboxIcon,
+  Users,
+  X,
+} from 'lucide-react';
+import type { InboxEntry } from '@shared/channels';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -8,12 +17,38 @@ import { InboxAnswer } from './InboxAnswer';
 import { receivedStatus } from './inboxStatus';
 import styles from './Inbox.module.css';
 
-/** The recipient's Inbox (08-questionnaires §3.3): questionnaires sent to the active person. */
+/** How each kind reads in the queue when it has no status of its own. */
+const KIND_LABEL: Record<InboxEntry['kind'], string> = {
+  'check-in': 'Check-in',
+  'together-invitation': 'Invitation',
+  'contribution-invitation': 'Asked you',
+  'shared-book': 'To read',
+};
+
+function KindIcon({ kind }: { kind: InboxEntry['kind'] }): JSX.Element {
+  const size = 14;
+  if (kind === 'together-invitation') return <Users size={size} aria-hidden="true" />;
+  if (kind === 'contribution-invitation') return <Handshake size={size} aria-hidden="true" />;
+  if (kind === 'shared-book') return <BookOpen size={size} aria-hidden="true" />;
+  return <ClipboardList size={size} aria-hidden="true" />;
+}
+
+/** The assignment behind a `check-in` entry, or null for every other kind. */
+function checkInAssignmentId(entry: InboxEntry): string | null {
+  return entry.kind === 'check-in' ? entry.id.slice('check-in:'.length) : null;
+}
+
+/**
+ * The recipient's Inbox (08 §3.3, §35): one cross-domain queue of what is waiting for the signed-in person —
+ * check-ins to answer, a Together invitation, someone asking you to add to their book, a book they shared.
+ */
 export function Inbox(): JSX.Element {
   const navigate = useNavigate();
   const items = useInboxStore((s) => s.items);
+  const entries = useInboxStore((s) => s.entries);
   const loaded = useInboxStore((s) => s.loaded);
   const load = useInboxStore((s) => s.load);
+  const dismissEntry = useInboxStore((s) => s.dismissEntry);
   const canCreate = useSessionStore((s) => s.can('questionnaires.create'));
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -30,12 +65,13 @@ export function Inbox(): JSX.Element {
           <Heading level={2}>Inbox</Heading>
         </div>
 
-        {loaded && items.length === 0 ? (
+        {loaded && entries.length === 0 ? (
           <Card>
             <Stack gap={3} align="center">
               <InboxIcon size={24} aria-hidden="true" />
               <Text tone="secondary">
-                Nothing to answer right now. Questionnaires people send you will show up here.
+                Nothing waiting right now. Check-ins, invitations and books people share with you
+                show up here.
               </Text>
               {canCreate ? (
                 <Button variant="secondary" onClick={() => navigate('/questionnaires')}>
@@ -47,38 +83,72 @@ export function Inbox(): JSX.Element {
           </Card>
         ) : (
           <Stack gap={2}>
-            {items.map((item) => {
-              const active = selectedId === item.assignmentId;
-              const status = receivedStatus(item);
+            {entries.map((entry) => {
+              const assignmentId = checkInAssignmentId(entry);
+              const active = assignmentId !== null && selectedId === assignmentId;
+              // A check-in is enriched from the assignment the answering pane already loaded, so the queue
+              // entry itself stays domain-neutral — it carries no questionnaire-shaped fields.
+              const item = assignmentId
+                ? items.find((i) => i.assignmentId === assignmentId)
+                : undefined;
+              const status = item ? receivedStatus(item) : null;
               return (
-                <button
-                  key={item.assignmentId}
-                  type="button"
-                  className={active ? `${styles.row} ${styles.rowActive}` : styles.row}
-                  onClick={() => setSelectedId(item.assignmentId)}
-                >
-                  <span className={styles.rowTop}>
-                    <span className={styles.rowName}>{item.title}</span>
-                    <span
-                      className={
-                        status.isNew
-                          ? `${styles.statusChip} ${styles.statusNew}`
-                          : styles.statusChip
-                      }
-                    >
-                      {status.label}
+                <div key={entry.id} className={styles.rowWrap}>
+                  <button
+                    type="button"
+                    className={active ? `${styles.row} ${styles.rowActive}` : styles.row}
+                    onClick={() => {
+                      // Check-ins answer in place. Everything else NAVIGATES — the queue never accepts,
+                      // declines or marks anything read on the person's behalf (08 §35.1); the surface that
+                      // owns the decision keeps its own framing and consent step.
+                      if (assignmentId) setSelectedId(assignmentId);
+                      else if (entry.openPath) navigate(entry.openPath);
+                    }}
+                  >
+                    <span className={styles.rowTop}>
+                      <span className={styles.rowName}>
+                        <KindIcon kind={entry.kind} />
+                        {entry.title}
+                      </span>
+                      {status ? (
+                        <span
+                          className={
+                            status.isNew
+                              ? `${styles.statusChip} ${styles.statusNew}`
+                              : styles.statusChip
+                          }
+                        >
+                          {status.label}
+                        </span>
+                      ) : (
+                        <span className={styles.statusChip}>{KIND_LABEL[entry.kind]}</span>
+                      )}
                     </span>
-                  </span>
-                  <span className={styles.rowMeta}>
-                    {item.fromBiographer
-                      ? 'Your biographer · '
-                      : item.autoCheckin
-                        ? 'Auto check-in · '
-                        : ''}
-                    From {item.senderName ?? 'Someone'} · {item.questionCount}{' '}
-                    {item.questionCount === 1 ? 'question' : 'questions'}
-                  </span>
-                </button>
+                    <span className={styles.rowMeta}>
+                      {item?.fromBiographer
+                        ? 'Your biographer · '
+                        : item?.autoCheckin
+                          ? 'Auto check-in · '
+                          : ''}
+                      {entry.fromName ? `From ${entry.fromName}` : 'From someone'}
+                      {item
+                        ? ` · ${item.questionCount} ${item.questionCount === 1 ? 'question' : 'questions'}`
+                        : entry.detail
+                          ? ` · ${entry.detail}`
+                          : ''}
+                    </span>
+                  </button>
+                  {entry.dismissible ? (
+                    <button
+                      type="button"
+                      className={styles.dismiss}
+                      aria-label={`Remove from your inbox: ${entry.title}`}
+                      onClick={() => void dismissEntry(entry.id)}
+                    >
+                      <X size={14} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
               );
             })}
           </Stack>

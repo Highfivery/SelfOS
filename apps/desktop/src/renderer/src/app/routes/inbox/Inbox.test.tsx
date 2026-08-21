@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { InboxAssignmentDetail, InboxItem } from '@shared/channels';
+
+// The queue NAVIGATES for the three kinds it does not own (08 §35.1), so the spy is the assertion.
+const navigateSpy = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigateSpy };
+});
+import type { InboxAssignmentDetail, InboxEntry, InboxItem, SelfosBridge } from '@shared/channels';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import type { Person } from '@shared/schemas';
 import { Inbox } from './Inbox';
@@ -27,6 +34,16 @@ const ME: Person = {
   updatedAt: 'now',
 };
 
+/** The queue entry the bridge derives for a check-in — so a test that seeds an item also seeds its row. */
+const checkInEntry = (item: InboxItem): InboxEntry => ({
+  id: `check-in:${item.assignmentId}`,
+  kind: 'check-in',
+  title: item.title,
+  ...(item.senderName ? { fromName: item.senderName } : {}),
+  at: item.createdAt,
+  dismissible: false,
+});
+
 /** Set the active person's role so the empty-state's capability-gated action reflects it. */
 function signIn(roleId: 'owner' | 'member'): void {
   useSessionStore.setState({
@@ -36,8 +53,9 @@ function signIn(roleId: 'owner' | 'member'): void {
 }
 
 afterEach(() => {
+  navigateSpy.mockClear();
   clearMockBridge();
-  useInboxStore.setState({ items: [], loaded: false });
+  useInboxStore.setState({ items: [], entries: [], loaded: false });
   useSessionStore.getState().reset();
 });
 
@@ -81,9 +99,12 @@ const detail = (over: Partial<InboxAssignmentDetail> = {}): InboxAssignmentDetai
 
 describe('Inbox', () => {
   it('shows the empty state, with no create action when the person cannot create questionnaires', async () => {
-    installMockBridge({ assignmentsInbox: () => Promise.resolve([]) });
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([]),
+      inboxList: () => Promise.resolve([]),
+    });
     renderInbox(); // no role signed in → can('questionnaires.create') is false
-    expect(await screen.findByText(/nothing to answer right now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nothing waiting right now/i)).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /create a questionnaire/i }),
     ).not.toBeInTheDocument();
@@ -91,14 +112,20 @@ describe('Inbox', () => {
 
   it('offers "Create a questionnaire" in the empty state when the person can create them', async () => {
     signIn('owner');
-    installMockBridge({ assignmentsInbox: () => Promise.resolve([]) });
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([]),
+      inboxList: () => Promise.resolve([]),
+    });
     renderInbox();
-    expect(await screen.findByText(/nothing to answer right now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nothing waiting right now/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create a questionnaire/i })).toBeInTheDocument();
   });
 
   it('lists an assignment with who sent it and a New chip', async () => {
-    installMockBridge({ assignmentsInbox: () => Promise.resolve([item()]) });
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
+    });
     renderInbox();
     expect(await screen.findByText('Weekly check-in')).toBeInTheDocument();
     expect(screen.getByText(/From Ben/)).toBeInTheDocument();
@@ -108,6 +135,7 @@ describe('Inbox', () => {
   it('shows a "Your biographer" eyebrow on a Your Story interview send (64 §5.5)', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ fromBiographer: true })]),
+      inboxList: () => Promise.resolve([checkInEntry(item({ fromBiographer: true }))]),
     });
     renderInbox();
     expect(await screen.findByText(/Your biographer · From Ben/)).toBeInTheDocument();
@@ -117,6 +145,7 @@ describe('Inbox', () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail()),
       assignmentsOpen: () => Promise.resolve(),
       assignmentsSubmit: submit,
@@ -145,6 +174,7 @@ describe('Inbox', () => {
     const dismiss = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail({ fromSelf: true })),
       assignmentsDismiss: dismiss,
     });
@@ -162,6 +192,7 @@ describe('Inbox', () => {
     const dismiss = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail({ fromSelf: false })),
       assignmentsDismiss: dismiss,
     });
@@ -211,6 +242,7 @@ describe('Inbox', () => {
     };
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -285,6 +317,7 @@ describe('Inbox', () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -347,6 +380,7 @@ describe('Inbox', () => {
     const applyFix = vi.fn(() => Promise.resolve({ ok: true }));
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail()),
       assignmentsCorrectFact: () =>
         Promise.resolve({
@@ -391,6 +425,7 @@ describe('Inbox', () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail()),
       assignmentsSubmit: submit,
     });
@@ -413,6 +448,132 @@ describe('Inbox', () => {
     expect(submit).toHaveBeenCalled();
   });
 
+  it('queues all four kinds, newest first, and only NAVIGATES for the three it does not own (08 §35)', async () => {
+    const entries: InboxEntry[] = [
+      {
+        id: 'check-in:a1',
+        kind: 'check-in',
+        title: 'Weekly check-in',
+        fromName: 'Ben',
+        at: '2026-08-01T00:00:00.000Z',
+        dismissible: false,
+      },
+      {
+        id: 'together-invitation:s1',
+        kind: 'together-invitation',
+        title: 'How we talk about money',
+        fromName: 'Angel',
+        detail: 'Invited you to a session',
+        at: '2026-08-04T00:00:00.000Z',
+        openPath: '/together/session/s1',
+        dismissible: false,
+      },
+      {
+        id: 'contribution-invitation:i1',
+        kind: 'contribution-invitation',
+        title: 'Ben asked you to add to their book',
+        fromName: 'Ben',
+        detail: 'Anything about the Denver years?',
+        at: '2026-08-03T00:00:00.000Z',
+        openPath: '/contribute/i1',
+        dismissible: true,
+      },
+      {
+        id: 'shared-book:ben:b1',
+        kind: 'shared-book',
+        title: 'The Weight of Quiet',
+        fromName: 'Ben',
+        detail: 'Shared their book with you',
+        at: '2026-08-02T00:00:00.000Z',
+        openPath: '/books/shared/ben/b1',
+        dismissible: true,
+      },
+    ];
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve(entries),
+    });
+    renderInbox();
+
+    // All four kinds share ONE list — the queue does not regroup them (owner, 2026-08-20: one chronological
+    // list). The ordering itself is `collectInbox`'s job and is tested there; what matters here is that
+    // every kind renders and none is bucketed away.
+    const list = await screen.findByRole('region', { name: 'Inbox' });
+    for (const title of [
+      'Weekly check-in',
+      'How we talk about money',
+      'Ben asked you to add to their book',
+      'The Weight of Quiet',
+    ]) {
+      expect(within(list).getByText(title)).toBeInTheDocument();
+    }
+
+    // A Together invitation NAVIGATES to the session, where the rules of the room and "Decline quietly"
+    // live (58 §3.4). It must never accept from here: accepting IS the consent record for a screen the
+    // person would not have seen.
+    await userEvent.click(screen.getByRole('button', { name: /How we talk about money/ }));
+    expect(navigateSpy).toHaveBeenCalledWith('/together/session/s1');
+    expect(screen.queryByRole('button', { name: /^Accept$/ })).toBeNull();
+  });
+
+  it('an ANSWERED check-in stays in the queue — reviewing your answers lives here (56)', async () => {
+    // Filtering the queue to "still waiting" looked right and removed the only route back to answers you had
+    // already sent: §56's review / edit / resend happens in the Inbox. What is outstanding is the chip's job
+    // to say, not the list's job to hide.
+    const submitted = item({
+      status: 'submitted',
+      answerable: false,
+      answeredAt: '2026-08-02T00:00:00.000Z',
+    });
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([submitted]),
+      inboxList: () => Promise.resolve([checkInEntry(submitted)]),
+    });
+    renderInbox();
+    expect(await screen.findByRole('button', { name: /Weekly check-in/ })).toBeInTheDocument();
+  });
+
+  it('a book invitation can be dismissed; a check-in and an invitation cannot (08 §35.3)', async () => {
+    const dismissEntry = vi.fn<SelfosBridge['inboxDismiss']>().mockResolvedValue([]);
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([]),
+      inboxList: () =>
+        Promise.resolve([
+          {
+            id: 'contribution-invitation:i1',
+            kind: 'contribution-invitation',
+            title: 'Ben asked you to add to their book',
+            at: '2026-08-03T00:00:00.000Z',
+            openPath: '/contribute/i1',
+            dismissible: true,
+          },
+          {
+            id: 'together-invitation:s1',
+            kind: 'together-invitation',
+            title: 'How we talk about money',
+            at: '2026-08-04T00:00:00.000Z',
+            openPath: '/together/session/s1',
+            dismissible: false,
+          },
+        ]),
+      inboxDismiss: dismissEntry,
+    });
+    renderInbox();
+
+    // Only the dismissible one offers it — deciding is the whole point of opening an invitation.
+    expect(
+      await screen.findByRole('button', { name: /Remove from your inbox: Ben asked you/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Remove from your inbox: How we talk about money/ }),
+    ).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Remove from your inbox: Ben asked you/ }),
+    );
+    expect(dismissEntry).toHaveBeenCalledWith('contribution-invitation:i1');
+  });
+
   it('steps through multiple questions with FREE Back/Next — no blocking gate (§25.1)', async () => {
     const submit = vi.fn(() => Promise.resolve());
     const twoQ = detail({
@@ -426,6 +587,7 @@ describe('Inbox', () => {
     });
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ questionCount: 2 })]),
+      inboxList: () => Promise.resolve([checkInEntry(item({ questionCount: 2 }))]),
       assignmentsGet: () => Promise.resolve(twoQ),
       assignmentsSubmit: submit,
     });
@@ -450,6 +612,7 @@ describe('Inbox', () => {
     const decline = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail()),
       assignmentsDecline: decline,
     });
@@ -466,6 +629,8 @@ describe('Inbox', () => {
   it('reviews a submitted assignment + offers Edit answers (56)', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      inboxList: () =>
+        Promise.resolve([checkInEntry(item({ status: 'submitted', answerable: false }))]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -491,6 +656,8 @@ describe('Inbox', () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      inboxList: () =>
+        Promise.resolve([checkInEntry(item({ status: 'submitted', answerable: false }))]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -527,6 +694,8 @@ describe('Inbox', () => {
   it('does NOT offer Edit answers on a submitted compatibility send (56)', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      inboxList: () =>
+        Promise.resolve([checkInEntry(item({ status: 'submitted', answerable: false }))]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -550,6 +719,7 @@ describe('Inbox', () => {
   it('shows the compatibility disclosure derived from the visibility mode', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -574,6 +744,8 @@ describe('Inbox', () => {
   it('shows the answerer their joint report once they’ve submitted a compatibility send', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      inboxList: () =>
+        Promise.resolve([checkInEntry(item({ status: 'submitted', answerable: false }))]),
       assignmentsGet: () =>
         Promise.resolve(
           detail({
@@ -617,6 +789,7 @@ describe('Inbox', () => {
     // Before submitting: the disclosure promises no report + no one sees the answers.
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
+      inboxList: () => Promise.resolve([checkInEntry(item())]),
       assignmentsGet: () => Promise.resolve(detail({ compatibility })),
     });
     const { unmount } = renderInbox();
@@ -625,11 +798,13 @@ describe('Inbox', () => {
       await screen.findByText(/no one in this exchange sees your answers/i),
     ).toBeInTheDocument();
     unmount();
-    useInboxStore.setState({ items: [], loaded: false });
+    useInboxStore.setState({ items: [], entries: [], loaded: false });
 
     // After submitting: still no report — just the "helps your own coach" note.
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      inboxList: () =>
+        Promise.resolve([checkInEntry(item({ status: 'submitted', answerable: false }))]),
       assignmentsGet: () =>
         Promise.resolve(detail({ status: 'submitted', answerable: false, compatibility })),
     });

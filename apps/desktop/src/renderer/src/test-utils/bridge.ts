@@ -292,6 +292,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         adultAcknowledged: false,
         hasPlacement: false,
       }),
+    inboxList: () => Promise.resolve([]),
+    inboxDismiss: () => Promise.resolve([]),
     questionnairesLiftSuppression: () =>
       Promise.resolve({
         candidates: [],

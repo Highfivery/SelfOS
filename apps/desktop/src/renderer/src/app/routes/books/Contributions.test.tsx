@@ -48,6 +48,7 @@ const invitation: ContributionInviteView = {
   authorPersonId: 'ben',
   authorName: 'Ben',
   note: 'Anything about the Denver years?',
+  invitedAt: '2026-08-01T00:00:00.000Z',
   canRead: false,
 };
 

@@ -9,6 +9,9 @@
 > **Living / Finished** lifecycle, and retires the story's private question engine onto the spec-71
 > ask-ledger substrate. It **supersedes spec 64**, whose §3–§19 remain the historical build record.
 
+> **Superseded in part by 08 §36 (2026-08-21).** `story-shared` is email-only and `story-checkin` retired —
+> both now surface in the Inbox queue (08 §35). See 64's note.
+
 ---
 
 ## 1. Overview

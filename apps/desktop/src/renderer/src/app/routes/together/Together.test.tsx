@@ -290,6 +290,26 @@ describe('Together home — tabbed IA (§3.2a)', () => {
     );
   });
 
+  it('does not badge the Sessions tab for a received invitation — the Inbox counts that (08 §36.3)', async () => {
+    installMockBridge({ togetherYnmStatus: () => Promise.resolve(ynmLocked()) });
+    seedPair({
+      sessions: [summary({ id: 'inv', status: 'invited', initiatorPersonId: PARTNER })],
+    });
+    renderHome();
+    const tab = await screen.findByRole('tab', { name: /Sessions/ });
+    // An invitation is queue work: it is counted once, by the Inbox badge. Counting it here too is exactly
+    // the double-count §36.3 removes — and it read as `Inbox 1` and `Together 1` side by side in the sidebar.
+    expect(within(tab).queryByText('1')).toBeNull();
+  });
+
+  it('DOES badge the Sessions tab for a live session waiting on you (§3.8)', async () => {
+    installMockBridge({ togetherYnmStatus: () => Promise.resolve(ynmLocked()) });
+    seedPair({ sessions: [summary({ id: 'live', status: 'active', yourTurn: true })] });
+    renderHome();
+    const tab = await screen.findByRole('tab', { name: /Sessions/ });
+    await waitFor(() => expect(within(tab).getByText('1')).toBeInTheDocument());
+  });
+
   it('keeps the joint challenge on the Sessions tab, and the crisis footer on every tab', async () => {
     installMockBridge({
       togetherYnmStatus: () => Promise.resolve(ynmLocked()),

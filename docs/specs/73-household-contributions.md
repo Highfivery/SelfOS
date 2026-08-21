@@ -8,6 +8,10 @@
 > life for them. Spec [72](72-books.md) §2 names this "the highest-value fast-follow" and defers it
 > explicitly because it needs its own consent and attribution model. This is that model.
 
+> **Superseded in part by 08 §36 (2026-08-21).** `contribution-invited` is **retired**: an invitation to add
+> to someone's book is queue work and lives in the Inbox (08 §35). `contribution-received` — something
+> waiting on YOU as an author — is unchanged, because it sits in nobody's inbox and is a real interruption.
+
 ---
 
 ## 1. Overview

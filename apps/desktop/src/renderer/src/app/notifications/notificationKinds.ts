@@ -9,6 +9,7 @@ import {
   Flag,
   Handshake,
   Heart,
+  Inbox,
   Lock,
   MessageCircle,
   PencilLine,
@@ -57,6 +58,12 @@ const onNewMember = (prev: string, cur: string): boolean => {
 };
 
 export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
+  // One row for everything waiting in the Inbox (08 §36) — it replaced five per-item kinds. Its signature is
+  // the SET of waiting entry ids, resolved by `onNewMember`, not a count: a queue's count oscillates as you
+  // work through it (2 → answer one → 1 → something new → 2), and under `onIncrease` that last step is not an
+  // increase over the 2 you already read, so a genuinely new arrival would land silently. A set has no such
+  // hole — working through the queue shrinks it and never re-pops, and any new id surfaces it.
+  'inbox-waiting': { icon: Inbox, severity: 'info', resurfaces: onNewMember },
   'update-available': { icon: Download, severity: 'warning', resurfaces: onChange },
   'profile-freshness': { icon: Sparkles, severity: 'info', resurfaces: onNewMember },
   'responses-arrived': { icon: ClipboardCheck, severity: 'info', resurfaces: onIncrease },
@@ -81,9 +88,11 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // A recipient edited + resubmitted after the sender analyzed them (56 §3.2) — nudges a re-analyze. onIncrease
   // by revision: dismissing (or re-analyzing, which drops the candidate) never re-nags until they edit again.
   'answers-updated': { icon: PencilLine, severity: 'info', resurfaces: onIncrease },
-  // A partner invited you to a Together session (58 §3.11). Registered now (Phase A); the candidate provider
-  // lands in Phase B. onChange: a fresh invite (a new session id) re-surfaces.
+  // Email-only (08 §36.2): no bell row — their candidates carry `inApp: false`, so they reach the
+  // transactional-email cadence and never the notification center. The icon/severity still resolve because
+  // a toast or a future surface may render one, and the registry is exhaustive over NotificationKind.
   'together-invite': { icon: Heart, severity: 'info', resurfaces: onChange },
+  'story-shared': { icon: BookOpen, severity: 'info', resurfaces: onChange },
   // Your turn in a Together session (58 §3.11), coalesced per session. onChange by the latest message in the
   // recipient's PROJECTION — an aside never changes the partner's signature, so it never re-pops here.
   'together-turn': { icon: MessageCircle, severity: 'info', resurfaces: onChange },
@@ -93,25 +102,12 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // The coach left a private note just for you (58 §3.14 Part B), coalesced per session. onChange by the
   // note's ts — a NEW private note re-surfaces; it never carries the note's text.
   'together-private': { icon: Lock, severity: 'info', resurfaces: onChange },
-  // An auto-generated check-in is waiting (63 §6.4). onIncrease by count: dismissing never re-nags unless
-  // ANOTHER arrives; answering some (a lower count) never re-pops it.
-  'auto-checkin-ready': { icon: ClipboardList, severity: 'info', resurfaces: onIncrease },
   // The one-time "Auto check-ins is now on" seed notice (63 §5.1). onChange: the seed fires once (write-once),
   // so the candidate is pushed once and, once dismissed, never returns (the seed can't re-fire).
   'auto-checkin-enabled': { icon: Sparkles, severity: 'info', resurfaces: onChange },
   // Someone set up recurring check-ins for you (63 §3.3a). One per sender, coalesced by sender id; onChange
   // with a stable signature so a dismissal stays dismissed — a genuinely NEW sender is a new key → new notice.
   'auto-checkin-incoming': { icon: Bell, severity: 'info', resurfaces: onChange },
-  // Someone shared their Story book with you (64 §3.6). Fires once, on first share — the candidate only exists
-  // while the viewer has NEVER opened it; opening records read progress → the candidate drops (never re-pops).
-  // Coalesced per book; onChange with a stable signature so a dismissal without opening stays dismissed.
-  'story-shared': { icon: BookOpen, severity: 'info', resurfaces: onChange },
-  // Your biographer has an interview check-in (a "gap" prompt) waiting (64 §18.5) — the living-book cadence now
-  // runs app-wide, so this surfaces globally, not only on /story. onIncrease by count: dismissing never re-nags
-  // unless ANOTHER arrives; answering some (a lower count) never re-pops it (the auto-checkin-ready precedent).
-  'story-checkin': { icon: BookOpen, severity: 'info', resurfaces: onIncrease },
-  // Someone opened a book to you (73 §3.1) — an invitation, so it resurfaces only when another arrives.
-  'contribution-invited': { icon: Handshake, severity: 'info', resurfaces: onIncrease },
   // Something is waiting for the author to accept or decline (73 §3.4).
   'contribution-received': { icon: Handshake, severity: 'info', resurfaces: onIncrease },
 };
@@ -135,6 +131,13 @@ export interface NotificationCandidate {
   action?: NotificationAction;
   /** ISO timestamp for newest-first ordering. Defaults to the resolve time when omitted. */
   createdAt?: string;
+  /**
+   * Whether this candidate renders in the notification center. Defaults to true. `false` makes it
+   * EMAIL-ONLY (08 §36.2): the transactional-email cadence reads the raw candidates, so a Together
+   * invitation or a shared book still emails by name, while the bell stays out of the Inbox's way — the
+   * queue is the record for anything waiting, and one `inbox-waiting` row is the whole nudge.
+   */
+  inApp?: boolean;
 }
 
 /** Whether a flag set at `prevSig` STILL covers `curSig` (i.e. the item should remain read/dismissed). */
@@ -156,7 +159,10 @@ export function resolveNotifications(
 ): Notification[] {
   // Coalesce: one candidate per key (a source contributes a single slot per key; last wins defensively).
   const byKey = new Map<string, NotificationCandidate>();
-  for (const candidate of candidates) byKey.set(candidate.coalesceKey, candidate);
+  for (const candidate of candidates) {
+    if (candidate.inApp === false) continue; // email-only (§36.2) — never a bell row
+    byKey.set(candidate.coalesceKey, candidate);
+  }
 
   const out: Notification[] = [];
   for (const candidate of byKey.values()) {

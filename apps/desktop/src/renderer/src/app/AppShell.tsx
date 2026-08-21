@@ -27,7 +27,8 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useConversationStore } from '../stores/conversationStore';
 import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
-import { unansweredCount, useInboxStore } from '../stores/inboxStore';
+import { useInboxStore } from '../stores/inboxStore';
+import { waitingCount } from '@selfos/core/inbox';
 import { questionnaireNavCount } from './routes/questionnaires/navCounts';
 import { memoryReviewCount } from './routes/memory/navCounts';
 import { testsOutstandingCount } from './routes/you/testsHub';
@@ -89,12 +90,18 @@ export function AppShell(): JSX.Element {
   // total as the in-page "Needs your review" callout. Subscribed reactively so it live-updates.
   const memoryInsights = useInsightStore((s) => s.insights);
   const memoryProposals = useInsightStore((s) => s.proposals);
-  const inboxItems = useInboxStore((s) => s.items);
-  const inboxCount = unansweredCount(inboxItems);
-  // The Questionnaires nav badge (08 §3.1): one aggregate of things needing YOU — responses ready to
-  // analyze + received questionnaires still to answer (never passive "awaiting their response").
+  // The Inbox nav badge (08 §36.3): everything waiting in the queue — check-ins, Together invitations,
+  // invitations to add to a book, books shared with you. It counts a SELF check-in too (an auto check-in, a
+  // biographer question): those are real work waiting on you, and since §36 retired `auto-checkin-ready` and
+  // `story-checkin`, this is now the only count that carries them. The queue LISTS more than it counts — an
+  // answered check-in stays, because you review and edit your own answers there (§56) — so it reads the
+  // waiting subset.
+  const inboxEntries = useInboxStore((s) => s.entries);
+  const inboxCount = waitingCount(inboxEntries);
+  // The Questionnaires nav badge (08 §3.1 / §36.3): YOUR OWN work — responses ready to analyze. Answering is
+  // the Inbox's half of the divide; counting it in both badges made neither of them a to-do list.
   const sentOverview = useQuestionnaireStore((s) => s.sentOverview);
-  const questionnaireCount = questionnaireNavCount(sentOverview, inboxItems);
+  const questionnaireCount = questionnaireNavCount(sentOverview);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
   // The Tests nav badge (50 §3.1): instruments never taken + gentle re-checks now due — the SAME arithmetic
@@ -103,7 +110,8 @@ export function AppShell(): JSX.Element {
   const testCatalog = useTestStore((s) => s.catalog);
   const testResults = useTestStore((s) => s.resultsByTest);
   // Together (58 §3.1): the nav shows only with `together.own` AND a live partner edge; the badge counts
-  // sessions waiting on you (invitations + your-turn), derived over your projection.
+  // LIVE sessions waiting on you (your turn, or ready to wrap up), derived over your projection. A received
+  // invitation is queue work and belongs to the Inbox badge (08 §36.3).
   const canTogether = useSessionStore((s) => s.can('together.own'));
   const canOwnStory = useSessionStore((s) => s.can('story.own'));
   const booksProgress = useStoryStore((s) => s.progress);
@@ -131,7 +139,7 @@ export function AppShell(): JSX.Element {
   });
   const locked = useSessionStore((s) => s.locked);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
-  const togetherWaiting = togetherWaitingCount(togetherSessions, activePersonId);
+  const togetherWaiting = togetherWaitingCount(togetherSessions);
   const memoryCount = memoryReviewCount(memoryInsights, memoryProposals, activePersonId);
   const testsCount = testsOutstandingCount(testCatalog, testResults, Date.now());
   const collapsed = useNavStore((s) => s.collapsed);
@@ -356,7 +364,7 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/inbox"
                 className={navClass}
-                aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} to answer` : 'Inbox'}
+                aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} waiting for you` : 'Inbox'}
                 title={tip('Inbox')}
                 onClick={closeDrawer}
               >

@@ -131,14 +131,14 @@ describe('togetherNotificationCandidates (§3.11)', () => {
 });
 
 describe('togetherWaitingCount (§3.1 nav badge)', () => {
-  it('counts invitations RECEIVED + your-turn sessions, NOT your own outgoing invites', () => {
+  it('counts LIVE sessions only — a received invitation belongs to the Inbox badge (08 §36.3)', () => {
     const sessions = [
-      summary({ id: 's1', status: 'invited', initiatorPersonId: PARTNER }), // received → counts
-      summary({ id: 's2', status: 'invited', initiatorPersonId: ME }), // my own outgoing → does NOT count
+      summary({ id: 's1', status: 'invited', initiatorPersonId: PARTNER }), // queue work → the Inbox counts it
+      summary({ id: 's2', status: 'invited', initiatorPersonId: ME }), // my own outgoing → nobody counts it
       summary({ id: 's3', status: 'active', yourTurn: true }), // your turn → counts
       summary({ id: 's4', status: 'active', yourTurn: false }), // not your turn → no
       summary({ id: 's5', status: 'complete' }), // done → no
     ];
-    expect(togetherWaitingCount(sessions, ME)).toBe(2);
+    expect(togetherWaitingCount(sessions)).toBe(1);
   });
 });

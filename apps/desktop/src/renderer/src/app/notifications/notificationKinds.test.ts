@@ -120,3 +120,57 @@ describe('resolveNotifications', () => {
     expect(out[0]?.createdAt).toBe(NOW);
   });
 });
+
+describe('email-only candidates (08 §36.2)', () => {
+  const invite: NotificationCandidate = {
+    kind: 'together-invite',
+    coalesceKey: 'together-invite:s1',
+    signature: 's1',
+    title: 'Angel invited you to a Together session',
+    inApp: false,
+  };
+
+  it('never renders as a bell row, so the queue is the only place the work lives', () => {
+    const out = resolveNotifications([invite, conflict(1)], EMPTY, NOW);
+    expect(out.map((n) => n.kind)).toEqual(['sync-conflict']);
+  });
+
+  // That it still EMAILS by name — the reason `inApp` filters at resolve time instead of the source simply
+  // not emitting — is asserted where it can actually fail, against the real hook, in
+  // `email/useEmailTransactional.test.tsx`. Asserting it over a locally-built array here could never fail.
+
+  it('leaves an ordinary candidate untouched when the flag is absent or true', () => {
+    const shown = resolveNotifications([{ ...invite, inApp: true }], EMPTY, NOW);
+    expect(shown).toHaveLength(1);
+    const noFlag: NotificationCandidate = { ...invite };
+    delete noFlag.inApp;
+    expect(resolveNotifications([noFlag], EMPTY, NOW)).toHaveLength(1);
+  });
+});
+
+describe('inbox-waiting re-surfacing (08 §36)', () => {
+  const queue = (ids: string): NotificationCandidate => ({
+    kind: 'inbox-waiting',
+    coalesceKey: 'inbox-waiting',
+    signature: ids,
+    title: 'Things are waiting for you',
+    createdAt: '2026-06-23T11:00:00.000Z',
+  });
+
+  it('a genuinely new arrival surfaces even when the COUNT is one you already read', () => {
+    // The queue's rhythm: read at two, answer one, a new one arrives — back to two. Under a COUNT signature
+    // ("2" vs "2") `onIncrease` calls that "not an increase" and stays silent on something never seen.
+    const read: PersonNotificationState = { read: { 'inbox-waiting': 'a,b' }, dismissed: {} };
+    expect(resolveNotifications([queue('a,c')], read, NOW)[0]?.read).toBe(false);
+    // That the COUNT signature this replaced would swallow it is pinned at the hook, which is where the
+    // signature is actually chosen (`useNotificationSources.test.tsx` asserts it is the id set).
+  });
+
+  it('working through the queue never re-pops it', () => {
+    const dismissed: PersonNotificationState = { read: {}, dismissed: { 'inbox-waiting': 'a,b' } };
+    // Answered one of the two → a strict subset → still covered, so no re-pop.
+    expect(resolveNotifications([queue('a')], dismissed, NOW)).toHaveLength(0);
+    // Unchanged → still covered.
+    expect(resolveNotifications([queue('a,b')], dismissed, NOW)).toHaveLength(0);
+  });
+});

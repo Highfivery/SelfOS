@@ -52,6 +52,7 @@ const togetherInvitations: InboxProvider = {
         // Deciding is the whole point of opening it — there is no "put this off" that isn't already
         // "Not right now" on the invitation screen itself.
         dismissible: false,
+        waiting: true,
       });
     }
     return out;
@@ -83,6 +84,7 @@ const contributionInvitations: InboxProvider = {
       at: invite.invitedAt,
       openPath: `/contribute/${invite.id}`,
       dismissible: true,
+      waiting: true,
     }));
   },
 };
@@ -116,6 +118,8 @@ const sharedBooks: InboxProvider = {
         at: b.publishedAt,
         openPath: `/books/shared/${b.authorPersonId}/${b.bookId}`,
         dismissible: true,
+        // Only new-or-updated books are listed at all, so every one of them is unread.
+        waiting: true,
       }));
   },
 };

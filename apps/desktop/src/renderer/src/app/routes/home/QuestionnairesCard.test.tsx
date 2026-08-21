@@ -66,7 +66,7 @@ describe('QuestionnairesCard', () => {
 
   it('surfaces an unanswered inbox send as an action link', () => {
     renderCard({ inboxCount: 1 });
-    expect(screen.getByText(/1 waiting for you to answer/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 check-in to answer/i)).toBeInTheDocument();
   });
 
   it('self-hides when there is nothing and the person cannot create', () => {

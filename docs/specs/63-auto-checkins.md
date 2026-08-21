@@ -10,6 +10,11 @@
 > It promotes the existing **gap-finder** from "suggest, wait for a tap" to autopilot, wrapped in a
 > self-regulating queue, an adaptive cadence, and a small per-person configuration surface.
 
+> **Superseded in part by 08 §36 (2026-08-21).** The `auto-checkin-ready` notification kind is **retired**:
+> a generated check-in lands in the Inbox queue (08 §35), and the single `inbox-waiting` row counts it
+> along with everything else waiting. Nothing is lost — the Inbox badge counts self check-ins precisely so
+> this signal keeps a home. `auto-checkin-enabled` and `auto-checkin-incoming` are unchanged.
+
 This **reuses, does not duplicate**, the questionnaire AI stack. It consumes:
 [`08`](08-questionnaires.md) — `generateQuestions` + the recipient-aware de-dup (fuzzy + semantic), the
 gap-finder `suggestQuestionnaires` + saved-suggestion store, the sensitivity tiers +

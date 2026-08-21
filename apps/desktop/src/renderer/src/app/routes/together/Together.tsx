@@ -5,7 +5,7 @@ import type { TogetherCatalogEntry, TogetherPulseView, TogetherYnmStatus } from 
 import { Button, Heading, Inline, Select, Stack, Text } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { useTogetherStore } from '../../../stores/togetherStore';
+import { togetherWaitingCount, useTogetherStore } from '../../../stores/togetherStore';
 import { TogetherStartDialog, type StartPending } from './TogetherStartDialog';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
@@ -152,13 +152,10 @@ export function Together(): JSX.Element {
     setTab(t);
     navigate(t === 'sessions' ? '/together' : `/together/${t}`);
   };
-  const attnCount = mySessions.filter(
-    (s) =>
-      // §3.8 — a ready-to-wrap-up session needs the viewer's attention too (for BOTH partners, not just the
-      // coach-addressed one), so it counts toward the tab badge alongside a turn or an open invitation.
-      (s.status === 'active' && (s.yourTurn || s.readyToWrapUp)) ||
-      (s.status === 'invited' && s.initiatorPersonId !== myId),
-  ).length;
+  // ONE derivation, shared with the sidebar badge — a second inline copy is how the two came to disagree
+  // (a received invitation counted here and, since 08 §36.3, in the Inbox badge). It counts live sessions:
+  // your turn, or one ready to wrap up (§3.8 — that needs BOTH partners, not just the coach-addressed one).
+  const attnCount = togetherWaitingCount(mySessions);
   const pulseDue = pulseView ? pulseIsDue(pulseView, Date.now()) : false;
 
   const onTabKeyDown = (e: React.KeyboardEvent): void => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { InboxItem, QuestionnaireSentOverview } from '@shared/channels';
-import { questionnaireNavCount, readyToAnalyzeCount, receivedToAnswerCount } from './navCounts';
+import type { QuestionnaireSentOverview } from '@shared/channels';
+import { questionnaireNavCount, readyToAnalyzeCount } from './navCounts';
 
 function overview(over: Partial<QuestionnaireSentOverview>): QuestionnaireSentOverview {
   return {
@@ -10,24 +10,6 @@ function overview(over: Partial<QuestionnaireSentOverview>): QuestionnaireSentOv
     answeredCount: 0,
     newResponses: 0,
     analyzed: false,
-    ...over,
-  };
-}
-
-function item(over: Partial<InboxItem>): InboxItem {
-  return {
-    assignmentId: 'a',
-    title: 't',
-    type: 'general',
-    questionCount: 1,
-    status: 'sent',
-    privacy: 'standard',
-    senderName: 'Sam',
-    createdAt: 'now',
-    favorite: false,
-    answerable: true,
-    hasDraft: false,
-    fromSelf: false,
     ...over,
   };
 }
@@ -45,24 +27,13 @@ describe('readyToAnalyzeCount', () => {
   });
 });
 
-describe('receivedToAnswerCount', () => {
-  it('counts answerable items NOT from yourself (a self check-in lives under Sent)', () => {
-    const items = [
-      item({ assignmentId: 'a1' }), // answerable, from someone else → yes
-      item({ assignmentId: 'a2', answerable: false }), // already answered → no
-      item({ assignmentId: 'a3', fromSelf: true }), // your own → no (it's under Sent)
-      item({ assignmentId: 'a4' }), // yes
-    ];
-    expect(receivedToAnswerCount(items)).toBe(2);
-    expect(receivedToAnswerCount([])).toBe(0);
-  });
-});
-
 describe('questionnaireNavCount', () => {
-  it('is the aggregate of ready-to-analyze + received-to-answer', () => {
-    const o = { q1: overview({ analyzableAssignmentId: 'a1' }) };
-    const items = [item({ assignmentId: 'r1' }), item({ assignmentId: 'r2', fromSelf: true })];
-    expect(questionnaireNavCount(o, items)).toBe(2); // 1 analyze + 1 answer
-    expect(questionnaireNavCount({}, [])).toBe(0);
+  it('counts ONLY responses ready to analyse — answering is the Inbox badge (§36.3)', () => {
+    const o = {
+      q1: overview({ analyzableAssignmentId: 'a1' }),
+      q2: overview({ analyzed: true }),
+    };
+    expect(questionnaireNavCount(o)).toBe(1);
+    expect(questionnaireNavCount({})).toBe(0);
   });
 });

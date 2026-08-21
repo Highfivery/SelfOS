@@ -12,6 +12,7 @@ import {
 import type { InboxEntry } from '@shared/channels';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
+import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { InboxAnswer } from './InboxAnswer';
 import { receivedStatus } from './inboxStatus';
@@ -51,10 +52,21 @@ export function Inbox(): JSX.Element {
   const dismissEntry = useInboxStore((s) => s.dismissEntry);
   const canCreate = useSessionStore((s) => s.can('questionnaires.create'));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const markRead = useNotificationStore((s) => s.markRead);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Looking at the queue IS seeing it (08 §36), so quiet the one "waiting for you" row — the same rule
+  // Results uses for `responses-arrived`. It matters more here: the row's signature is the SET of waiting
+  // ids, so every action changes it, and without a read flag each change would mint a fresh unread id and
+  // toast again — working through three items would toast three times at someone who is plainly already
+  // looking. A read flag at a superset still covers every subset under `onNewMember`, so working the queue
+  // down stays quiet while a genuinely new arrival still surfaces. `markRead` no-ops when nothing is showing.
+  useEffect(() => {
+    markRead('inbox-waiting');
+  }, [markRead, entries]);
 
   const detailOpen = selectedId !== null;
 

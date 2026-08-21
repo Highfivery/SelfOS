@@ -4,7 +4,8 @@ import type { NotificationCandidate } from '../../notifications/notificationKind
 /**
  * The Together notification candidates (58 §3.11), derived over the viewer's projection (the summaries are
  * already projection-computed in the bridge). Carry names/topic, NEVER message content. `together-invite`
- * fires for a session you were invited to (not the initiator); `together-turn` for an active your-turn
+ * fires for a session you were invited to (not the initiator) and is EMAIL-ONLY (`inApp: false`, 08 §36.2) —
+ * the Inbox queue is where you accept or decline; `together-turn` for an active your-turn
  * session, coalesced per session, its signature the latest message time so it re-surfaces `onChange` — an
  * aside never changes the partner's summary, so it never re-pops here. `together-private` (§3.14 Part B) fires
  * when the coach has left a private note just for this viewer; its signature is the note's ts (a new private
@@ -25,6 +26,10 @@ export function togetherNotificationCandidates(
         signature: session.id, // a fresh invite (a new session id) re-surfaces
         title: `${withName} invited you to a Together session`,
         action: { type: 'navigate', to: `/together/session/${session.id}` },
+        // Email-only (08 §36.2): accepting or declining happens in the Inbox queue, so this no longer takes a
+        // bell row — but it still EMAILS by name, because an invitation from your partner is exactly the kind
+        // of thing that has to reach someone who hasn't opened SelfOS in days.
+        inApp: false,
       });
     }
     // §3.8 — a concluded session nudges "wrap up & reflect" instead of a (phantom) turn.

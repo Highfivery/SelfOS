@@ -11,6 +11,11 @@
 > and line-edit, quote mining, the cast register, manuscript metrics), so it stays the reference for
 > how those work. Where 64 and 72 disagree, **72 wins**.
 
+> **Superseded in part by 08 §36 (2026-08-21).** `story-checkin` is **retired** (a biographer question is
+> queue work; the Inbox counts it), and `story-shared` is **email-only** — the queue carries the
+> "shared with you" row, while the email still names the author and the book, which is what actually gets
+> someone to open it.
+
 > **Original status:** **Approved** — _last updated 2026-07-15_
 >
 > Your Story turns everything SelfOS knows about a person into an ever-evolving, professionally

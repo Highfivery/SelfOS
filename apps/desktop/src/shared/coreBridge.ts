@@ -9621,6 +9621,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           at: i.createdAt,
           // No `openPath`: a check-in is answered in place, where it always has been.
           dismissible: false,
+          // Listed either way (§56 review/edit lives here); only an unanswered one is WAITING.
+          waiting: i.answerable,
         }))
         .filter((e) => !dismissals.ids.includes(e.id));
       return [...entries, ...checkIns].sort((a, b) =>

@@ -18,6 +18,7 @@ const ctx = (fs = memFileSystem()) => ({ fs, key, personId: 'p1', now, readAt: {
 const entry = (over: Partial<InboxEntry> & Pick<InboxEntry, 'id' | 'kind' | 'at'>): InboxEntry => ({
   title: 'Something',
   dismissible: false,
+  waiting: true,
   ...over,
 });
 

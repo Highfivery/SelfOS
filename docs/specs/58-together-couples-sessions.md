@@ -23,6 +23,12 @@
 > review (decision fidelity · architecture fit · safety/privacy · testability); all findings are
 > incorporated.
 
+> **Superseded in part by 08 §36 (2026-08-21).** The `together-invite` notification is now **email-only**:
+> an invitation is queue work, so it lives in the Inbox (08 §35) and takes no bell row. It still emails by
+> name, because an email is the only thing that reaches a partner who has not opened SelfOS in days.
+> `together-turn`, `together-wrapup` and `together-private` are unchanged — they are live-conversation
+> prompts with no queue row. The nav badge counts live sessions only.
+
 Builds on [`05-conversations.md`](05-conversations.md) (the turn pipeline, PERSONA/SAFETY, markers,
 fail-safes), [`16-guided-sessions.md`](16-guided-sessions.md) (guide addenda, structured steps, the
 18+ ack), [`09-session-analysis.md`](09-session-analysis.md) (wrap-up → Insight),

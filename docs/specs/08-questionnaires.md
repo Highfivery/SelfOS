@@ -4740,3 +4740,97 @@ offers no Accept**; only the dismissible kinds show the control.
 
 **Verified to FAIL when reverted**: removing the per-provider `try` (one bad provider empties the queue),
 ignoring the dismissal filter, making every kind dismissible, and dropping the navigation branch.
+
+---
+
+## 36. The bell stops repeating the queue (2026-08-21)
+
+**Status: BUILT.** §35 made the Inbox the record for everything addressed to you. That left the notification
+fan-out saying the same thing a second time: five kinds — `together-invite`, `auto-checkin-ready`,
+`story-checkin`, `contribution-invited`, `story-shared` — each announced one item already sitting in the queue.
+Two surfaces, two counts, and the two disagree the moment either is touched: a bell can be dismissed without
+acting, so the badge clears while the work stays, and the queue can be worked through without opening the bell,
+so the badge lingers over nothing.
+
+A bell is the wrong home for work. It is an **interruption** — the right shape for "a conflict needs resolving",
+"your allowance is nearly spent", "a response you can analyse came back". Work belongs in a list you return to.
+So the five rows collapse into **one**: `inbox-waiting`, "3 things are waiting for you", opening `/inbox`. It
+states a count and nothing else — the queue says what each thing is, and naming one item here would just
+re-create the fan-out with extra steps.
+
+Its signature is the **set of waiting entry ids**, resolved by `onNewMember` — not a count under `onIncrease`,
+which is what every other coalesced kind uses. A queue's count oscillates as you work through it: read at two,
+answer one, something new arrives, back to two — and "2" is not an increase over the "2" already read, so a
+genuinely new arrival would land silently. A set has no such hole: working through the queue shrinks it and
+never re-pops, while any new id surfaces it. (`onNewMember` already existed for `profile-freshness`, for the
+same reason: a shrinking set must not re-nag.)
+
+Retiring a bell row is safe by construction: read/dismissed state is keyed by `coalesceKey`, never by kind, so a
+person carrying a dismissal for `story-checkin` loses a key nothing looks up any more. No migration.
+
+### 36.1 What did NOT collapse
+
+Only queue items. A notification that is genuinely an interruption — and has no queue row to compete with —
+keeps its own: `sync-conflict`, `responses-arrived`, `reminder-due`, `answers-updated`, `goal-followup`,
+`coaching-synthesis`, `challenge-followup`, `onboarding-updated`, `update-available`, `profile-freshness`,
+`together-turn`, `together-wrapup`, `together-private`, `auto-checkin-enabled`, `auto-checkin-incoming`,
+`contribution-received`.
+
+Note the two Together pairs that split: the **invitation** is queue work (§35) and collapses, while
+**your-turn** and **wrap-up** are live-conversation prompts with no queue row, and stay. Same for contributions:
+an invitation TO you is a queue item; something waiting on YOU as an author (`contribution-received`) is not in
+anyone's inbox, so it keeps its bell.
+
+### 36.2 Two kinds outlived their bell row, because they EMAIL
+
+`together-invite` and `story-shared` are in `EMAILABLE_TRANSACTIONAL_KINDS` (67 §3.2), and the transactional
+cadence reads the **raw candidates**, not the resolved bell rows. That is the whole reason `inApp` is a filter
+at resolve time rather than the source simply not emitting: the candidate still exists, so the email still goes
+out **by name**.
+
+The reasoning that justified collapsing the bell does not transfer to email. A bell competes with the queue
+three inches away; an email is the only thing that reaches someone who has not opened SelfOS in days, and there
+"Angel invited you to a Together session" is worth far more than "3 things are waiting for you". So:
+
+- `NotificationCandidate.inApp?: boolean` (default true). `false` = email-only — never a bell row.
+- `resolveNotifications` skips them; `useEmailTransactional` does not.
+- `inbox-waiting` itself is **not** emailable. A "3 things are waiting" email would be exactly the weak,
+  unspecific message this section rejects.
+
+### 36.3 One divide, two badges
+
+The Inbox and Questionnaires nav badges counted overlapping things: received-to-answer was in **both**, so
+neither number was a to-do list.
+
+- **Inbox** counts every waiting queue entry, all four kinds — including a SELF check-in (an auto check-in, a
+  biographer question). Those are real work waiting on you, and since §36 retired `auto-checkin-ready` and
+  `story-checkin` this is the only count that still carries them; excluding them would quietly lose the signal
+  the retirement was supposed to move, not delete.
+- **Questionnaires** counts your own work: responses ready for you to analyse. `receivedToAnswerCount` is gone.
+- **Together** counts LIVE sessions — your turn, or one ready to wrap up. A received invitation is queue work,
+  so it left this badge too. Visual QA caught that one: the tests were green while the same invitation showed
+  as `Inbox 1` and `Together 1` side by side in the sidebar, which is the exact defect this section removes,
+  one badge over.
+
+The queue **lists more than it counts**. An answered check-in stays listed, because reviewing and editing your
+own answers happens there (§56), but nothing is waiting on you for it — hence `InboxEntry.waiting` and
+`waitingCount()`, which both the badge and the notification read, so they cannot drift.
+
+### 36.4 As built
+
+`packages/core`: `NOTIFICATION_KINDS` drops three, gains `inbox-waiting`, keeps the two emailable kinds;
+`InboxEntry.waiting` + `waitingEntries()`/`waitingCount()`. Renderer: `NotificationCandidate.inApp`, the
+resolve-time filter, one `inbox-waiting` candidate derived from the already-loaded queue (no extra read),
+`inApp: false` on the two email-only candidates, and two now-dead fetches removed from
+`useNotificationSources` (`assignmentsInbox`, `booksMyInvitations` — the queue does those reads now), along
+with the three pieces of state they fed.
+
+Opening the Inbox marks the row read, the way opening Results clears `responses-arrived`. That is more than
+tidiness here: the signature is a set, so every action on the queue mints a new notification id, and without a
+read flag each one would toast again — working a three-item queue would toast three times at someone who is
+plainly already looking. A read flag at a superset still covers every subset under `onNewMember`.
+
+**Verified to FAIL when reverted**: dropping the `inApp` filter (a Together invitation reappears as a bell row,
+caught by both the unit test and the E2E against the built bundle), restoring answering to the Questionnaires
+badge, zeroing the waiting count, putting the count back as the signature, and swapping `onNewMember` back to
+`onIncrease`.

@@ -417,18 +417,16 @@ export function appendTogetherChunk(chunk: TogetherChunk): void {
 }
 
 /**
- * The count of sessions "waiting on you" — invitations you RECEIVED + your-turn sessions — for the nav badge
- * (§3.1). An `invited` session the ACTIVE person initiated is their own pending outgoing invite (they're
- * waiting on the partner, not the other way round), so it's excluded.
+ * The count of LIVE sessions waiting on you — your turn to reply, or one ready to wrap up (§3.8, which needs
+ * attention from BOTH partners, not just the addressed one) — for the nav badge (§3.1).
+ *
+ * A received INVITATION is deliberately not counted here: it is queue work, and the Inbox badge counts it
+ * (08 §36.3). One thing, one badge — counting an invitation in both made neither number a to-do list, and the
+ * two then disagreed the moment either surface was touched. (An `invited` session the active person started
+ * was never counted anyway: they are waiting on their partner, not the other way round.)
  */
-export function togetherWaitingCount(
-  sessions: TogetherSessionSummary[],
-  myId: string | null,
-): number {
-  return sessions.filter(
-    (s) =>
-      (s.status === 'invited' && s.initiatorPersonId !== myId) ||
-      // §3.8 — a ready-to-wrap-up session needs attention for BOTH partners, not just the addressed one.
-      (s.status === 'active' && (s.yourTurn || s.readyToWrapUp)),
-  ).length;
+export function togetherWaitingCount(sessions: TogetherSessionSummary[]): number {
+  // No viewer id needed: the summaries are already projection-computed per viewer in the bridge, so
+  // `yourTurn` is this person's turn, and `readyToWrapUp` is true for both partners by design (§3.8).
+  return sessions.filter((s) => s.status === 'active' && (s.yourTurn || s.readyToWrapUp)).length;
 }

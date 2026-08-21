@@ -187,6 +187,7 @@ export function registerBuiltinSettings(): void {
     defineSetting({
       key: 'appearance.theme',
       section: 'appearance',
+      scope: 'device',
       label: 'Theme',
       description: 'Follow the system, or choose light or dark.',
       schema: z.enum(['system', 'light', 'dark']),
@@ -205,6 +206,7 @@ export function registerBuiltinSettings(): void {
     defineSetting({
       key: 'appearance.density',
       section: 'appearance',
+      scope: 'device',
       label: 'Density',
       description: 'Comfortable spacing, or a more compact layout.',
       schema: z.enum(['comfortable', 'compact']),
@@ -221,6 +223,7 @@ export function registerBuiltinSettings(): void {
     defineSetting({
       key: 'appearance.textScale',
       section: 'appearance',
+      scope: 'device',
       label: 'Text size',
       description: 'Scale all text up or down.',
       schema: z.number().min(0.9).max(1.3),
@@ -237,6 +240,7 @@ export function registerBuiltinSettings(): void {
     defineSetting({
       key: 'appearance.reduceMotion',
       section: 'appearance',
+      scope: 'device',
       label: 'Reduce motion',
       description: 'Minimize animations and transitions.',
       schema: z.boolean(),

@@ -1498,6 +1498,31 @@ function unitForType(typeId: string): { one: string; many: string } {
     : { one: 'chapter', many: 'chapters' };
 }
 
+/**
+ * A household person reduced to what a NON-people-manager legitimately needs: who they are, enough to
+ * name and picture them, and whether they have their own experience in the app.
+ *
+ * Everything descriptive is dropped — notes, contact details, birthday, the depiction fields, health,
+ * faith, orientation, relationship style, the promoted intake life-facts, and the `privateFields`
+ * lock list itself (which would otherwise disclose WHICH fields someone has chosen to lock).
+ *
+ * Built by naming what is KEPT rather than what is stripped, so a field added to `Person` later is
+ * private by default instead of silently joining the payload.
+ */
+function identityOnlyPerson(person: Person): Person {
+  return {
+    id: person.id,
+    schemaVersion: person.schemaVersion,
+    displayName: person.displayName,
+    isSubject: person.isSubject,
+    tags: person.tags,
+    createdAt: person.createdAt,
+    updatedAt: person.updatedAt,
+    ...(person.pronouns !== undefined ? { pronouns: person.pronouns } : {}),
+    ...(person.avatarPath !== undefined ? { avatarPath: person.avatarPath } : {}),
+  };
+}
+
 function isCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00.000Z`);
@@ -3028,7 +3053,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     peopleList: async (): Promise<Person[]> => {
       const ctx = await host.vaultAndKey();
-      return ctx ? listPeople(ctx.fs, ctx.key) : [];
+      if (!ctx) return [];
+      const people = await listPeople(ctx.fs, ctx.key);
+      // Full records only for someone who manages people. This read is reached by member-facing
+      // surfaces (the Together partner picker, the Usage person filter), which need names — and it
+      // was handing every caller `healthNotes`, `faith`, `sexualOrientation`, `relationshipStyle`,
+      // `notes`, `birthday` and `privateFields` for EVERY household person, with no gate at all.
+      // Gating it outright would break Together for members, so non-managers get identity only.
+      if (await activePersonCan(ctx.fs, ctx.key, 'people.manage')) return people;
+      return people.map(identityOnlyPerson);
     },
     peopleSave: async (input): Promise<Person> => {
       const ctx = await host.vaultAndKey();

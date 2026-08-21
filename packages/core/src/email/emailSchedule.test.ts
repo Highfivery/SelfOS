@@ -294,6 +294,46 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
     expect(welcome?.deliveredAt).toBeDefined();
   });
 
+  // `clickedAt` and `clicks[]` were declared on the schema and RENDERED in the owner view, but written
+  // by nothing. Two things were missing: the stamp itself, and `opened` being pollable — Resend reports
+  // only the LATEST event, so an entry that reached `opened` stopped being polled and could never
+  // progress to `clicked`. The Clicked column was permanently empty.
+  it('records a click on an already-OPENED entry (opened is not terminal)', async () => {
+    const fs = await configured();
+    const fake = schedulingFake();
+    const prefs = await setEmailPrefs(fs, key, PERSON, {}, false, new Date());
+    await sendFamilyEmail({
+      fs,
+      key,
+      email: fake.client,
+      resendKey: 're-key',
+      personId: PERSON,
+      family: 'welcome',
+      composed: buildWelcomeEmail({ recipientName: 'Me' }),
+      crisisSuppressed: false,
+      now: new Date(),
+    });
+
+    // First poll: it gets opened.
+    fake.setStatus('re-1', 'opened');
+    await reconcileEmailSchedule(
+      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true }),
+    );
+    const opened = (await listEmailActivity(fs, key, PERSON)).find((e) => e.family === 'welcome');
+    expect(opened?.status).toBe('opened');
+    expect(opened?.openedAt).toBeDefined();
+
+    // Second poll: they click. An `opened` entry must still be polled, and the click must be stamped.
+    fake.setStatus('re-1', 'clicked');
+    await reconcileEmailSchedule(
+      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true, auto: false }),
+    );
+    const clicked = (await listEmailActivity(fs, key, PERSON)).find((e) => e.family === 'welcome');
+    expect(clicked?.status).toBe('clicked');
+    expect(clicked?.clickedAt).toBeDefined();
+    expect(clicked?.openedAt).toBe(opened?.openedAt); // the earlier stamp is not overwritten
+  });
+
   it('cancels a questionnaire reminder whose assignment has been answered', async () => {
     const fs = await configured();
     const fake = schedulingFake();

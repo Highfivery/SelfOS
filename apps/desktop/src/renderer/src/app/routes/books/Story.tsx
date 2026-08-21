@@ -33,6 +33,7 @@ export function Story(): JSX.Element {
   const draftBook = useStoryStore((s) => s.draftBook);
   const readerView = useStoryStore((s) => s.readerView);
   const closeSharedBook = useStoryStore((s) => s.closeSharedBook);
+  const openSharedBook = useStoryStore((s) => s.openSharedBook);
   const ownReader = useStoryStore((s) => s.ownReader);
   const openOwnBook = useStoryStore((s) => s.openOwnBook);
   const clearOwnReader = useStoryStore((s) => s.clearOwnReader);
@@ -48,7 +49,14 @@ export function Story(): JSX.Element {
   // `memories` is reserved: it is person-level and belongs to no book (§15.1).
   const segments = (useParams()['*'] ?? '').split('/').filter(Boolean);
   const memoriesMode = segments[0] === 'memories';
-  const routeBookId = memoriesMode ? null : (segments[0] ?? null);
+  // `shared/<authorId>/<bookId>` opens a book someone shared with you. The Inbox has always emitted
+  // this path (`inbox/providers.ts`), but nothing parsed it: `shared` was read as the BOOK id, so the
+  // queue entry opened a book that does not exist. `shared` is reserved here alongside `memories`.
+  const sharedRoute =
+    segments[0] === 'shared' && segments[1] && segments[2]
+      ? { authorPersonId: segments[1], bookId: segments[2] }
+      : null;
+  const routeBookId = memoriesMode || sharedRoute ? null : (segments[0] ?? null);
   const splat = segments.slice(1).join('/');
   const readMode = splat === 'read' || splat.startsWith('read/');
   const routeChapterId = splat.startsWith('read/') ? splat.slice('read/'.length) : null;
@@ -114,6 +122,17 @@ export function Story(): JSX.Element {
     void open(routeBookId);
   }, [loaded, routeBookId, bundle, progress, open]);
 
+  // Open a shared book named by the URL. Asked-once per id (the `requestedBookRef` pattern above): a
+  // book that was unshared or deleted must stop asking rather than re-render into a loop.
+  const sharedKey = sharedRoute ? `${sharedRoute.authorPersonId}/${sharedRoute.bookId}` : null;
+  const requestedSharedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!loaded || !sharedRoute || !sharedKey) return;
+    if (requestedSharedRef.current === sharedKey) return;
+    requestedSharedRef.current = sharedKey;
+    void openSharedBook(sharedRoute.authorPersonId, sharedRoute.bookId);
+  }, [loaded, sharedKey, sharedRoute, openSharedBook]);
+
   // Load the owner's own-book reader view when on the read route (and not editing). Re-runs when the editor
   // closes (`reading` → null) so returning from an edit shows the fresh prose. Clears it when leaving the route.
   const bookId = bundle?.manifest.id;
@@ -141,6 +160,9 @@ export function Story(): JSX.Element {
           onExit={() => {
             setSharedChapterId(null);
             closeSharedBook();
+            // Arrived via /books/shared/<author>/<book> (an Inbox entry) — leaving the reader must
+            // also leave that URL, or the shelf renders under a route that no longer describes it.
+            if (sharedRoute) navigate('/books');
           }}
           resolveImage={async (imageId) => {
             const img = await window.selfos?.booksReadSharedImage({

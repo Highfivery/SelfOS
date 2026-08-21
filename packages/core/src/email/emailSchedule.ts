@@ -88,8 +88,20 @@ const iso = (ms: number): string => new Date(ms).toISOString();
 const withinDays = (at: string | undefined, now: number, days: number): boolean =>
   at !== undefined && now - new Date(at).getTime() <= days * DAY_MS;
 
-/** Statuses that are NOT terminal — worth polling Resend for an update (67 §3.4). */
-const POLLABLE_STATUSES = new Set<EmailDeliveryStatus>(['scheduled', 'sent', 'delivered']);
+/**
+ * Statuses that are NOT terminal — worth polling Resend for an update (67 §3.4).
+ *
+ * `opened` is in here because a click comes AFTER an open: Resend reports only the latest event, so an
+ * entry that reached `opened` and stopped being polled could never progress to `clicked`. That, plus
+ * the missing `clickedAt` stamp below, is why the owner view's Clicked column was permanently empty
+ * despite `mapResendStatus` having always mapped the event.
+ */
+const POLLABLE_STATUSES = new Set<EmailDeliveryStatus>([
+  'scheduled',
+  'sent',
+  'delivered',
+  'opened',
+]);
 /** Only poll entries this recent — an old entry that never progressed is abandoned, not re-polled forever. */
 const POLL_WINDOW_DAYS = 30;
 /**
@@ -705,6 +717,10 @@ export async function reconcileEmailSchedule(deps: {
         status: next,
         ...(next === 'delivered' && !e.deliveredAt ? { deliveredAt: now.toISOString() } : {}),
         ...(next === 'opened' && !e.openedAt ? { openedAt: now.toISOString() } : {}),
+        // A click is a deliberate act and the only trustworthy engagement signal we get (an "open" can
+        // be Apple Mail or Gmail pre-fetching the pixel). It was declared, rendered, and written by
+        // nothing.
+        ...(next === 'clicked' && !e.clickedAt ? { clickedAt: now.toISOString() } : {}),
       };
     });
   }

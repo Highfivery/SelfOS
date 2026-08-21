@@ -1002,6 +1002,48 @@ describe('createCoreBridge', () => {
     expect(mine.some((a) => a.status === 'submitted' || a.status === 'analyzed')).toBe(true);
   });
 
+  // `peopleList` had NO capability gate at all and returned full `Person` records — healthNotes, faith,
+  // sexualOrientation, relationshipStyle, notes, birthday and the `privateFields` lock list — for EVERY
+  // household person, to ANY caller. It cannot simply be gated: member-facing surfaces (the Together
+  // partner picker, the Usage person filter) legitimately need names, so a non-manager gets identity only.
+  it('people: a member sees identity only; the owner still sees the full record', async () => {
+    const { bridge } = await freshOwner();
+    const subject = await bridge.peopleSave({
+      displayName: 'Ada',
+      isSubject: true,
+      tags: [],
+      healthNotes: 'migraines',
+      faith: 'none',
+      sexualOrientation: 'bi',
+      notes: 'private note',
+      birthday: '1990-04-02',
+      email: 'ada@example.com',
+      privateFields: ['notes'],
+    });
+
+    // The owner (people.manage) still gets everything.
+    const asOwner = (await bridge.peopleList()).find((p) => p.id === subject.id);
+    expect(asOwner?.healthNotes).toBe('migraines');
+    expect(asOwner?.notes).toBe('private note');
+    expect(asOwner?.privateFields).toEqual(['notes']);
+
+    // A member gets a name and nothing else.
+    const member = await bridge.peopleSave({ displayName: 'Mo', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+
+    const asMember = (await bridge.peopleList()).find((p) => p.id === subject.id);
+    expect(asMember?.displayName).toBe('Ada'); // still usable by the partner picker
+    expect(asMember?.isSubject).toBe(true);
+    expect(asMember?.healthNotes).toBeUndefined();
+    expect(asMember?.faith).toBeUndefined();
+    expect(asMember?.sexualOrientation).toBeUndefined();
+    expect(asMember?.notes).toBeUndefined();
+    expect(asMember?.birthday).toBeUndefined();
+    expect(asMember?.email).toBeUndefined();
+    expect(asMember?.privateFields).toBeUndefined(); // which fields are locked is itself a disclosure
+  });
+
   it('email (67 §3.7 / Phase 6): a sent email stores its content; the owner reads it, a member cannot', async () => {
     const { bridge, ownerId } = await freshOwner();
     await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });

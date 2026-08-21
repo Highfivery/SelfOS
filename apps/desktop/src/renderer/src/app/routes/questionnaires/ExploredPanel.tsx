@@ -15,6 +15,7 @@ import type {
   CandidateFeedItem,
   CoverageAreaView,
   CoverageTopicView,
+  MarkedOffView,
   PartnerWishGroupView,
 } from '@shared/channels';
 import { useCoverageStore } from '../../../stores/coverageStore';
@@ -399,6 +400,100 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   );
 }
 
+/** How long is left on a mark, in the plainest words that are still true. */
+function lapsesIn(lapsesAt: string | undefined): string | null {
+  if (!lapsesAt) return null;
+  const days = Math.ceil((new Date(lapsesAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  if (!Number.isFinite(days)) return null;
+  if (days <= 0) return 'lifting now';
+  if (days === 1) return 'lifts tomorrow';
+  if (days < 14) return `lifts in ${days} days`;
+  if (days < 60) return `lifts in ${Math.round(days / 7)} weeks`;
+  const months = Math.round(days / 30);
+  return months <= 1 ? 'lifts in about a month' : `lifts in about ${months} months`;
+}
+
+/**
+ * One reversible mark. The label says what lifting DOES, and it differs by kind because the two acts are not
+ * the same thing (§12): correcting something the app believes about you, versus ending a pause you asked for.
+ *
+ * A boundary confirms first (owner, 2026-08-20). Lifting one means SelfOS starts asking about something the
+ * person marked "prefer not to say" — a mis-tap puts a sensitive question in their Inbox — while lifting a
+ * pause or a "doesn't apply" costs them nothing. The friction sits exactly where the consequence is.
+ */
+function MarkedOffRow({ mark }: { mark: MarkedOffView }): JSX.Element {
+  const lift = useCoverageStore((s) => s.lift);
+  const lifting = useCoverageStore((s) => s.lifting);
+  const [confirming, setConfirming] = useState(false);
+  const busy = lifting === `${mark.kind}|${mark.label}`;
+  const needsConfirm = mark.kind === 'prefer-not-to-say';
+  const undoLabel = mark.kind === 'not-applicable' ? 'This does apply' : 'Start asking again';
+  const remaining = lapsesIn(mark.lapsesAt);
+
+  const doLift = (): void => {
+    setConfirming(false);
+    void lift({
+      kind: mark.kind,
+      label: mark.label,
+      ...(mark.topicId ? { topicId: mark.topicId } : {}),
+    });
+  };
+
+  return (
+    <li className={styles.markRow}>
+      <span className={styles.markLabel}>{mark.label}</span>
+      {remaining ? <span className={styles.chipKind}>{remaining}</span> : null}
+      {confirming ? (
+        <span className={styles.confirmRow}>
+          <Text tone="secondary">Ask about this again?</Text>
+          <button type="button" className={styles.dangerBtn} disabled={busy} onClick={doLift}>
+            Yes, ask me
+          </button>
+          <button type="button" className={styles.clearBtn} onClick={() => setConfirming(false)}>
+            Keep it paused
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className={styles.clearBtn}
+          disabled={busy}
+          aria-label={`${undoLabel}: ${mark.label}`}
+          onClick={() => (needsConfirm ? setConfirming(true) : doLift())}
+        >
+          {busy ? 'Saving…' : undoLabel}
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** One of the two groups in "Left alone" — self-hiding, so an empty group never shows an empty card. */
+function MarkedOffGroup({
+  heading,
+  blurb,
+  marks,
+}: {
+  heading: string;
+  blurb: string;
+  marks: MarkedOffView[];
+}): JSX.Element | null {
+  if (marks.length === 0) return null;
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Heading level={3}>{heading}</Heading>
+        <Text tone="secondary">{blurb}</Text>
+        <ul className={styles.markList}>
+          {marks.map((m, i) => (
+            <MarkedOffRow key={`${m.kind}-${m.label}-${i}`} mark={m} />
+          ))}
+        </ul>
+      </Stack>
+    </Card>
+  );
+}
+
 function PartnerCard({ group }: { group: PartnerWishGroupView }): JSX.Element {
   const addPartnerWish = useCoverageStore((s) => s.addPartnerWish);
   const removePartnerWish = useCoverageStore((s) => s.removePartnerWish);
@@ -522,7 +617,6 @@ export function ExploredPanel(): JSX.Element {
   const areas = view?.areas ?? [];
   const markedOff = view?.markedOff ?? [];
   const partners = view?.partners ?? [];
-  const areaTopicIds = new Set(areas.map((a) => a.topicId));
   const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
   const [areaTerm, setAreaTerm] = useState('');
   const term = areaTerm.trim().toLowerCase();
@@ -539,14 +633,14 @@ export function ExploredPanel(): JSX.Element {
     if (areaFilter === 'paused') return a.topics.some((t) => t.leftAlone);
     return true;
   });
-  // The "left alone" list shows every mark that ISN'T already visible as a paused area row. Only the panel's
-  // own `left-alone` steer is reflected up there, so only it may be filtered out: once declines started
-  // carrying a topicId, filtering on the topic alone hid a "doesn't apply" or a "prefer not to say" from this
-  // list while the area row — which reads only `left-alone` — showed nothing either. A live suppression with
-  // no row anywhere, and no way to lift it.
-  const declines = markedOff.filter(
-    (m) => !(m.kind === 'left-alone' && m.topicId && areaTopicIds.has(m.topicId)),
-  );
+  // EVERY mark, in two groups (08 §34.5). This list is the authoritative inventory of what SelfOS is steering
+  // clear of and the one place to reverse any of it, so nothing is filtered out — a pause also reads "paused"
+  // on its own area row, and that duplication is honest. Filtering by topic was what let a decline vanish from
+  // here while the area row (which reads `left-alone` only) showed nothing either: a live suppression with no
+  // row anywhere and no way to lift it.
+  const notAboutMe = markedOff.filter((m) => m.kind === 'not-applicable');
+  const pausedForNow = markedOff.filter((m) => m.kind !== 'not-applicable');
+  const declines = markedOff;
   const hasEverRefreshed = Boolean(view?.candidatesRefreshedAt);
   // The nav uses just the first name so the label stays on one line; the section itself keeps the full name.
   const partnerFirst = partners.length === 1 ? partners[0]?.partnerName.split(' ')[0] : undefined;
@@ -809,22 +903,16 @@ export function ExploredPanel(): JSX.Element {
                         Things you’ve told SelfOS not to explore. It steers clear of these.
                       </Text>
                     </div>
-                    <Card>
-                      <ul className={styles.chipList}>
-                        {declines.map((m, i) => (
-                          <li key={`${m.label}-${i}`} className={styles.chip}>
-                            <span>{m.label}</span>
-                            <span className={styles.chipKind}>
-                              {m.kind === 'not-applicable'
-                                ? 'Doesn’t apply'
-                                : m.kind === 'prefer-not-to-say'
-                                  ? 'Prefer not to say'
-                                  : 'Paused'}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </Card>
+                    <MarkedOffGroup
+                      heading="Not about me"
+                      blurb="You told SelfOS these aren’t about you. It stops asking — and checks back in a year, in case that changes."
+                      marks={notAboutMe}
+                    />
+                    <MarkedOffGroup
+                      heading="Paused for now"
+                      blurb="Ground you’ve asked SelfOS to leave for a while. Each one lifts on its own, or you can lift it here."
+                      marks={pausedForNow}
+                    />
                   </section>
                 ) : null}
               </div>

@@ -256,6 +256,7 @@ import type {
   QuestionnaireCoverageView,
   CoverageSteerInput,
   CandidateCurateInput,
+  LiftSuppressionInput,
   AddPartnerWishInput,
 } from '@selfos/core/questionnaires';
 import type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
@@ -401,6 +402,7 @@ export const IpcChannels = {
   questionnairesPersonalizationProfile: 'questionnaires:personalizationProfile',
   questionnairesSteerTopic: 'questionnaires:steerTopic',
   questionnairesCurateCandidate: 'questionnaires:curateCandidate',
+  questionnairesLiftSuppression: 'questionnaires:liftSuppression',
   questionnairesClearCandidateFeed: 'questionnaires:clearCandidateFeed',
   questionnairesRefreshNextCandidates: 'questionnaires:refreshNextCandidates',
   questionnairesAcknowledgeAdult: 'questionnaires:acknowledgeAdult',
@@ -799,6 +801,7 @@ export type {
   CoverageStatus,
   MarkedOffView,
   CoverageSteerInput,
+  LiftSuppressionInput,
   CandidateFeedItem,
   CandidateCurateInput,
   PartnerWishView,
@@ -1223,6 +1226,8 @@ export interface SelfosBridge {
   /** Adaptive Exploration (70 §3.2/§6): curate a candidate in the OWN feed (Ask me this / Not this / Go deeper
    * / clear); returns the refreshed view. Cheap, no AI. Own-scoped. */
   questionnairesCurateCandidate(input: CandidateCurateInput): Promise<QuestionnaireCoverageView>;
+  /** Lift ONE mark from the person's own "Left alone" list (08 §34.5) — the per-mark undo. */
+  questionnairesLiftSuppression(input: LiftSuppressionInput): Promise<QuestionnaireCoverageView>;
   /** Clear the whole candidate feed (mark every active candidate skipped). Own-scoped. */
   questionnairesClearCandidateFeed(): Promise<QuestionnaireCoverageView>;
   /** Adaptive Exploration (70 §3.2/§5.4): the manual "Look for more" — force a candidate refresh for the active

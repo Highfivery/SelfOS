@@ -3,6 +3,7 @@ import type {
   AddPartnerWishInput,
   CandidateCurateInput,
   CoverageSteerInput,
+  LiftSuppressionInput,
   QuestionnaireCoverageView,
 } from '@shared/channels';
 
@@ -19,6 +20,8 @@ interface CoverageStoreState {
   error: string | null;
   /** The topicId currently mid-steer, so the panel can disable just that row's buttons. */
   steering: string | null;
+  /** The mark currently being lifted (`kind|label`), so only that row's control goes busy. */
+  lifting: string | null;
   /** The candidateId currently mid-curation, so the panel can disable just that card. */
   curating: string | null;
   /** True while the manual "Look for more" candidate refresh is running (it spends). */
@@ -29,6 +32,8 @@ interface CoverageStoreState {
   acking: boolean;
   load: () => Promise<void>;
   steer: (input: CoverageSteerInput) => Promise<void>;
+  /** Lift ONE mark from "Left alone" (08 §34.5) — the per-mark undo. */
+  lift: (input: LiftSuppressionInput) => Promise<void>;
   curate: (input: CandidateCurateInput) => Promise<void>;
   clearFeed: () => Promise<void>;
   lookForMore: () => Promise<void>;
@@ -45,6 +50,7 @@ const EMPTY = {
   loaded: false,
   error: null,
   steering: null,
+  lifting: null,
   curating: null,
   refreshing: false,
   clearing: false,
@@ -69,6 +75,15 @@ export const useCoverageStore = create<CoverageStoreState>((set) => ({
       set({ view, steering: null });
     } catch {
       set({ steering: null, error: 'We couldn’t save that. Try again.' });
+    }
+  },
+  lift: async (input) => {
+    set({ lifting: `${input.kind}|${input.label}`, error: null });
+    try {
+      const view = (await window.selfos?.questionnairesLiftSuppression(input)) ?? null;
+      set({ view, lifting: null });
+    } catch {
+      set({ lifting: null, error: 'We couldn’t save that. Try again.' });
     }
   },
   curate: async (input) => {

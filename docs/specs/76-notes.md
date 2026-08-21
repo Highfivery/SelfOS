@@ -391,8 +391,13 @@ Per the owner's decision (2026-08-21) the distress/crisis system is being remove
 change: `aggregateCrisisSignal`, the Home `CrisisSupportBanner`, the `CrisisFooter`, insight
 `crisisFlag` handling, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression.
 
-Notes therefore have no crisis gate and no crisis footer. **This spec does not itself remove anything** —
-it is written against the post-removal state, and must not land before that change.
+Notes therefore have no crisis gate and no crisis footer. **This spec does not itself remove anything.**
+
+**Corrected 2026-08-21:** this section previously said Notes "must not land before that change". That was
+an assumption, and it was wrong — the two are not coupled. `sendNoteEmail` calls `performSend` **directly**
+rather than routing through `sendFamilyEmail`, so the note family never passed through the
+`crisisSuppressed` gate at all and has nothing there to remove; and no note surface renders a
+`CrisisFooter`. Notes shipped first, and the removal is its own change.
 
 > **Open (§11.1):** whether the PHQ-9 item-9 trigger survives. It is independent of everything else in
 > the removal.

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.61.0](https://github.com/Highfivery/SelfOS/compare/v0.60.1...v0.61.0) (2026-08-21)
+
+
+### Features
+
+* **notes:** the note core + seam — owner-authored notes sent as SelfOS ([#556](https://github.com/Highfivery/SelfOS/issues/556)) ([4301655](https://github.com/Highfivery/SelfOS/commit/4301655b899a8fac3d6dff12623945a6d630465d))
+* **notes:** write to one person, as SelfOS — and make the answers answerable (76) ([#558](https://github.com/Highfivery/SelfOS/issues/558)) ([cd60658](https://github.com/Highfivery/SelfOS/commit/cd60658ce61a41c3030ba0ac01e6df774020bbd6))
+
 ## [0.60.1](https://github.com/Highfivery/SelfOS/compare/v0.60.0...v0.60.1) (2026-08-21)
 
 

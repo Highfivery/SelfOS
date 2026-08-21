@@ -292,6 +292,15 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         adultAcknowledged: false,
         hasPlacement: false,
       }),
+    questionnairesLiftSuppression: () =>
+      Promise.resolve({
+        candidates: [],
+        areas: [],
+        markedOff: [],
+        partners: [],
+        adultAcknowledged: false,
+        hasPlacement: false,
+      }),
     questionnairesCurateCandidate: () =>
       Promise.resolve({
         candidates: [],

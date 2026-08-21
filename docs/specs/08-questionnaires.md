@@ -4569,7 +4569,45 @@ productive-vein filter suppresses a vein by matching it against the avoid list, 
 stops matching. That is not a formatting bug: it tells the model to go deeper on exactly the ground the person
 just marked off. It is guarded.
 
-### 34.5 Guards
+### 34.5 "Left alone": two groups, everything reversible (slice 3)
+
+The list was a flat row of chips with no dates and no way back. Every mark on it can now be lifted, and every
+mark says when it lifts on its own.
+
+**Two groups, from three kinds.** "Not about me" holds `not-applicable` — a standing fact about them. "Paused
+for now" holds `prefer-not-to-say` and `left-alone` — both "not right now", differing only in how long. The
+split is the one distinction a person actually acts on: _is this wrong about me_, or _is this just not
+today_.
+
+**It shows everything (owner, 2026-08-20).** A pause set from an area row appears here as well as reading
+"paused" on that row. That duplication is deliberate: this list is the authoritative inventory of what SelfOS
+is steering clear of and the one place to reverse any of it, and a surface whose whole job is _"here is
+everything you've told me to leave"_ cannot be missing a category. Filtering by topic is also what let a
+decline vanish from here while the area row showed nothing either (§34.4).
+
+**Lifting is per-mark, and the label says what it does.** The undo differs by kind because the acts differ
+(§12): "This does apply" corrects something the app believes about you; "Start asking again" ends a pause you
+asked for. Identity is `(kind, topicId, label)` — the same triple `applyDecline` de-dupes on — so a label
+marked off under two kinds lifts one at a time, and a decline on a hand-authored question (no `topicId` at
+all) is still reachable. A stale row is a no-op that returns the same profile, so a double-tap cannot churn
+`updatedAt`.
+
+**A boundary asks first (owner, 2026-08-20).** Lifting a `prefer-not-to-say` means SelfOS starts asking about
+something the person marked off as a boundary — a mis-tap puts a sensitive question in their Inbox. That one
+gets a two-step inline confirm; "doesn't apply" and a pause lift on a single tap. The friction sits exactly
+where the consequence is, and nowhere else, so tidying a long list never trains anyone to click through
+confirms without reading them.
+
+**Nothing reads as permanent.** Each row states when it lapses in plain words — _"lifts in 3 days"_, _"lifts
+in about 10 months"_ — from the `lapsesAt` the view now carries (§34.4). A mark the person can neither see the
+end of nor remove is the un-gettable-rid-of preference this whole area exists to avoid.
+
+The lift is its own bridge op (`questionnaires:liftSuppression`), gated `questionnaires.own` and
+active-person-scoped like every other coverage write. No 18+ gate: it only ever REMOVES a suppression the
+person set themselves, and an Intimacy topic they un-mark is still gated everywhere it would actually be
+asked about.
+
+### 34.6 Guards
 
 `summarizeSkips` / `isFullySkipped` / `skipKindOf` are pure and unit-tested, including that a summary of a
 reason reading _"I had a miscarriage in March"_ serialises **without that text**. A coreBridge test drives the
@@ -4589,6 +4627,13 @@ and asserts the facts come out unchanged — the shape assertions all stay green
 `isDefaultPrivate` to also match an empty array, so only this one catches the leak returning — and a coreBridge
 test builds the divergent two-send case in both directions (older send with a real answer; older send private
 while the newest is Standard).
+
+Slice 3 adds: the per-mark undo (lifts exactly the named mark, leaves its two same-topic neighbours standing,
+reaches a topic-less decline, and no-ops a stale row without churning `updatedAt`); a bridge round-trip that
+lifts a real decline and is refused for a Guest; that the boundary confirm sends nothing until confirmed and
+nothing at all if backed out; and that each row states its own lapse. **Verified to FAIL when reverted**:
+removing the confirm (the boundary lifts on the first tap), ignoring `kind` in the identity (lifting one mark
+takes a neighbour with it), and dropping the lapse line.
 
 Slice 2b adds its own, all likewise **verified to FAIL when reverted**: not stamping `topicId` (the decline
 goes back to being about one wording); restoring the old `dropSuppression` (the panel toggle wipes a boundary

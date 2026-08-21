@@ -6402,6 +6402,54 @@ describe('createCoreBridge', () => {
     expect(priv?.skipped?.total).toBe(1);
   });
 
+  it('lifting a mark is own-scoped and gated, and really stops the steer (08 §34.5)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    // A decline the person made while answering: the panel toggle deliberately cannot clear it (§34.4), so
+    // this per-mark undo is the ONLY way back — which is exactly why it has to work and has to be gated.
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [
+        {
+          id: 'q1',
+          type: 'shortText',
+          prompt: 'How is work going?',
+          required: false,
+          topicIds: ['work-stress'],
+        },
+      ],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: q.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: { declined: true, reason: 'Doesn’t apply to me' } }],
+    });
+
+    const before = await bridge.questionnairesPersonalizationProfile();
+    const mark = before.markedOff.find((m) => m.label === 'How is work going?');
+    expect(mark?.kind).toBe('not-applicable');
+    expect(mark?.topicId).toBe('work-stress');
+    expect(mark?.lapsesAt).toBeTruthy(); // it says when it lifts on its own
+
+    const after = await bridge.questionnairesLiftSuppression({
+      kind: 'not-applicable',
+      topicId: 'work-stress',
+      label: 'How is work going?',
+    });
+    expect(after.markedOff.some((m) => m.label === 'How is work going?')).toBe(false);
+
+    // A Guest has no questionnaires.own → the bridge is the boundary, not the panel.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(
+      (await bridge.questionnairesLiftSuppression({ kind: 'not-applicable', label: 'anything' }))
+        .markedOff,
+    ).toEqual([]);
+  });
+
   it('the skip state describes the send the action targets, not a different one (08 §34.3)', async () => {
     // A re-asked questionnaire has more than one send, and one click of the card's own Analyze puts the
     // NEWEST send in the analysed pile while an older one is still waiting. The display state and the action

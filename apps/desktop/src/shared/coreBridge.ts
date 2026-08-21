@@ -752,6 +752,7 @@ import {
   readProfile,
   writeProfile,
   readCoverageView,
+  liftSuppression,
   steerTopic,
   curateCandidate,
   clearCandidateFeedAndRead,
@@ -1403,6 +1404,11 @@ const SteerTopicSchema = z.object({
   lifeArea: z.string().optional(),
   label: z.string().optional(),
   action: z.enum(['explore-more', 'leave-alone', 'clear']),
+});
+const LiftSuppressionSchema = z.object({
+  kind: z.enum(['not-applicable', 'prefer-not-to-say', 'left-alone']),
+  topicId: z.string().min(1).optional(),
+  label: z.string().min(1),
 });
 const CurateCandidateSchema = z.object({
   candidateId: z.string().min(1),
@@ -5551,6 +5557,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(parsed.label !== undefined ? { label: parsed.label } : {}),
       };
       return steerTopic(ctx.fs, ctx.key, personId, p, new Date(), acked);
+    },
+    // Lift ONE mark from the person's own "Left alone" list (08 §34.5). Own-scoped in the bridge like every
+    // other coverage write. No 18+ gate: lifting only ever REMOVES a suppression the person set themselves,
+    // and an Intimacy topic they un-mark is still gated everywhere it would actually be asked about.
+    questionnairesLiftSuppression: async (input): Promise<QuestionnaireCoverageView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
+      const personId = await activePersonId();
+      if (!personId) return emptyCoverageView();
+      const parsed = LiftSuppressionSchema.parse(input);
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return liftSuppression(
+        ctx.fs,
+        ctx.key,
+        personId,
+        {
+          kind: parsed.kind,
+          label: parsed.label,
+          ...(parsed.topicId !== undefined ? { topicId: parsed.topicId } : {}),
+        },
+        new Date(),
+        acked,
+      );
     },
     // Curate a candidate in the active person's OWN feed (spec 70 §3.2). Cheap, no AI; own-scoped in the bridge.
     questionnairesCurateCandidate: async (input): Promise<QuestionnaireCoverageView> => {

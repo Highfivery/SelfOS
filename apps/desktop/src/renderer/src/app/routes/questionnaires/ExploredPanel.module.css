@@ -1178,3 +1178,35 @@
   white-space: nowrap;
   font-size: 0.62rem;
 }
+
+/* ── "Left alone": two reversible groups (08 §34.5) ────────────────────────── */
+
+.markList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.markRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* the undo drops below the label at phone width rather than squeezing it */
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.markRow:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* Takes the row and pushes the controls to the end; `min-width: 0` so a long question prompt wraps inside
+   the row instead of overflowing the card (the flexbox footgun, §12). */
+.markLabel {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+}

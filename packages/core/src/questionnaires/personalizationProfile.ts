@@ -344,6 +344,36 @@ export function applyDecline(
 }
 
 /**
+ * Lift ONE suppression the person is looking at (08 §34.5) — the undo for a mark shown in "Left alone".
+ *
+ * Deliberately narrow. `applySteer`'s `clear` is the panel's own pause toggle and lifts only `left-alone`
+ * (§34.4), because a tap meant to un-pause a topic must not silently revoke a boundary set while answering.
+ * This is the other half: an explicit, per-mark act on the row that shows the mark, so lifting a decline is
+ * something the person chose to do to THAT mark and not a side effect of something else.
+ *
+ * Identity is (kind, topicId, label) — the same triple `applyDecline` de-dupes on — because one label can be
+ * marked off under more than one kind, and a decline on a hand-authored question carries no topicId at all
+ * yet still has to be liftable. Pure; returns the profile unchanged when nothing matches, so a stale row
+ * cannot churn `updatedAt`.
+ */
+export function clearSuppression(
+  profile: PersonalizationProfile,
+  input: { kind: FeedbackKind; topicId?: string; label: string },
+  now: Date,
+): PersonalizationProfile {
+  const label = input.label.trim();
+  if (!label) return profile;
+  const feedback = profile.feedback.filter((f) => {
+    if (f.kind !== input.kind) return true;
+    if (norm(f.topicId) !== norm(input.topicId)) return true;
+    // The label the surfaces render is `questionPrompt ?? topicId` — match what the person actually saw.
+    return norm(f.questionPrompt ?? f.topicId) !== norm(label);
+  });
+  if (feedback.length === profile.feedback.length) return profile;
+  return { ...profile, feedback, updatedAt: now.toISOString() };
+}
+
+/**
  * Record an engagement signal for an answered question — `answered-richly` (a productive vein) or `bailed`
  * (opened, abandoned). Keyed by topic; collapses a prior identical signal. Pure.
  */

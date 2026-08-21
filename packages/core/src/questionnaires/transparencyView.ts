@@ -15,6 +15,7 @@ import {
   addPartnerWish,
   applyCandidateCuration,
   clearCandidateFeed,
+  clearSuppression,
   applySteer,
   FEED_CANDIDATE_CAP,
   isActiveCandidate,
@@ -641,6 +642,32 @@ export async function steerTopic(
   const profile = await readProfile(fs, key, personId);
   const next = applySteer(profile, input, now);
   if (next !== profile) await writeProfile(fs, key, next); // skip the vault write on a no-op steer
+  return readCoverageView(fs, key, personId, now, adultAcknowledged);
+}
+
+/** What the Left-alone list sends back when the person lifts one mark (08 §34.5). */
+export interface LiftSuppressionInput {
+  kind: MarkedOffView['kind'];
+  topicId?: string;
+  label: string;
+}
+
+/**
+ * Lift one suppression from the active person's OWN profile and return the refreshed view (08 §34.5). Cheap,
+ * no AI. The undo for a mark the person is looking at — see `clearSuppression` for why this is separate from
+ * the panel's pause toggle.
+ */
+export async function liftSuppression(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  input: LiftSuppressionInput,
+  now: Date,
+  adultAcknowledged = false,
+): Promise<QuestionnaireCoverageView> {
+  const profile = await readProfile(fs, key, personId);
+  const next = clearSuppression(profile, input, now);
+  if (next !== profile) await writeProfile(fs, key, next); // no vault write when the row was already gone
   return readCoverageView(fs, key, personId, now, adultAcknowledged);
 }
 

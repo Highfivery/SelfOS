@@ -19,6 +19,7 @@ import {
   applyEngagement,
   applyReciprocity,
   applySteer,
+  clearSuppression,
   isSuppressionLive,
   buildFeedbackGuidance,
   CANDIDATE_CAP,
@@ -404,6 +405,74 @@ describe('suppression lifetimes (08 §34 / 2b)', () => {
     );
     p = applySteer(p, { topicId: 'money', action: 'explore-more' }, at(2));
     expect(p.feedback.some((f) => f.kind === 'not-applicable')).toBe(true);
+  });
+});
+
+describe('clearSuppression (08 §34.5 — the per-mark undo)', () => {
+  it('lifts exactly the mark named, and leaves its neighbours alone', () => {
+    let p = applyDecline(
+      emptyProfile('p1'),
+      { topicId: 'money', questionPrompt: 'Rent?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(1),
+    );
+    p = applyDecline(
+      p,
+      { topicId: 'money', questionPrompt: 'Debt?', reason: PREFER_NOT_TO_SAY_SKIP_REASON },
+      at(2),
+    );
+    p = applySteer(p, { topicId: 'money', action: 'leave-alone', label: 'Money' }, at(3));
+
+    // Same topic, three different kinds — lifting one must not touch the other two.
+    const after = clearSuppression(
+      p,
+      { kind: 'not-applicable', topicId: 'money', label: 'Rent?' },
+      at(4),
+    );
+    expect(after.feedback.map((f) => f.kind).sort()).toEqual(['left-alone', 'prefer-not-to-say']);
+  });
+
+  it('lifts a decline that has no topic at all (a hand-authored question)', () => {
+    const p = applyDecline(
+      emptyProfile('p1'),
+      { questionPrompt: 'How is work?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(1),
+    );
+    const after = clearSuppression(p, { kind: 'not-applicable', label: 'How is work?' }, at(2));
+    expect(after.feedback).toEqual([]);
+  });
+
+  it('is a no-op for a stale row — no churn, no accidental match', () => {
+    const p = applyDecline(
+      emptyProfile('p1'),
+      { topicId: 'money', questionPrompt: 'Rent?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(1),
+    );
+    // Right label, WRONG kind: a label can be marked off under more than one kind, so the kind is part of
+    // the identity and must not be ignored.
+    expect(
+      clearSuppression(p, { kind: 'left-alone', topicId: 'money', label: 'Rent?' }, at(2)),
+    ).toBe(p);
+    // Right kind + label, wrong topic.
+    expect(
+      clearSuppression(p, { kind: 'not-applicable', topicId: 'health', label: 'Rent?' }, at(2)),
+    ).toBe(p);
+    // Gone already → the same object back, so `updatedAt` never churns on a stale tap.
+    expect(clearSuppression(p, { kind: 'not-applicable', label: 'Nothing here' }, at(2))).toBe(p);
+  });
+
+  it('a lifted mark stops steering generation immediately', () => {
+    const p = applyDecline(
+      emptyProfile('p1'),
+      { topicId: 'money', questionPrompt: 'Rent?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(1),
+    );
+    expect(buildFeedbackGuidance(p, at(2))).toMatch(/DON'T APPLY/);
+    const after = clearSuppression(
+      p,
+      { kind: 'not-applicable', topicId: 'money', label: 'Rent?' },
+      at(3),
+    );
+    expect(buildFeedbackGuidance(after, at(4))).toBe('');
   });
 });
 

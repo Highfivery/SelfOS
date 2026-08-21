@@ -3236,6 +3236,20 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
         coverage: { topics: [] },
         feedback: [
           { kind: 'left-alone', topicId: 'Money:debt-shame', at: '2026-07-20T00:00:00.000Z' },
+          // One of each remaining kind, with the human prompts real declines carry (08 §34.5) — so BOTH
+          // "Left alone" groups render against realistic data rather than a single row.
+          {
+            kind: 'not-applicable',
+            topicId: 'Family:kids',
+            questionPrompt: 'What is bedtime like in your house?',
+            at: '2026-08-01T00:00:00.000Z',
+          },
+          {
+            kind: 'prefer-not-to-say',
+            topicId: 'Health:sleep',
+            questionPrompt: 'How have you been sleeping since March?',
+            at: '2026-08-05T00:00:00.000Z',
+          },
         ],
         changes: [],
         // A REALISTIC map (spec 71 §5.9). Every defect this surface shipped — empty rows, a topic panel
@@ -3411,7 +3425,26 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     // The Auto check-ins tab is present (4-tab worst case for the overflow guard).
     await expect(w.getByRole('tab', { name: /Auto check-ins/ })).toBeVisible();
 
-    // ~360px: the panel fills width with no horizontal scrollbar / inner scroller (CLAUDE.md §12).
+    // "Left alone" (08 §34.5): two groups, each mark reversible and each stating when it lifts on its own.
+    await w.getByRole('button', { name: /Left alone/ }).click();
+    await expect(w.getByRole('heading', { name: 'Not about me' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Paused for now' })).toBeVisible();
+    await expect(w.getByText('What is bedtime like in your house?')).toBeVisible();
+    await expect(w.getByText(/lifts in about \d+ months/).first()).toBeVisible();
+    // Lifting a BOUNDARY asks first — the tap opens a confirm rather than acting.
+    await w
+      .getByRole('button', { name: 'Start asking again: How have you been sleeping since March?' })
+      .click();
+    await expect(w.getByText('Ask about this again?')).toBeVisible();
+    await w.getByRole('button', { name: 'Keep it paused' }).click();
+    // …and a "doesn't apply" lifts on one tap, through the real IPC → core → vault path.
+    await w
+      .getByRole('button', { name: 'This does apply: What is bedtime like in your house?' })
+      .click();
+    await expect(w.getByText('What is bedtime like in your house?')).toHaveCount(0);
+
+    // ~360px: the panel fills width with no horizontal scrollbar / inner scroller (CLAUDE.md §12). Checked
+    // ON the Left-alone section, whose rows carry the longest text + two controls — the worst case.
     await w.setViewportSize({ width: 360, height: 800 });
     await expectNoInnerOverflow(w);
     const mainOverflow = await w.evaluate(() => {
@@ -3436,6 +3469,10 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     candidates?: { id: string; curation?: string }[];
     relational?: { partnerWishes?: { note?: string }[] };
   } | null;
+  // The lifted mark is gone from the ledger — the undo went all the way to the vault (08 §34.5), while the
+  // boundary they backed out of is untouched.
+  expect(profile?.feedback?.some((f) => f.kind === 'not-applicable')).toBe(false);
+  expect(profile?.feedback?.some((f) => f.kind === 'prefer-not-to-say')).toBe(true);
   // The partner wish persisted to the OWNER's own profile (spec 70 §3.5).
   expect(
     profile?.relational?.partnerWishes?.some((w) => w.note === 'plan a proper holiday together'),

@@ -337,12 +337,92 @@ describe('ExploredPanel (spec 70 §3)', () => {
     );
     await userEvent.click(await screen.findByRole('button', { name: /Left alone/ }));
 
+    // Two groups, and every mark is in one of them. This list is the authoritative inventory of what SelfOS
+    // steers clear of (08 §34.5), so the pause appears here TOO — it also reads "paused" on its area row, and
+    // that duplication is honest. What must never happen is a live mark with no row at all.
+    expect(screen.getByRole('heading', { name: 'Not about me' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Paused for now' })).toBeInTheDocument();
     expect(screen.getByText('Rent?')).toBeInTheDocument();
-    expect(screen.getByText('Doesn’t apply')).toBeInTheDocument();
     expect(screen.getByText('Debt?')).toBeInTheDocument();
-    expect(screen.getByText('Prefer not to say')).toBeInTheDocument();
-    // …and the pause is NOT duplicated here — the area row above already says it.
-    expect(screen.queryByText('Paused')).toBeNull();
+    expect(screen.getByText('Money')).toBeInTheDocument();
+  });
+
+  it('every mark is reversible, and a BOUNDARY asks first (08 §34.5)', async () => {
+    // Behave like a real lift: the mark that was lifted goes, the other stays — otherwise the second row
+    // vanishes with the first and the boundary half of this test never runs.
+    const boundary = {
+      topicId: 'Health',
+      label: 'Sleep?',
+      kind: 'prefer-not-to-say' as const,
+      at: 'now',
+    };
+    const lift = vi
+      .fn<SelfosBridge['questionnairesLiftSuppression']>()
+      .mockResolvedValue(view({ markedOff: [boundary] }));
+    installMockBridge({ questionnairesLiftSuppression: lift });
+    useCoverageStore.setState({
+      view: view({
+        markedOff: [
+          { topicId: 'Money', label: 'Rent?', kind: 'not-applicable', at: 'now' },
+          boundary,
+        ],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /Left alone/ }));
+
+    // "Doesn't apply" lifts on one tap, and its label says what lifting DOES — correcting something the app
+    // believes about you is not the same act as ending a pause, so it does not borrow the same words (§12).
+    await userEvent.click(screen.getByRole('button', { name: 'This does apply: Rent?' }));
+    expect(lift).toHaveBeenCalledWith({ kind: 'not-applicable', label: 'Rent?', topicId: 'Money' });
+
+    // A boundary asks first: the tap opens a confirm and sends nothing. Lifting one means SelfOS starts
+    // asking about something they marked "prefer not to say", so a mis-tap would put a sensitive question in
+    // their Inbox.
+    lift.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Start asking again: Sleep?' }));
+    expect(lift).not.toHaveBeenCalled();
+    expect(screen.getByText('Ask about this again?')).toBeInTheDocument();
+
+    // Backing out sends nothing either.
+    await userEvent.click(screen.getByRole('button', { name: 'Keep it paused' }));
+    expect(lift).not.toHaveBeenCalled();
+
+    // Confirming does.
+    await userEvent.click(screen.getByRole('button', { name: 'Start asking again: Sleep?' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, ask me' }));
+    expect(lift).toHaveBeenCalledWith({
+      kind: 'prefer-not-to-say',
+      label: 'Sleep?',
+      topicId: 'Health',
+    });
+  });
+
+  it('says when each mark lifts on its own, so none of it reads as permanent (08 §34.5)', async () => {
+    const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const later = new Date(Date.now() + 300 * 24 * 60 * 60 * 1000).toISOString();
+    useCoverageStore.setState({
+      view: view({
+        markedOff: [
+          { topicId: 'Money', label: 'Rent?', kind: 'not-applicable', at: 'now', lapsesAt: later },
+          { topicId: 'Work', label: 'Work', kind: 'left-alone', at: 'now', lapsesAt: soon },
+        ],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /Left alone/ }));
+    expect(screen.getByText('lifts in 3 days')).toBeInTheDocument();
+    expect(screen.getByText('lifts in about 10 months')).toBeInTheDocument();
   });
 
   it('the area toggle reads off the panel’s OWN pause, not any decline (08 §34 / 2b)', async () => {

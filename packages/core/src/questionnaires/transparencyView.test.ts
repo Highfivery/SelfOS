@@ -164,6 +164,48 @@ describe('readCoverageView / steerTopic (round-trip)', () => {
     expect(view.markedOff.some((m) => m.topicId === 'Health')).toBe(false);
     expect(view.areas.find((a) => a.lifeArea === 'Health')?.steered).toBe(true);
   });
+
+  it('reports each mark by its TRUE kind, with the date it lapses (08 §34 / 2b)', () => {
+    const nowD = new Date('2026-06-01T00:00:00.000Z');
+    const ago = (days: number): string =>
+      new Date(nowD.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const profile = {
+      ...emptyProfile('p1'),
+      feedback: [
+        { topicId: 'money', questionPrompt: 'Rent?', kind: 'not-applicable' as const, at: ago(10) },
+        {
+          topicId: 'health',
+          questionPrompt: 'Sleep?',
+          kind: 'prefer-not-to-say' as const,
+          at: ago(10),
+        },
+        { topicId: 'work', questionPrompt: 'Work', kind: 'left-alone' as const, at: ago(10) },
+        // Lapsed on its own clock — a year and a bit of "doesn't apply" is no longer a fact about them.
+        { topicId: 'old', questionPrompt: 'Kids?', kind: 'not-applicable' as const, at: ago(400) },
+      ],
+    };
+    const view = projectCoverageView([], profile, nowD);
+
+    // The kinds are no longer collapsed. `left-alone` used to be reported as `not-applicable`, which made the
+    // area card render a "Start asking again" for a decline its toggle deliberately does not clear.
+    const byLabel = new Map(view.markedOff.map((m) => [m.label, m]));
+    expect(byLabel.get('Rent?')?.kind).toBe('not-applicable');
+    expect(byLabel.get('Sleep?')?.kind).toBe('prefer-not-to-say');
+    expect(byLabel.get('Work')?.kind).toBe('left-alone');
+    // The lapsed one is simply gone — from here AND from the generator's avoid list, by the same predicate.
+    expect(byLabel.has('Kids?')).toBe(false);
+
+    // Each carries when it lapses, so no surface has to imply a pause is permanent. 90 / 180 / 365 days on.
+    const lapseDays = (label: string): number =>
+      Math.round(
+        (new Date(byLabel.get(label)!.lapsesAt!).getTime() -
+          new Date(byLabel.get(label)!.at).getTime()) /
+          (24 * 60 * 60 * 1000),
+      );
+    expect(lapseDays('Work')).toBe(90);
+    expect(lapseDays('Sleep?')).toBe(180);
+    expect(lapseDays('Rent?')).toBe(365);
+  });
 });
 
 const candidate = (

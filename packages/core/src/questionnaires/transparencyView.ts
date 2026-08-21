@@ -6,7 +6,6 @@ import { deriveTopicStats, readLedger, type AskLedger } from './askLedger';
 import { deriveCoverageSkeleton } from './coverageModel';
 import {
   ensureTopics,
-  LEAVE_ALONE_COOLDOWN_DAYS,
   SATURATION_ASKS,
   topicStatuses,
   type Topic,
@@ -19,7 +18,9 @@ import {
   applySteer,
   FEED_CANDIDATE_CAP,
   isActiveCandidate,
+  isSuppressionLive,
   readProfile,
+  suppressionLapsesAt,
   removePartnerWish,
   writeProfile,
   type CandidateCuration,
@@ -88,8 +89,17 @@ export interface MarkedOffView {
   /** Present ⇒ the mark is reversible via an "explore it again" steer. */
   topicId?: string;
   label: string;
-  kind: 'not-applicable' | 'prefer-not-to-say';
+  /**
+   * The TRUE kind, no longer collapsed. `left-alone` used to be reported as `not-applicable`, which was
+   * harmless while the two could not be told apart anywhere it mattered and became wrong the moment declines
+   * carried a `topicId`: the area card derives its toggle label from this, so a real "doesn't apply" decline
+   * started rendering a "Start asking again" that — by design — does not clear it. A dead control. Each kind
+   * also lapses on its own clock, which a caller cannot state without knowing which kind it is.
+   */
+  kind: 'not-applicable' | 'prefer-not-to-say' | 'left-alone';
   at: string;
+  /** When this mark lapses on its own — so no surface has to imply it is permanent. */
+  lapsesAt?: string;
 }
 
 /** One candidate in the forward-first feed (spec 70 §3.2) — what SelfOS is curious about asking next. */
@@ -226,9 +236,9 @@ export function projectCandidateFeed(
 }
 
 const norm = (s: string | undefined): string => (s ?? '').trim().toLowerCase();
-/** How long a `prefer-not-to-say` boundary stays shown as "marked off" (mirrors the cooldown the engine uses). */
-const PREFER_NOT_COOLDOWN_DAYS = 180;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// The cooldown windows are NOT redeclared here. A local copy of "180" that merely "mirrors the cooldown the
+// engine uses" is the drift this slice exists to remove — one edit to the engine and this panel starts
+// showing a mark as lapsed while generation still avoids it. `isSuppressionLive` is the single owner.
 const MARKED_OFF_CAP = 24;
 
 /**
@@ -453,30 +463,29 @@ export function projectCoverageView(
     };
   });
 
-  const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
   const seen = new Set<string>();
   const markedOff: MarkedOffView[] = [];
-  const leftAloneCutoff = new Date(
-    now.getTime() - LEAVE_ALONE_COOLDOWN_DAYS * MS_PER_DAY,
-  ).toISOString();
   for (const f of profile.feedback) {
-    let kind: 'not-applicable' | 'prefer-not-to-say';
-    if (f.kind === 'not-applicable') kind = 'not-applicable';
-    // A topic-level "leave alone" (spec 71 §5.8) belongs in this list while it holds, and drops out of it
-    // when it lapses — it is a 90-day pause the person can change their mind about, not a standing "not me".
-    else if (f.kind === 'left-alone' && f.at >= leftAloneCutoff) kind = 'not-applicable';
-    else if (f.kind === 'prefer-not-to-say' && f.at >= cutoff) kind = 'prefer-not-to-say';
-    else continue;
+    // ONE liveness rule, shared with `buildFeedbackGuidance` — so a mark shown here as still holding is
+    // exactly a mark the generator is still steering clear of, and one that has lapsed disappears from both
+    // at the same moment. `not-applicable` now lapses too (after a year), which is why this can no longer be
+    // "the permanent one plus two cutoffs computed locally".
+    if (f.kind !== 'not-applicable' && f.kind !== 'prefer-not-to-say' && f.kind !== 'left-alone') {
+      continue;
+    }
+    if (!isSuppressionLive(f, now)) continue;
     const label = (f.questionPrompt ?? f.topicId ?? '').trim();
     if (!label) continue;
-    const dedupKey = `${kind}|${norm(label)}`;
+    const dedupKey = `${f.kind}|${norm(label)}`;
     if (seen.has(dedupKey)) continue;
     seen.add(dedupKey);
+    const lapsesAt = suppressionLapsesAt(f);
     markedOff.push({
       ...(f.topicId ? { topicId: f.topicId } : {}),
       label,
-      kind,
+      kind: f.kind,
       at: f.at,
+      ...(lapsesAt ? { lapsesAt } : {}),
     });
     if (markedOff.length >= MARKED_OFF_CAP) break;
   }

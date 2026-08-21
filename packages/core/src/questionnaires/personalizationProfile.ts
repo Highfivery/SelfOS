@@ -59,6 +59,49 @@ export const SKIPPED_CANDIDATE_CAP = 24;
  */
 export const PREFER_NOT_COOLDOWN_DAYS = 180;
 
+/**
+ * "Doesn't apply to me" lapses after a year (owner, 2026-08-20). It reads as a standing fact — and it is,
+ * for a while — but lives change: someone marks the questions about a partner not-applicable, and two years
+ * later that is simply wrong, with nothing in the app ever asking again to find out. A year is long enough
+ * that it never feels like nagging and short enough that the app is not permanently wrong about them.
+ */
+export const NOT_APPLICABLE_EXPIRY_DAYS = 365;
+
+/**
+ * Whether a suppression entry still holds — the ONE definition of "is this mark live", shared by the reader
+ * that steers generation (`buildFeedbackGuidance`) and the reader that renders it to the person
+ * (`buildTransparencyView`). Keeping the arithmetic in one place is the point: two copies of "365 days" drift,
+ * and the failure is invisible and horrible — the panel says a mark has lapsed while generation is still
+ * avoiding the topic, or the panel drops a row for something the model is still steering clear of. Every kind
+ * has its own clock, and only these three suppress anything.
+ */
+export function isSuppressionLive(entry: Pick<FeedbackEntry, 'kind' | 'at'>, now: Date): boolean {
+  const days =
+    entry.kind === 'not-applicable'
+      ? NOT_APPLICABLE_EXPIRY_DAYS
+      : entry.kind === 'prefer-not-to-say'
+        ? PREFER_NOT_COOLDOWN_DAYS
+        : entry.kind === 'left-alone'
+          ? LEAVE_ALONE_COOLDOWN_DAYS
+          : undefined;
+  if (days === undefined) return false;
+  return entry.at >= new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/** When a live suppression lapses — the date the surfaces show so a pause never reads as permanent. */
+export function suppressionLapsesAt(entry: Pick<FeedbackEntry, 'kind' | 'at'>): string | undefined {
+  const days =
+    entry.kind === 'not-applicable'
+      ? NOT_APPLICABLE_EXPIRY_DAYS
+      : entry.kind === 'prefer-not-to-say'
+        ? PREFER_NOT_COOLDOWN_DAYS
+        : entry.kind === 'left-alone'
+          ? LEAVE_ALONE_COOLDOWN_DAYS
+          : undefined;
+  if (days === undefined) return undefined;
+  return new Date(new Date(entry.at).getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 const ReopenSignalSchema = z.enum(['new-material', 'profile-edit', 'explicit-request', 'dormant']);
 
 const CoverageTopicSchema = z.object({
@@ -88,9 +131,9 @@ export const FeedbackKindSchema = z.enum([
   'unclear',
   'not-applicable',
   // A TOPIC-level "leave alone" from the Explored panel (spec 71 §5.8). Deliberately distinct from
-  // `not-applicable`: that is a per-question "this isn't about me", which stays true indefinitely, whereas
-  // leaving a topic alone is a "not right now" the person can change their mind about. Bounded to
-  // `LEAVE_ALONE_COOLDOWN_DAYS`, then it simply lapses.
+  // `not-applicable`: that is a per-question "this isn't about me", a standing fact about them, whereas
+  // leaving a topic alone is a "not right now" the person can change their mind about. Both lapse, on their
+  // own clocks (`LEAVE_ALONE_COOLDOWN_DAYS` vs `NOT_APPLICABLE_EXPIRY_DAYS`) — see `isSuppressionLive`.
   'left-alone',
   'prefer-not-to-say',
   'skipped',
@@ -699,16 +742,15 @@ export function applySteer(
       void _reopenedBy;
       return rest;
     });
+  // Lift ONLY the pause this panel itself set (owner, 2026-08-20). The other two suppressing kinds are
+  // declines the person made while ANSWERING — "doesn't apply to me", and a "prefer not to say" boundary —
+  // and a tap on a topic toggle must not silently revoke either. That mattered the moment declines started
+  // carrying a `topicId`: before, they had none, so this filter never matched them and the panel could not
+  // reach them anyway. Keeping it to `left-alone` preserves exactly that, rather than quietly widening a
+  // control's blast radius to include a boundary set somewhere else entirely. Undoing a decline is its own
+  // deliberate act, in the list where the decline is shown.
   const dropSuppression = (feedback: readonly FeedbackEntry[]): FeedbackEntry[] =>
-    feedback.filter(
-      (f) =>
-        !(
-          (f.kind === 'not-applicable' ||
-            f.kind === 'prefer-not-to-say' ||
-            f.kind === 'left-alone') &&
-          norm(f.topicId) === norm(topicId)
-        ),
-    );
+    feedback.filter((f) => !(f.kind === 'left-alone' && norm(f.topicId) === norm(topicId)));
 
   if (input.action === 'clear') {
     const hadReopen = profile.coverage.topics.some(
@@ -789,73 +831,121 @@ const CHANGE_FRESH_DAYS = 45;
 /** How long a recent abandonment ("bailed") keeps steering toward shorter/simpler questionnaires (§5.2). */
 const BAILED_FRESH_DAYS = 45;
 
-function uniqLabels(labels: readonly string[]): string[] {
+/**
+ * A guidance line: `label` is the identity (what the topic IS, used for de-dup and for the productive-vein
+ * suppression check) and `display` is what the prompt renders. They differ only when the person's own words
+ * about a skip are attached — which must never leak into the identity, or a decorated line stops matching the
+ * avoid list it is supposed to be suppressed by.
+ */
+interface Labelled {
+  label: string;
+  display: string;
+}
+
+/** De-dup on the LABEL, keeping the first (richest) display for it, and cap like `uniqLabels`. */
+function uniqLabelled(items: readonly Labelled[]): Labelled[] {
   const seen = new Set<string>();
-  const out: string[] = [];
-  for (const l of labels) {
-    const t = l.trim();
+  const out: Labelled[] = [];
+  for (const it of items) {
+    const t = it.label.trim();
     if (!t) continue;
     const k = t.toLowerCase();
     if (seen.has(k)) continue;
     seen.add(k);
-    out.push(t);
+    out.push(it);
   }
   return out.slice(0, GUIDANCE_LIST_CAP);
 }
 
 /**
  * Turn the feedback ledger into a prompt block that steers generation (spec 69 §5.9), differentiated by reason:
- * - `not-applicable`    → a hard avoid list (don't ask this or closely related things).
- * - `prefer-not-to-say` → a boundary; avoided only while within `PREFER_NOT_COOLDOWN_DAYS` (after that a fresh
- *                         re-approach is allowed, so it drops off the avoid list).
+ * - `not-applicable`    → a hard avoid list (don't ask this or closely related things), while it holds.
+ * - `prefer-not-to-say` → a boundary; avoided while it holds (after that a fresh re-approach is allowed, so it
+ *                         drops off the list).
+ * Every suppressing kind runs on its own clock via the shared `isSuppressionLive` — the same predicate the
+ * transparency panel renders from, so what the model avoids and what the person is shown cannot disagree.
  * - `unclear`           → a reword list (if you cover this ground, ask it a different, more concrete way).
  * - `answered-richly`   → a productive vein: going DEEPER (a fresh angle) here is justified (spec 69 §5.2).
  * - `bailed`            → recent abandonment → a general "keep it short + simple" note (topic-agnostic).
- * `skipped` is not steered here (a weak signal). Pure; `''` when there is nothing to say.
+ * - `skipped`           → a free-text skip: still not a suppression (a weak signal, by design), but when they
+ *                         TYPED a reason it is passed on, because that prose is the only place they ever say
+ *                         what was actually wrong with the question (owner, 2026-08-20 — the §24.5 bargain).
+ * Pure; `''` when there is nothing to say.
  */
 export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date): string {
-  const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
-  const leftAloneCutoff = new Date(
-    now.getTime() - LEAVE_ALONE_COOLDOWN_DAYS * MS_PER_DAY,
-  ).toISOString();
-  const avoid: string[] = [];
-  const boundary: string[] = [];
-  const reword: string[] = [];
-  const productive: string[] = [];
+  const avoid: Labelled[] = [];
+  const boundary: Labelled[] = [];
+  const reword: Labelled[] = [];
+  const productive: Labelled[] = [];
+  const explained: Labelled[] = [];
   for (const f of profile.feedback) {
     const label = f.questionPrompt ?? f.topicId;
     if (!label) continue;
-    if (f.kind === 'not-applicable') avoid.push(label);
-    else if (f.kind === 'left-alone') {
-      if (f.at >= leftAloneCutoff) boundary.push(label);
-    } else if (f.kind === 'prefer-not-to-say') {
-      if (f.at >= cutoff) boundary.push(label);
-    } else if (f.kind === 'unclear') reword.push(label);
-    else if (f.kind === 'answered-richly') productive.push(label);
+    // Every suppressing kind goes through the ONE liveness predicate, including `not-applicable`, which used
+    // to be forever. `isSuppressionLive` owns each kind's clock so this reader and the transparency panel
+    // cannot disagree about whether a mark still holds.
+    // Their own words, where they wrote any (owner, 2026-08-20 — the §24.5 bargain). This only ever means a
+    // FREE-TEXT skip: the three presets classify to their own kinds and their `reason` is just the preset
+    // string back again ("Doesn't apply to me"), which the section header already says — quoting it would be
+    // pure noise. Free text is the only place the person ever says what was actually wrong with a question,
+    // and until now it reached the planner nowhere at all, because `skipped` steers nothing.
+    //
+    // It stays a WEAK signal: still no suppression, still no avoid entry — only a note that they skipped this
+    // and what they said about it. The prose decorates `display` and never `label`, because `label` is a key:
+    // the productive-vein filter suppresses a vein by matching it against the avoid/boundary lists, and a
+    // decorated label silently stops matching — which would tell the model to go deeper on ground they had
+    // just marked off.
+    const reason = f.reason?.trim();
+    if (f.kind === 'not-applicable') {
+      if (isSuppressionLive(f, now)) avoid.push({ label, display: label });
+    } else if (f.kind === 'left-alone' || f.kind === 'prefer-not-to-say') {
+      if (isSuppressionLive(f, now)) boundary.push({ label, display: label });
+    } else if (f.kind === 'unclear') reword.push({ label, display: label });
+    else if (f.kind === 'answered-richly') productive.push({ label, display: label });
+    else if (f.kind === 'skipped' && reason)
+      explained.push({ label, display: `${label} — they said: "${reason}"` });
   }
   const sections: string[] = [];
-  const a = uniqLabels(avoid);
-  const b = uniqLabels(boundary);
-  const r = uniqLabels(reword);
+  const a = uniqLabelled(avoid);
+  const b = uniqLabelled(boundary);
+  const r = uniqLabelled(reword);
   // A productive vein is only a justification to go DEEPER — don't drown out the strong-new-ground bias, so
-  // avoid a topic they've explicitly marked off / bounded (it may co-occur if a prior question landed both ways).
-  const p = uniqLabels(productive.filter((l) => !a.includes(l) && !b.includes(l)));
+  // avoid a topic they've explicitly marked off / bounded (it may co-occur if a prior question landed both
+  // ways). Compared on the LABEL, which is why the reason lives on `display` alone.
+  const suppressed = new Set([...a, ...b].map((x) => x.label.trim().toLowerCase()));
+  const p = uniqLabelled(productive.filter((x) => !suppressed.has(x.label.trim().toLowerCase())));
+  // A skip they explained is only worth passing on for ground that is still in play — if they have since
+  // marked it off or bounded it, the avoid list already says everything the planner needs.
+  const e = uniqLabelled(explained.filter((x) => !suppressed.has(x.label.trim().toLowerCase())));
   if (a.length)
     sections.push(
       `They have indicated these DON'T APPLY to them — do NOT ask about these or closely related things:\n${a
-        .map((l) => `- ${l}`)
+        .map((x) => `- ${x.display}`)
         .join('\n')}`,
     );
   if (b.length)
     sections.push(
       `These touch a boundary they'd rather not discuss right now — leave them alone:\n${b
-        .map((l) => `- ${l}`)
+        .map((x) => `- ${x.display}`)
         .join('\n')}`,
     );
   if (r.length)
     sections.push(
       `These questions landed as UNCLEAR to them — if you cover this ground at all, ask it a DIFFERENT, more` +
-        ` concrete and specific way (never the same wording):\n${r.map((l) => `- ${l}`).join('\n')}`,
+        ` concrete and specific way (never the same wording):\n${r.map((x) => `- ${x.display}`).join('\n')}`,
+    );
+  // A free-text skip, with what they said about it. Deliberately NOT an avoid list — they skipped one
+  // question and told you why, which is a reason to ask better, not a reason to drop the subject.
+  //
+  // The quoted words are theirs, and the questions this produces are read by the SENDER. Use it, never repeat
+  // it: a question that hands back what someone typed while declining to answer is worse than the question
+  // they declined.
+  if (e.length)
+    sections.push(
+      `They SKIPPED these and said why. Use it to ask better — a different angle, or plainer wording. It is` +
+        ` NOT a reason to avoid the subject. Their words are quoted only so you can act on them: NEVER quote,` +
+        ` paraphrase or allude to what they said in a question, and never mention that they explained a` +
+        ` skip:\n${e.map((x) => `- ${x.display}`).join('\n')}`,
     );
   // Question-quality self-selection (spec 69 §5.2 / Phase 5): the person engaged RICHLY here — this vein is
   // productive, so going DEEPER (a fresh, more specific angle) is a justified exception to the new-ground bias.
@@ -864,7 +954,7 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
     sections.push(
       `They engaged RICHLY with these — this ground is productive, so a DEEPER, fresh angle here is welcome` +
         ` (a justified exception to the new-ground bias); never re-ask the same question:\n${p
-          .map((l) => `- ${l}`)
+          .map((x) => `- ${x.display}`)
           .join('\n')}`,
     );
   // Question-quality self-selection — the "bailed" signal (spec 69 §5.2 / Phase 5): recent abandonment means

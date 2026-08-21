@@ -68,6 +68,14 @@ async function seedVault(): Promise<{
     'config/ai-credentials.enc',
     'config/devices/A.enc',
     'config/devices/B.enc',
+    // Top-level roots OUTSIDE the old hard-coded ['people','config','questionnaires'] list. Their
+    // absence from this fixture is exactly why the orphaning bug survived: every rotation test passed
+    // while the relationship graph and every Together session were left under the destroyed old key.
+    'relationships/r1.enc',
+    'together/sessions/s1/session.enc',
+    'together/sessions/s1/messages/m1.enc',
+    'together/pairs/p1~p2/agreements.enc',
+    'story/contributions/c1.enc',
   ];
   for (const path of contentFiles) {
     await writeEncryptedJson(fs, path, { path, secret: `plain-${path}` }, oldKey);
@@ -95,6 +103,40 @@ describe('keyRotation — enumeration (32 §5.1)', () => {
     expect(found).not.toContain('config/recovery.enc');
     expect(found).not.toContain('config/invites/inv1.enc');
     expect(found).not.toContain('config/settings.json');
+  });
+
+  it('discovers content roots from the vault, not a hard-coded list (relationships/ + together/)', async () => {
+    const { fs } = await seedVault();
+    const found = await enumerateEncryptedFiles(fs);
+
+    // The regression: these roots are master-key encrypted but were never walked, so rotation
+    // re-encrypted everything else, promoted the new key and destroyed the old one — leaving the
+    // relationship graph and every Together session permanently unreadable.
+    expect(found).toContain('relationships/r1.enc');
+    expect(found).toContain('together/sessions/s1/session.enc');
+    expect(found).toContain('together/sessions/s1/messages/m1.enc');
+    expect(found).toContain('together/pairs/p1~p2/agreements.enc');
+    expect(found).toContain('story/contributions/c1.enc');
+  });
+
+  it('picks up a brand-new top-level root with no code change', async () => {
+    const { fs, oldKey } = await seedVault();
+    // Stands in for the next feature that adds a root. Discovery must cover it automatically —
+    // that is the whole point of not keeping a per-feature list.
+    await writeEncryptedJson(fs, 'somefuturefeature/thing.enc', { a: 1 }, oldKey);
+
+    expect(await enumerateEncryptedFiles(fs)).toContain('somefuturefeature/thing.enc');
+  });
+
+  it('never walks .selfos (the rotation staging dir holds this rotation’s own output)', async () => {
+    const { fs } = await seedVault();
+    await fs.writeAtomic(
+      '.selfos/rotation-staging/people/p1/profile.enc',
+      encode('{"staged":true}'),
+    );
+
+    const found = await enumerateEncryptedFiles(fs);
+    expect(found.some((p) => p.startsWith('.selfos/'))).toBe(false);
   });
 });
 

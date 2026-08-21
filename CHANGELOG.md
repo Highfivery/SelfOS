@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.58.0](https://github.com/Highfivery/SelfOS/compare/v0.57.0...v0.58.0) (2026-08-20)
+
+
+### Features
+
+* **tests:** a genuinely insightful read, and the split folded into the words ([#518](https://github.com/Highfivery/SelfOS/issues/518)) ([6b63b4c](https://github.com/Highfivery/SelfOS/commit/6b63b4c21c0a9689556bcab942f3052320a5979c))
+* **tests:** a retake asks first — keep what you marked, or start fresh ([#513](https://github.com/Highfivery/SelfOS/issues/513)) ([58cdaaf](https://github.com/Highfivery/SelfOS/commit/58cdaafc6da60508fe00ce98556aa49371313a82))
+* **tests:** adaptive tests — the Tests hub and the Dirty Talk profile (74) ([#495](https://github.com/Highfivery/SelfOS/issues/495)) ([81700aa](https://github.com/Highfivery/SelfOS/commit/81700aa45084eb5b860db79548096ba3013e468f))
+* **tests:** Dirty Talk — the purged bank, one shape across the AI steps, suppression everywhere ([#540](https://github.com/Highfivery/SelfOS/issues/540)) ([54f86d6](https://github.com/Highfivery/SelfOS/commit/54f86d60b2b9d1c4a65fda5b40a9ecc0cf44517d))
+* **tests:** per-direction name marks, directional boundaries, and a real start-over ([#510](https://github.com/Highfivery/SelfOS/issues/510)) ([1ec3f81](https://github.com/Highfivery/SelfOS/commit/1ec3f8183b03038904397b28843c8813186e05bb))
+* **tests:** pet names and role lines are asked in the direction they can land ([#536](https://github.com/Highfivery/SelfOS/issues/536)) ([bbcb577](https://github.com/Highfivery/SelfOS/commit/bbcb5779c0257fb0d00f834681bf86681a67d72b))
+* **tests:** pet names as a phase, plus a map, a step rail, and a real readiness gate ([#511](https://github.com/Highfivery/SelfOS/issues/511)) ([249b913](https://github.com/Highfivery/SelfOS/commit/249b91338e7d12574322f3cffddb915b03fa9309))
+* **tests:** redesign the deck — direction as a graphic, the line as the hero, a sticky action rail ([#503](https://github.com/Highfivery/SelfOS/issues/503)) ([4c508ba](https://github.com/Highfivery/SelfOS/commit/4c508ba2415bab8d0765e6d97d213fa1ccaa834b))
+* **tests:** register steers generation, and a rejected line can become a boundary ([#505](https://github.com/Highfivery/SelfOS/issues/505)) ([e8ee2f9](https://github.com/Highfivery/SelfOS/commit/e8ee2f99c302e1769be30d32db40013fc302ed01))
+* **tests:** the bank pass is oriented, one area at a time, with a quote per term (74 §3.6) ([#498](https://github.com/Highfivery/SelfOS/issues/498)) ([1947470](https://github.com/Highfivery/SelfOS/commit/194747028825b7bc2bfb168c3247c315bf49a509))
+* **tests:** the pet-name bank is purged, a `never` is a preference, and the register grid is redesigned ([#534](https://github.com/Highfivery/SelfOS/issues/534)) ([cba966b](https://github.com/Highfivery/SelfOS/commit/cba966bc33e2def905a0b4d5a1c2ea415a01e485))
+* **tests:** the practice sheet — two taps before the deck opens ([#508](https://github.com/Highfivery/SelfOS/issues/508)) ([ba574dd](https://github.com/Highfivery/SelfOS/commit/ba574ddc08c904d4f465ab3bce1157bbded65573))
+* **tests:** the profile reaches the whole app, by one rule instead of a dozen ([#520](https://github.com/Highfivery/SelfOS/issues/520)) ([79cbf98](https://github.com/Highfivery/SelfOS/commit/79cbf98e659cce542211582c3d546f8cb3d4438a))
+* **tests:** the report redesigned, and an AI read worth reading ([#519](https://github.com/Highfivery/SelfOS/issues/519)) ([848470c](https://github.com/Highfivery/SelfOS/commit/848470c0dd366559c82345ed727cf3c60686436b))
+* **tests:** the Tests landing is one grid with state on every card, a rotating next, and a count ([#530](https://github.com/Highfivery/SelfOS/issues/530)) ([623726b](https://github.com/Highfivery/SelfOS/commit/623726bd1507d903478d1022e06d1b45530cd26b))
+
+
+### Bug Fixes
+
+* **books:** a fictionalized book was told to invent, then told not to ([#493](https://github.com/Highfivery/SelfOS/issues/493)) ([09155cd](https://github.com/Highfivery/SelfOS/commit/09155cdf4b160c04300dcd5807452d28b61bb64a))
+* **email:** an emailed question carries answers written for it, not one fixed set ([#523](https://github.com/Highfivery/SelfOS/issues/523)) ([#525](https://github.com/Highfivery/SelfOS/issues/525)) ([f5c236b](https://github.com/Highfivery/SelfOS/commit/f5c236b38b09441cd1c258d6ed4e6d190438073b))
+* **questionnaires:** a skipped-through response is an outcome, not a dead button ([#539](https://github.com/Highfivery/SelfOS/issues/539)) ([1d2dd44](https://github.com/Highfivery/SelfOS/commit/1d2dd44763315504ff46b47484f6f19c5948fd63))
+* **questionnaires:** the cards stop squeezing, and four dead defects go with them ([#537](https://github.com/Highfivery/SelfOS/issues/537)) ([bf8b4a6](https://github.com/Highfivery/SelfOS/commit/bf8b4a60aa834477c3c0f475e1879eddf89705e5))
+* **tests:** a pet name is a boundary when it ADDRESSES them, not everywhere ([#521](https://github.com/Highfivery/SelfOS/issues/521)) ([f4ab7bf](https://github.com/Highfivery/SelfOS/commit/f4ab7bf49d40a099e644c74202eaa0567ce2b442))
+* **tests:** a skipped question is no longer stated as a definite finding ([#531](https://github.com/Highfivery/SelfOS/issues/531)) ([ed04414](https://github.com/Highfivery/SelfOS/commit/ed04414ac05f2d0a98c6a60b37ad963e3007843b))
+* **tests:** a started adaptive take stays featured — it never finishes ([#532](https://github.com/Highfivery/SelfOS/issues/532)) ([5a464d9](https://github.com/Highfivery/SelfOS/commit/5a464d91552f900fe9e3728de760b7f1fad7a972))
+* **tests:** an unanswered side is not a rated zero, and a failed AI step says why ([#514](https://github.com/Highfivery/SelfOS/issues/514)) ([1a427b7](https://github.com/Highfivery/SelfOS/commit/1a427b7037f9e733adde9430af0d98f98567a4eb))
+* **tests:** close out the adaptive-test audit — honest badges, no dropped goal, no frozen take ([#499](https://github.com/Highfivery/SelfOS/issues/499)) ([8fc6586](https://github.com/Highfivery/SelfOS/commit/8fc6586eab3b78915b9be8982fffa174a5db3b2d))
+* **tests:** delete is delete — a hard no no longer survives deleting the test ([#535](https://github.com/Highfivery/SelfOS/issues/535)) ([93d1324](https://github.com/Highfivery/SelfOS/commit/93d1324a518404cf7c1ce2df0c31a3d717386582))
+* **tests:** every tap in the bank pass saves itself (74 §3.4) ([#496](https://github.com/Highfivery/SelfOS/issues/496)) ([d315567](https://github.com/Highfivery/SelfOS/commit/d315567d283718b8e3bcb3b07bc4358222bf5a7d))
+* **tests:** four defects only the live model could show ([#526](https://github.com/Highfivery/SelfOS/issues/526)) ([e1ab159](https://github.com/Highfivery/SelfOS/commit/e1ab159a38917b061fdc3ef770a516a6a34e8456))
+* **tests:** leaving a step saves it, so the next one can see what you just marked ([#515](https://github.com/Highfivery/SelfOS/issues/515)) ([245c587](https://github.com/Highfivery/SelfOS/commit/245c58736b5b0cb14dd1b3ef4d1e2f3810c2c235))
+* **tests:** name the analysis, and make a failed phase say WHICH failure it was ([#522](https://github.com/Highfivery/SelfOS/issues/522)) ([8294ac8](https://github.com/Highfivery/SelfOS/commit/8294ac8da4504d0f1aab89db35393709079bcb6a))
+* **tests:** one head for both adaptive screens, and the row's hierarchy says what you're rating ([#506](https://github.com/Highfivery/SelfOS/issues/506)) ([4ce68a3](https://github.com/Highfivery/SelfOS/commit/4ce68a36460f1841236fc72b261656006ed5525d))
+* **tests:** one scrollbar, a real invitation screen, and the deck says you're marking the word ([#504](https://github.com/Highfivery/SelfOS/issues/504)) ([9760862](https://github.com/Highfivery/SelfOS/commit/97608625973d010720a38d57691605b7837fa6a2))
+* **tests:** second adaptive-test audit — crisis footer on every phase, the middle mark stops being write-only ([#500](https://github.com/Highfivery/SelfOS/issues/500)) ([4924ce1](https://github.com/Highfivery/SelfOS/commit/4924ce13739fbc23ec3d9b207306bccfb2387e0d))
+* **tests:** the audit now asks whether there is anything to DO on a screen ([#517](https://github.com/Highfivery/SelfOS/issues/517)) ([cfca245](https://github.com/Highfivery/SelfOS/commit/cfca2455f97e93babe2cb125b4d1e84710712824))
+* **tests:** the deck rail actually follows, and becomes a bar on a phone ([#509](https://github.com/Highfivery/SelfOS/issues/509)) ([dbf071f](https://github.com/Highfivery/SelfOS/commit/dbf071f68be83d64c173a984a22c08bd346c83ba))
+* **tests:** the deck says which direction you're rating, and the body axis stops failing open ([#502](https://github.com/Highfivery/SelfOS/issues/502)) ([f9b1773](https://github.com/Highfivery/SelfOS/commit/f9b17733b30275a36e68e38efe548ef253a782b3))
+* **tests:** the fold's arrow sits on the heading's line, not above it ([#528](https://github.com/Highfivery/SelfOS/issues/528)) ([6e1b8d5](https://github.com/Highfivery/SelfOS/commit/6e1b8d56833aa41a1c763243f91e6c699ee2ead3))
+* **tests:** the moments get navigation, the questions get short, and six answers stop becoming one ([#527](https://github.com/Highfivery/SelfOS/issues/527)) ([cfd4d5f](https://github.com/Highfivery/SelfOS/commit/cfd4d5fbbc448108edeb96f51747fd2cca2a9f67))
+* **tests:** the phone rail wraps instead of spilling, and the deck keeps its bar ([#516](https://github.com/Highfivery/SelfOS/issues/516)) ([232c9d0](https://github.com/Highfivery/SelfOS/commit/232c9d093ad02c05be5407cab0bb93ef45675404))
+* **tests:** the two scrollbars — 21 absolutely-positioned sr-only spans were extending the document ([#507](https://github.com/Highfivery/SelfOS/issues/507)) ([fd8210d](https://github.com/Highfivery/SelfOS/commit/fd8210d15029c6a2c7d4441c67292cbc7b8b58a6))
+* **tests:** third adaptive-test audit — unfiltered model prose, discarded profile data, and 36 screens of repeated chrome ([#501](https://github.com/Highfivery/SelfOS/issues/501)) ([15bc7c3](https://github.com/Highfivery/SelfOS/commit/15bc7c3f95ffa955fd5ca71de86bd766200b58e8))
+* **tests:** who you two are is step 1, the profile keeps your last marks, and no raw ids ([#512](https://github.com/Highfivery/SelfOS/issues/512)) ([3964453](https://github.com/Highfivery/SelfOS/commit/3964453460f158e1fbc2031487d250ef97958a00))
+
 ## [0.57.0](https://github.com/Highfivery/SelfOS/compare/v0.56.0...v0.57.0) (2026-08-16)
 
 

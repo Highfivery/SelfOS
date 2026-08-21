@@ -57,4 +57,27 @@ describe('settingsStore', () => {
     expect(useSettingsStore.getState().values['general.flag']).toBe(false);
     expect(setSetting).not.toHaveBeenCalled();
   });
+
+  // The bridge is the trust boundary and REFUSES a write the caller isn't permitted to make (30 §5).
+  // Every caller invokes `set` as `void set(...)`, so before this the rejection was unhandled AND the
+  // control kept showing a value that was never stored, silently reverting on the next load.
+  it('rolls the optimistic value back when the bridge refuses the write', async () => {
+    const setSetting = vi.fn(() => Promise.reject(new Error('Not permitted')));
+    installMockBridge({ setSetting });
+
+    await useSettingsStore.getState().set('general.flag', true);
+
+    expect(setSetting).toHaveBeenCalled();
+    expect(useSettingsStore.getState().values['general.flag']).toBe(false);
+  });
+
+  it('rolls a refused reset back too', async () => {
+    installMockBridge({ setSetting: vi.fn(() => Promise.resolve()) });
+    await useSettingsStore.getState().set('general.flag', true);
+
+    installMockBridge({ resetSetting: vi.fn(() => Promise.reject(new Error('Not permitted'))) });
+    await useSettingsStore.getState().reset('general.flag');
+
+    expect(useSettingsStore.getState().values['general.flag']).toBe(true);
+  });
 });

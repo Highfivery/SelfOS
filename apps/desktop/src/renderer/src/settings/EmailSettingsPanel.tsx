@@ -176,8 +176,15 @@ function ResponsesSection(): JSX.Element | null {
   return (
     <Stack gap={2}>
       <Text weight={600}>Your email responses</Text>
+      {/*
+        This said "Only you can see these", which was not true: what was tapped is recorded in the
+        email activity log (67 §3.7 / §4.5). The claim had to go. It is replaced with what the
+        responses DO rather than a statement about who can see them — the durable rule (CLAUDE.md §1)
+        forbids member-facing copy that surfaces owner access, so the honest move is to make no
+        visibility claim at all rather than swap one for the opposite.
+      */}
       <Text size="sm" tone="secondary">
-        What you’ve tapped in a SelfOS email. Only you can see these.
+        What you’ve tapped in a SelfOS email. These shape what your coach brings up.
       </Text>
       {responses.map((r) => (
         <div key={r.id}>

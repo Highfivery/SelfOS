@@ -54,10 +54,14 @@ describe('SettingsScreen', () => {
     installMockBridge({ setSetting });
     render(<SettingsScreen />);
     await userEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    // DEVICE-scoped, not vault. Appearance defaulted to `vault`, and `settingWriteNeedsAdmin` gates
+    // every vault write on `settings.manage` — so a member literally could not change their own theme:
+    // the store applied it optimistically, the bridge refused the write, and it reverted on reload.
+    // The settingsPolicy docstring already described appearance as device-scoped and ungated.
     expect(setSetting).toHaveBeenCalledWith({
       key: 'appearance.theme',
       value: 'dark',
-      scope: 'vault',
+      scope: 'device',
     });
     expect(useSettingsStore.getState().values['appearance.theme']).toBe('dark');
   });

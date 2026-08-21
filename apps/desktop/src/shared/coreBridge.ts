@@ -482,6 +482,23 @@ import type {
 } from '@selfos/core/schemas';
 // A value, not a type — the readiness numbers are shared with the renderer so the two cannot drift.
 import { generationReadiness } from '@selfos/core/schemas';
+// Notes (76) — the input schemas are values; the rest are view types.
+import {
+  NoteDraftInputSchema,
+  NoteSendInputSchema,
+  type NoteDraftResult,
+  type NoteRecipient,
+  type NoteRow,
+  type NoteSendResult,
+} from '@selfos/core/schemas';
+import {
+  createNote,
+  deleteNote,
+  draftNote,
+  listNotesByAuthor,
+  markNoteEmailed,
+} from '@selfos/core/notes';
+import { buildNoteEmail, sendNoteEmail } from '@selfos/core/email';
 import {
   backfillPartnerSharing,
   deleteInsight,
@@ -6642,6 +6659,135 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Own-data only — an explicit-confirm inventory bump on the ACTIVE person's own intake (67 §3.6).
       return applyIntimacyInventoryOffer(ctx.fs, ctx.key, personId, actKey, new Date());
     },
+    // ── Notes (76) ────────────────────────────────────────────────────────────────────────────────
+    // Owner-only, `notes.manage`-gated in the bridge (the trust boundary, never the renderer). Every
+    // handler resolves the ACTIVE person as the author, so an id in the payload can never write a note
+    // as someone else.
+
+    notesRecipients: async (): Promise<NoteRecipient[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return [];
+      const me = await activePersonId();
+      const people = await listPeople(ctx.fs, ctx.key);
+      // A projection, never a full `Person` — the recipient step needs a name and an address, nothing
+      // more, and this read is the one the picker uses.
+      return people
+        .filter((p) => p.isSubject && p.id !== me)
+        .map((p) => ({
+          personId: p.id,
+          displayName: p.displayName,
+          ...(p.email ? { email: p.email } : {}),
+          reachableByEmail: Boolean(p.email?.trim()),
+        }));
+    },
+
+    notesDraft: async (input): Promise<NoteDraftResult> => {
+      const deps = await aiDeps('notes.manage');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      return draftNote(deps, NoteDraftInputSchema.parse(input));
+    },
+
+    notesSend: async (input): Promise<NoteSendResult> => {
+      const ctx = await host.vaultAndKey();
+      const author = ctx ? await activePersonId() : null;
+      if (!ctx || !author || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) {
+        return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      }
+      const parsed = NoteSendInputSchema.parse(input);
+      const recipient = await getPerson(ctx.fs, ctx.key, parsed.recipientPersonId);
+      if (!recipient) {
+        return { ok: false, reason: 'NO_RECIPIENT', message: 'That person is no longer here.' };
+      }
+
+      const now = new Date();
+      // The record FIRST, unconditionally (76 §5.3). Everything below is reach, and reach may fail.
+      const note = await createNote(ctx.fs, ctx.key, author, parsed, now);
+
+      const address = recipient.email?.trim();
+      if (!address) return { ok: true, noteId: note.id, emailed: false };
+
+      const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+      const composed = buildNoteEmail({
+        recipientName: recipient.displayName,
+        subject: note.subject,
+        body: note.body,
+      });
+      const sent = await sendNoteEmail({
+        fs: ctx.fs,
+        key: ctx.key,
+        email: host.email,
+        resendKey: resolved.key,
+        senderPersonId: author,
+        recipientPersonId: note.recipientPersonId,
+        toAddress: address,
+        composed,
+        sourceKey: `note:${note.id}`,
+        now,
+      });
+
+      if (!sent.ok) {
+        // The note still landed in their Inbox. Report the reach failure without losing it — and
+        // without naming a reason that could disclose something about the recipient (76 §8.3).
+        return { ok: true, noteId: note.id, emailed: false, emailFailure: sent.reason };
+      }
+      await markNoteEmailed(ctx.fs, ctx.key, author, note.id, sent.entryId, now);
+      return { ok: true, noteId: note.id, emailed: true };
+    },
+
+    notesList: async (): Promise<NoteRow[]> => {
+      const ctx = await host.vaultAndKey();
+      const author = ctx ? await activePersonId() : null;
+      if (!ctx || !author || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return [];
+
+      const notes = await listNotesByAuthor(ctx.fs, ctx.key, author);
+      const people = await listPeople(ctx.fs, ctx.key);
+      const nameById = new Map(people.map((p) => [p.id, p.displayName]));
+      // The delivery state lives on the AUTHOR's activity shard (76 §5.3), which is exactly why it is
+      // readable here at all — and why the status poll keeps it fresh.
+      const activity = await listEmailActivity(ctx.fs, ctx.key, author, { family: 'note' });
+      const byEntry = new Map(activity.map((e) => [e.id, e]));
+
+      return notes.map((note) => {
+        const entry = note.emailEntryId ? byEntry.get(note.emailEntryId) : undefined;
+        return {
+          note,
+          recipientName: nameById.get(note.recipientPersonId) ?? 'Someone',
+          ...(entry
+            ? {
+                delivery: {
+                  status: entry.status,
+                  ...(entry.deliveredAt ? { deliveredAt: entry.deliveredAt } : {}),
+                  ...(entry.openedAt ? { openedAt: entry.openedAt } : {}),
+                  ...(entry.clickedAt ? { clickedAt: entry.clickedAt } : {}),
+                },
+              }
+            : {}),
+        };
+      });
+    },
+
+    notesDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      const author = ctx ? await activePersonId() : null;
+      if (!ctx || !author || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return;
+      const { noteId } = z.object({ noteId: z.string().min(1) }).parse(input);
+      // Scoped to the ACTIVE person's own folder, so an id alone can never reach another author's note.
+      await deleteNote(ctx.fs, author, noteId);
+    },
+
+    peopleSetEmail: async (input): Promise<Person | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'notes.manage'))) return null;
+      const { personId, email } = z
+        .object({ personId: z.string().min(1), email: z.string().max(320) })
+        .parse(input);
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      if (!person) return null;
+      // `Person.email` is a contact address, deliberately excluded from `buildContext` — operational
+      // data, not coaching data. That stays true here.
+      return upsertPerson(ctx.fs, ctx.key, { ...person, email: email.trim() });
+    },
+
     emailActivity: async (input): Promise<EmailActivityEntry[]> => {
       const ctx = await host.vaultAndKey();
       const activeId = ctx ? await activePersonId() : null;

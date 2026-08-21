@@ -1,4 +1,5 @@
-import { getPerson } from '../people/peopleService';
+import { getPerson, listPeople } from '../people/peopleService';
+import { listNotesForRecipient } from '../notes/noteStore';
 import { listMyInvitations } from '../books/contributions';
 import { listSharedBooks } from '../books/storyPublish';
 import { deriveStatusFor, listSessionsForPerson, listStates } from '../together/togetherService';
@@ -124,8 +125,43 @@ const sharedBooks: InboxProvider = {
   },
 };
 
+/**
+ * A note written for this person (76 §3.6).
+ *
+ * The note lives in the AUTHOR's folder, so this scans the household for notes addressed here — the same
+ * shape as a contribution invitation, and legitimate for the same reason: the thing offered is not the
+ * recipient's to hold.
+ *
+ * **No sender.** `fromName` is deliberately left unset. A note is unattributed on both surfaces — it
+ * reads as something the app noticed — and setting it here would contradict the email, which carries no
+ * signature. The queue names the thing, not who sent it.
+ *
+ * `waiting` is true only while the note carries something to answer. An announcement has nothing to tap,
+ * so it is listed but never counted — the badge means "something needs you", which an announcement does
+ * not.
+ */
+const notes: InboxProvider = {
+  kind: 'note',
+  list: async ({ fs, key, personId }) => {
+    const authorIds = (await listPeople(fs, key)).map((p) => p.id);
+    const mine = await listNotesForRecipient(fs, key, personId, authorIds);
+    return mine.map((note) => ({
+      id: `note:${note.id}`,
+      kind: 'note' as const,
+      title: note.subject,
+      // The first line only — enough to recognise it, never the whole body (announce, never preview).
+      detail: note.body.split(/\n/)[0]?.slice(0, 120) ?? '',
+      at: note.createdAt,
+      openPath: `/inbox/note/${note.authorPersonId}/${note.id}`,
+      dismissible: true,
+      waiting: note.answers.length > 0,
+    }));
+  },
+};
+
 export function registerBuiltInInboxProviders(): void {
   registerInboxProvider(togetherInvitations);
   registerInboxProvider(contributionInvitations);
   registerInboxProvider(sharedBooks);
+  registerInboxProvider(notes);
 }

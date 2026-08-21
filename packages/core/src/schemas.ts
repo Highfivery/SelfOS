@@ -2915,6 +2915,9 @@ export const EmailFamilySchema = z.enum([
   'ai-suggestion-intimacy',
   'milestone',
   'welcome',
+  // 76 — an owner-authored note to ONE person. Delivery-shaped like family A (the recipient's contact
+  // address, no per-family opt-in), not engagement-shaped.
+  'note',
 ]);
 export type EmailFamily = z.infer<typeof EmailFamilySchema>;
 
@@ -2977,6 +2980,13 @@ export const EmailActivityEntrySchema = z.object({
    * signature — a genuinely new event — sends again). Absent for families with no such trigger.
    */
   sourceKey: z.string().optional(),
+  /**
+   * Who the email was FOR, when that differs from the person it is logged under (76 §5.3). A note is
+   * logged under the SENDER — the family-A precedent — so that the sender's own reconcile polls it;
+   * logging it under the recipient would mean their opens never refreshed until they opened the app.
+   * Additive-optional: absent on every entry written before 76, and on every family but `note`.
+   */
+  recipientPersonId: z.string().optional(),
 });
 export type EmailActivityEntry = z.infer<typeof EmailActivityEntrySchema>;
 
@@ -3110,6 +3120,99 @@ export const EmailContentSnapshotSchema = z.object({
   text: z.string(),
 });
 export type EmailContentSnapshot = z.infer<typeof EmailContentSnapshotSchema>;
+
+/**
+ * ── Notes (76) ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * An owner-authored note to ONE household member. Stored under the AUTHOR at
+ * `people/<authorId>/notes/<id>.enc`; the recipient's Inbox provider finds it by scanning for notes
+ * addressed to them — the same shape as a contribution invitation, which also lives in the author's
+ * folder because the thing offered is not the recipient's to hold.
+ *
+ * The note record is written FIRST and unconditionally. The email is the reach layer and may fail (no
+ * address, Resend not configured, a send error) — none of which may lose the note.
+ */
+export const NoteTypeSchema = z.enum(['announcement', 'question', 'suggestion']);
+export type NoteType = z.infer<typeof NoteTypeSchema>;
+
+/** One tappable answer on a note (76 §3.3). Mirrors the family-E option shape so the tap layer is reused. */
+export const NoteAnswerSchema = z.object({
+  label: z.string().min(1),
+  stance: EmailAnswerStanceSchema,
+});
+export type NoteAnswer = z.infer<typeof NoteAnswerSchema>;
+
+export const NoteSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  authorPersonId: z.string().min(1),
+  /** Exactly one. Single-recipient is expressed in the TYPE, so nothing downstream defends against a list. */
+  recipientPersonId: z.string().min(1),
+  type: NoteTypeSchema,
+  subject: z.string().min(1),
+  body: z.string().min(1),
+  /** Empty for an announcement — nothing to tap means no false click signal, and no homework framing. */
+  answers: z.array(NoteAnswerSchema).default([]),
+  /** Whether the draft came from the model or the author's own words (76 §3.3). */
+  drafted: z.enum(['ai', 'self']).default('self'),
+  createdAt: z.string().datetime(),
+  /** When the email went out. Absent ⇒ it reached the Inbox only (no address / not configured / failed). */
+  emailedAt: z.string().datetime().optional(),
+  /** The `EmailActivityEntry` this note's email was logged as, for the delivery timeline. */
+  emailEntryId: z.string().optional(),
+});
+export type Note = z.infer<typeof NoteSchema>;
+
+/** A note plus the resolved names + delivery state — the owner's Notes list (76 §3.1). A view type. */
+export interface NoteRow {
+  note: Note;
+  recipientName: string;
+  /** Absent when the note never emailed; otherwise the live delivery state from the activity log. */
+  delivery?: {
+    status: EmailDeliveryStatus;
+    deliveredAt?: string;
+    openedAt?: string;
+    clickedAt?: string;
+  };
+  /** What they tapped, once a tap has drained back (76 §3.5). */
+  answered?: string;
+}
+
+/** A person a note can be addressed to (76 §3.2) — an identity projection, never a full `Person`. */
+export interface NoteRecipient {
+  personId: string;
+  displayName: string;
+  email?: string;
+  /** False when they have no contact address: the note still lands in their Inbox, but no email goes. */
+  reachableByEmail: boolean;
+}
+
+/** The renderer-facing draft request (76 §6). */
+export const NoteDraftInputSchema = z.object({
+  recipientPersonId: z.string().min(1),
+  type: NoteTypeSchema,
+  intent: z.string().min(1).max(2000),
+});
+export type NoteDraftInput = z.infer<typeof NoteDraftInputSchema>;
+
+/** The renderer-facing send (76 §6). Exactly one recipient, by construction. */
+export const NoteSendInputSchema = z.object({
+  recipientPersonId: z.string().min(1),
+  type: NoteTypeSchema,
+  subject: z.string().min(1).max(200),
+  body: z.string().min(1).max(4000),
+  answers: z.array(NoteAnswerSchema).max(5).default([]),
+  drafted: z.enum(['ai', 'self']).default('self'),
+});
+export type NoteSendInput = z.infer<typeof NoteSendInputSchema>;
+
+export type NoteDraftResult =
+  | { ok: true; subject: string; body: string; answers: NoteAnswer[] }
+  | { ok: false; reason: AiFailureReason; message: string };
+
+export type NoteSendResult =
+  | { ok: true; noteId: string; emailed: boolean; emailFailure?: string }
+  | { ok: false; reason: 'DENIED' | 'NO_RECIPIENT'; message: string };
 
 /** The renderer-facing trigger for a send (67 §6) — Phase 0 covers the `welcome` family. */
 export const EmailSendInputSchema = z.object({

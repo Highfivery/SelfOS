@@ -346,6 +346,57 @@ export function buildMilestoneEmail(input: {
 }
 
 /** Content for an AI Coach Suggestion email (67 §3.3 family E / Phase 5). */
+export interface NoteContent {
+  recipientName?: string;
+  subject: string;
+  body: string;
+  /** Tappable answers, when the relay is provisioned and the note type carries them (76 §3.3). */
+  answers?: { label: string; url: string }[];
+}
+
+/**
+ * Family I — an owner-authored note (76 §3.6).
+ *
+ * Deliberately the plainest builder here: **no sender, no signature, no greeting**. A note carries no
+ * attribution on either surface, so it must read as SelfOS throughout — the body already speaks in the
+ * app's voice (enforced in `noteDraft`), and a "Hi <name>" opener would reintroduce the sense of a
+ * person writing. The subject leads; the body follows.
+ *
+ * Without a relay there are no tap buttons to mint, so the note closes with an "Open SelfOS" prompt
+ * rather than dead-ending — the same rule every other family follows.
+ */
+export function buildNoteEmail(content: NoteContent): ComposedEmail {
+  const answers = content.answers ?? [];
+  const openPrompt = 'Open SelfOS to see it.';
+
+  const html = shell(
+    [
+      `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(content.subject)}</h1>`,
+      ...content.body
+        .split(/\n{2,}/)
+        .filter((p) => p.trim())
+        .map((p) => `<p style="margin:0 0 14px;">${esc(p.trim())}</p>`),
+      ...answers.map((a) => ctaButton(a.url, a.label) + ' '),
+      answers.length === 0
+        ? `<p style="margin:14px 0 0;color:#6e665c;">${esc(openPrompt)}</p>`
+        : '',
+    ].join(''),
+  );
+
+  const text = [
+    content.subject,
+    '',
+    content.body,
+    ...(answers.length > 0
+      ? ['', ...answers.map((a) => `${a.label}: ${a.url}`)]
+      : ['', openPrompt]),
+    '',
+    NOT_MEDICAL,
+  ].join('\n');
+
+  return { subject: content.subject, html, text };
+}
+
 export interface SuggestionContent {
   recipientName?: string;
   headline: string;

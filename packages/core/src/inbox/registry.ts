@@ -24,7 +24,10 @@ export type InboxEntryKind =
   | 'check-in'
   | 'together-invitation'
   | 'contribution-invitation'
-  | 'shared-book';
+  | 'shared-book'
+  // 76 — a note written for this person. Carries NO sender: a note is unattributed on both surfaces,
+  // so `fromName` is deliberately left unset here as well as in the email.
+  | 'note';
 
 /** One thing waiting for the signed-in person, in any domain. */
 export interface InboxEntry {

@@ -1006,6 +1006,98 @@ describe('createCoreBridge', () => {
   // sexualOrientation, relationshipStyle, notes, birthday and the `privateFields` lock list — for EVERY
   // household person, to ANY caller. It cannot simply be gated: member-facing surfaces (the Together
   // partner picker, the Usage person filter) legitimately need names, so a non-manager gets identity only.
+  // Notes (76): owner-only, one recipient, and the record survives every reach failure.
+  it('notes: the record lands even with no address; the email logs under the SENDER when it goes', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const her = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+
+    // The picker offers her, and says plainly that she is not reachable by email yet.
+    const before = await bridge.notesRecipients();
+    expect(before.map((r) => r.displayName)).toEqual(['Angel']);
+    expect(before[0]?.reachableByEmail).toBe(false);
+    expect(before.some((r) => r.personId === ownerId)).toBe(false); // never yourself
+
+    // No address: the note STILL lands. Reach is reduced; the note is not lost.
+    expect(
+      await bridge.notesSend({
+        recipientPersonId: her.id,
+        type: 'announcement',
+        subject: 'Covers are here',
+        body: 'Your books can have covers now.',
+        answers: [],
+        drafted: 'self',
+      }),
+    ).toMatchObject({ ok: true, emailed: false });
+
+    // Give her an address, connect Resend, send again — now it emails.
+    await bridge.peopleSetEmail({ personId: her.id, email: 'angel@example.com' });
+    expect((await bridge.notesRecipients())[0]?.reachableByEmail).toBe(true);
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+
+    expect(
+      await bridge.notesSend({
+        recipientPersonId: her.id,
+        type: 'question',
+        subject: 'One thing you would want more of?',
+        body: 'No wrong answer.',
+        answers: [
+          { label: 'Time outside', stance: 'other' },
+          { label: 'Quiet evenings', stance: 'other' },
+        ],
+        drafted: 'ai',
+      }),
+    ).toMatchObject({ ok: true, emailed: true });
+
+    // The activity row is under the OWNER — which is what makes the delivery poll reach it at all —
+    // and names her rather than only an address.
+    const activity = await bridge.emailActivity({ family: 'note' });
+    expect(activity).toHaveLength(1);
+    expect(activity[0]?.personId).toBe(ownerId);
+    expect(activity[0]?.recipientPersonId).toBe(her.id);
+    expect(activity[0]?.toAddress).toBe('angel@example.com');
+
+    // The owner's own list shows both, with the delivery state resolved only for the one that emailed.
+    const rows = await bridge.notesList();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.recipientName === 'Angel')).toBe(true);
+    expect(rows.find((r) => r.note.type === 'question')?.delivery?.status).toBe('sent');
+    expect(rows.find((r) => r.note.type === 'announcement')?.delivery).toBeUndefined();
+
+    // Finally, HER queue: both notes, neither naming a sender.
+    expect((await bridge.sessionSetActive({ personId: her.id })).ok).toBe(true);
+    const queued = (await bridge.inboxList()).filter((e) => e.kind === 'note');
+    expect(queued).toHaveLength(2);
+    expect(queued.every((e) => e.fromName === undefined)).toBe(true);
+    // The badge counts what needs her: a question does, an announcement does not.
+    expect(queued.filter((e) => e.waiting)).toHaveLength(1);
+  });
+
+  it('notes: a member is denied every note channel', async () => {
+    const { bridge } = await freshOwner();
+    const her = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const member = await bridge.peopleSave({ displayName: 'Mo', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+
+    expect(await bridge.notesRecipients()).toEqual([]);
+    expect(await bridge.notesList()).toEqual([]);
+    expect(await bridge.peopleSetEmail({ personId: her.id, email: 'x@y.z' })).toBeNull();
+    expect(
+      await bridge.notesSend({
+        recipientPersonId: her.id,
+        type: 'announcement',
+        subject: 'nope',
+        body: 'nope',
+        answers: [],
+        drafted: 'self',
+      }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
+    expect(
+      await bridge.notesDraft({ recipientPersonId: her.id, type: 'announcement', intent: 'x' }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
+  });
+
   it('people: a member sees identity only; the owner still sees the full record', async () => {
     const { bridge } = await freshOwner();
     const subject = await bridge.peopleSave({

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  Bell,
   BookOpen,
   ClipboardList,
   Handshake,
@@ -24,12 +25,15 @@ const KIND_LABEL: Record<InboxEntry['kind'], string> = {
   'together-invitation': 'Invitation',
   'contribution-invitation': 'Asked you',
   'shared-book': 'To read',
+  // 76 — deliberately not "From <someone>": a note carries no sender on either surface.
+  note: 'For you',
 };
 
 function KindIcon({ kind }: { kind: InboxEntry['kind'] }): JSX.Element {
   const size = 14;
   if (kind === 'together-invitation') return <Users size={size} aria-hidden="true" />;
   if (kind === 'contribution-invitation') return <Handshake size={size} aria-hidden="true" />;
+  if (kind === 'note') return <Bell size={size} aria-hidden="true" />;
   if (kind === 'shared-book') return <BookOpen size={size} aria-hidden="true" />;
   return <ClipboardList size={size} aria-hidden="true" />;
 }

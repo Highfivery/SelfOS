@@ -428,6 +428,14 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.emailIntimacyOffers, bridge.emailIntimacyOffers);
   handle(IpcChannels.emailApplyIntimacyOffer, bridge.emailApplyIntimacyOffer);
   handle(IpcChannels.emailActivity, bridge.emailActivity);
+
+  // Notes (76) — thin delegates; every gate lives in the shared bridge.
+  handle(IpcChannels.notesRecipients, bridge.notesRecipients);
+  handle(IpcChannels.notesDraft, bridge.notesDraft);
+  handle(IpcChannels.notesSend, bridge.notesSend);
+  handle(IpcChannels.notesList, bridge.notesList);
+  handle(IpcChannels.notesDelete, bridge.notesDelete);
+  handle(IpcChannels.peopleSetEmail, bridge.peopleSetEmail);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);
   handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);

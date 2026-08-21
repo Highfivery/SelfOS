@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.0](https://github.com/Highfivery/SelfOS/compare/v0.59.0...v0.60.0) (2026-08-21)
+
+
+### Features
+
+* **together:** say something to your partner (75) ([#550](https://github.com/Highfivery/SelfOS/issues/550)) ([652ab72](https://github.com/Highfivery/SelfOS/commit/652ab72f2ec9b4a9a77d5d88f0016ca2bbeaa078))
+
 ## [0.59.0](https://github.com/Highfivery/SelfOS/compare/v0.58.1...v0.59.0) (2026-08-21)
 
 

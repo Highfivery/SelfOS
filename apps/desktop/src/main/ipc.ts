@@ -83,6 +83,7 @@ export function registerIpcHandlers(): void {
   };
   let storySender: WebContents | undefined;
   let imageSender: WebContents | undefined;
+  let sayLinesSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
   // E2E/dev: a deterministic update check (no real GitHub call). The env value is the latest version to
@@ -151,6 +152,11 @@ export function registerIpcHandlers(): void {
     emitImageProgress: (progress) => {
       if (imageSender && !imageSender.isDestroyed()) {
         imageSender.send(IpcChannels.imageProgress, progress);
+      }
+    },
+    emitSayLinesProgress: (progress) => {
+      if (sayLinesSender && !sayLinesSender.isDestroyed()) {
+        sayLinesSender.send(IpcChannels.togetherSayLinesProgress, progress);
       }
     },
     getBootState: currentBootState,
@@ -258,6 +264,7 @@ export function registerIpcHandlers(): void {
     onStreamChunk: () => () => {},
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
+    onSayLinesProgress: () => () => {},
   };
 
   const bridge = createCoreBridge(host);
@@ -641,6 +648,21 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.togetherMyAgreements, bridge.togetherMyAgreements);
   handle(IpcChannels.togetherDoneCommitments, bridge.togetherDoneCommitments);
   handle(IpcChannels.togetherSetAgreementStatus, bridge.togetherSetAgreementStatus);
+  handle(IpcChannels.togetherSayLinesState, bridge.togetherSayLinesState);
+  // togetherSayLines streams gathering→writing phases via emitSayLinesProgress → IPC event (75 §3.5), so the
+  // surface shows realtime progress. Bound for the whole generation, reset when it resolves.
+  ipcMain.handle(IpcChannels.togetherSayLines, async (event, raw: unknown) => {
+    sayLinesSender = event.sender;
+    try {
+      return await bridge.togetherSayLines(
+        raw as { partnerId: string; brief?: string; exclude?: string[] },
+      );
+    } finally {
+      sayLinesSender = undefined;
+    }
+  });
+  handle(IpcChannels.togetherStarLine, bridge.togetherStarLine);
+  handle(IpcChannels.togetherUnstarLine, bridge.togetherUnstarLine);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsSetFavorite, bridge.assignmentsSetFavorite);

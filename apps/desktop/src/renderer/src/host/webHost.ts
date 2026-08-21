@@ -1,5 +1,10 @@
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import type { BootState, StoryDraftProgress, ImageGenProgress } from '@shared/schemas';
+import type {
+  BootState,
+  StoryDraftProgress,
+  ImageGenProgress,
+  SayLinesProgress,
+} from '@shared/schemas';
 import type { StreamSurface } from '@shared/channels';
 import type {
   ClaudeClient,
@@ -108,6 +113,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   };
   const storyProgressListeners = new Set<(progress: StoryDraftProgress) => void>();
   const imageProgressListeners = new Set<(progress: ImageGenProgress) => void>();
+  const sayLinesProgressListeners = new Set<(progress: SayLinesProgress) => void>();
 
   const activeVaultId = async (): Promise<string | null> =>
     (await deviceStore.read()).vaultBookmark ?? null;
@@ -186,6 +192,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     emitImageProgress: (progress) => {
       for (const listener of imageProgressListeners) listener(progress);
     },
+    emitSayLinesProgress: (progress) => {
+      for (const listener of sayLinesProgressListeners) listener(progress);
+    },
     getBootState: bootState,
     refreshBootState: bootState,
     selectVaultFolder: parts.selectVaultFolder,
@@ -244,6 +253,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     onImageProgress: (listener) => {
       imageProgressListeners.add(listener);
       return () => imageProgressListeners.delete(listener);
+    },
+    onSayLinesProgress: (listener) => {
+      sayLinesProgressListeners.add(listener);
+      return () => sayLinesProgressListeners.delete(listener);
     },
   };
 }

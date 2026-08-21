@@ -1224,6 +1224,85 @@ export type AdaptiveProfile = z.infer<typeof AdaptiveProfileSchema>;
  * Fantasy and Sex Sessions next) and read by every explicit surface. Three results, one lexicon (74 §1.3),
  * so no test re-asks another's ground and a boundary recorded in one constrains all of them.
  */
+/**
+ * 75 §4 — a line the person chose to KEEP, and the store it lives in.
+ *
+ * In the REQUESTER's own space, keyed by pair. `lastBrief` is what they last asked for, so the box comes back
+ * filled (§11.1-10). Kept lines deliberately outlive the partner's data (§8.3).
+ */
+export const StarredLineSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+  /** What was asked for when it was written, so a kept line still has its context later. */
+  brief: z.string().optional(),
+  createdAt: z.string(),
+});
+export type StarredLine = z.infer<typeof StarredLineSchema>;
+
+export const SayLinesStoreSchema = z.object({
+  schemaVersion: z.number(),
+  pairKey: z.string().min(1),
+  lines: z.array(StarredLineSchema).catch([]),
+  lastBrief: z.string().optional(),
+});
+export type SayLinesStore = z.infer<typeof SayLinesStoreSchema>;
+
+/**
+ * What the renderer may see. Deliberately carries NO marks — only whether there is anything to draw on, the
+ * partner's display name, what was kept, and the remembered brief. 75 §6: the view never carries her marks,
+ * and "no signal" is indistinguishable from "not entitled", so an empty state leaks nothing.
+ */
+export interface SayLinesView {
+  partnerId: string;
+  partnerName: string;
+  ready: boolean;
+  kept: StarredLine[];
+  lastBrief?: string;
+}
+
+export interface SayLinesResult {
+  ok: boolean;
+  lines: string[];
+  kept: StarredLine[];
+  degraded: boolean;
+  reason?: AiFailureReason;
+  message?: string;
+  /** Admin-only; redacted in the bridge for a caller without `budgets.manage`. */
+  costUsd?: number;
+}
+
+/**
+ * 75 §3.2 — the brief is free text, and bounded. Defined HERE rather than beside the phase that trims it,
+ * because the seam's input validation and the engine's trim are the same rule: written twice they diverge,
+ * which is exactly the 74 §3.6.39 lesson this feature was built under.
+ */
+export const MAX_SAY_BRIEF = 400;
+
+/** 75 §6 — the four say-lines inputs. Validated in the bridge; the renderer is never the trust boundary. */
+export const SayLinesRefSchema = z.object({ partnerId: z.string().min(1) });
+export const SayLinesGenerateInputSchema = SayLinesRefSchema.extend({
+  brief: z.string().max(MAX_SAY_BRIEF).optional(),
+  /** The lines already on screen, so "write more" means more rather than the same five (74 §3.6.19). */
+  exclude: z.array(z.string()).max(60).optional(),
+});
+export const SayLinesStarInputSchema = SayLinesRefSchema.extend({
+  text: z.string().min(1).max(2000),
+  brief: z.string().max(MAX_SAY_BRIEF).optional(),
+});
+export const SayLinesUnstarInputSchema = SayLinesRefSchema.extend({ id: z.string().min(1) });
+
+/**
+ * 75 §3.5 — realtime progress for a generation, the durable §12 rule (a bare spinner is unacceptable).
+ *
+ * Two real phases, because there are two real waits: reading what lands for the partner, then the model
+ * writing. Mirrors `ImageGenProgress` — keyed by `id` so a surface only ever renders its own generation.
+ */
+export type SayLinesPhase = 'gathering' | 'writing' | 'done' | 'error';
+export interface SayLinesProgress {
+  id: string;
+  phase: SayLinesPhase;
+}
+
 export const EroticLexiconSchema = z.object({
   schemaVersion: z.number().int().positive(),
   personId: z.string().min(1),

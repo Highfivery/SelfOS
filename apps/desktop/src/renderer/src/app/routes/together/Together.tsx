@@ -9,6 +9,7 @@ import { togetherWaitingCount, useTogetherStore } from '../../../stores/together
 import { TogetherStartDialog, type StartPending } from './TogetherStartDialog';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
+import { SayLines } from './SayLines';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
 import { TogetherSessionsBoard } from './TogetherSessionsBoard';
@@ -376,16 +377,24 @@ export function Together(): JSX.Element {
             ) : null}
 
             {tab === 'desire' && partnerId ? (
-              <TogetherIntimacy
-                variant="panel"
-                partnerId={partnerId}
-                partnerName={partnerName}
-                adultPractices={adultPractices}
-                selectedId={selectedGuideId}
-                onPick={pickGuide}
-                status={ynmStatus}
-                onRefresh={refreshYnm}
-              />
+              <Stack gap={4}>
+                {/*
+                 * 75 — "Say something to <name>". Lives here because the Desire tab already exists only once
+                 * BOTH partners hold the 18+ ack (§3.10), which is exactly this feature's gate; the bridge
+                 * re-checks it (plus a live partner edge) on every call regardless.
+                 */}
+                <SayLines partnerId={partnerId} partnerName={partnerName} />
+                <TogetherIntimacy
+                  variant="panel"
+                  partnerId={partnerId}
+                  partnerName={partnerName}
+                  adultPractices={adultPractices}
+                  selectedId={selectedGuideId}
+                  onPick={pickGuide}
+                  status={ynmStatus}
+                  onRefresh={refreshYnm}
+                />
+              </Stack>
             ) : null}
           </section>
         </>

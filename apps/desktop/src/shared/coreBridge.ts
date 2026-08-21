@@ -187,6 +187,14 @@ import {
   TogetherGetReportInputSchema,
   TogetherSaveAgreementInputSchema,
   TogetherSetAgreementStatusInputSchema,
+  // 75 — say something to your partner.
+  SayLinesRefSchema,
+  SayLinesGenerateInputSchema,
+  SayLinesStarInputSchema,
+  SayLinesUnstarInputSchema,
+  type SayLinesView,
+  type SayLinesResult,
+  type StarredLine,
   type AgreementSummary,
   StoryCreateInputSchema,
   StoryAskGapInputSchema,
@@ -266,6 +274,7 @@ import {
   type AiFailureReason,
   type StoryDraftProgress,
   type ImageGenProgress,
+  type SayLinesProgress,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
   type StoryAnswerResult,
@@ -918,6 +927,13 @@ import {
   shownSides,
   deckFamilies,
   nameFamilies,
+  // 75 — "say something to your partner".
+  partnerLandingSignal,
+  runSayLinesPhase,
+  readSayLines,
+  starLine,
+  unstarLine,
+  rememberBrief,
   type AdaptiveTestDefinition,
   type Orientation,
 } from '@selfos/core/tests';
@@ -1002,6 +1018,8 @@ export interface BridgeHost {
   /** Deliver a single-image / vision generation phase update to the renderer (its own channel), so every
    *  image surface shows realtime progress (compose → render / analyze) instead of a bare spinner. */
   emitImageProgress(progress: ImageGenProgress): void;
+  /** 75 §3.5 — say-lines generation phases, so the surface shows realtime progress not a spinner. */
+  emitSayLinesProgress(progress: SayLinesProgress): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -1042,6 +1060,8 @@ export interface BridgeHost {
   onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
   /** Subscribe to image/vision generation phase updates; the counterpart to `emitImageProgress`. */
   onImageProgress(listener: (progress: ImageGenProgress) => void): () => void;
+  /** Subscribe to say-lines generation phases; the counterpart to `emitSayLinesProgress` (75 §3.5). */
+  onSayLinesProgress(listener: (progress: SayLinesProgress) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -1849,6 +1869,12 @@ const AI_UNAVAILABLE_FOR_PHASE = 'AI isn’t available right now — check Setti
 /** The take itself is out of reach — signed out, switched person, or the 18+ acknowledgement is gone. */
 const ADAPTIVE_UNAVAILABLE = 'This test isn’t available right now.';
 const NOT_ENOUGH_MARKED = 'There isn’t enough marked yet for this to be worth running.';
+/**
+ * 75 §5.1 — ONE sentence for every reason there is nothing to write from: a failed gate, or a partner
+ * who has marked nothing. The two must stay indistinguishable, or the empty state becomes a probe for
+ * whether a gate exists. It never blames their data, and it never names what is missing.
+ */
+const SAY_LINES_UNAVAILABLE = 'There’s nothing to write from yet.';
 
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   // The queue's non-check-in kinds (08 §35.2). Idempotent by kind, so re-creating a bridge is harmless.
@@ -1961,6 +1987,41 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       youOptedIn,
       partnerOptedIn,
       ready: eligible && youOptedIn && partnerOptedIn,
+    };
+  };
+
+  /**
+   * 75 §6 — the ONE gate every say-lines call goes through, re-derived on every call.
+   *
+   * `together.own` (via {@link togetherCtx}) + a live `partner` edge + BOTH 18+ acks. The Desire tab already
+   * hides the surface without those, but the UI gate is convenience — this is the trust boundary, so a
+   * hand-crafted IPC call is refused exactly like a hidden button would be. Removing the edge or revoking
+   * either ack drops it on the very next call, with no stale access.
+   *
+   * Null for every failure, and the callers return the SAME shape they return for "nothing marked" (§5.1):
+   * a partner who has marked nothing and a partner you are not entitled to read must look identical.
+   */
+  const sayLinesGate = async (
+    partnerId: string,
+  ): Promise<{
+    fs: FileSystem;
+    key: Uint8Array;
+    personId: string;
+    pairKey: string;
+    partnerName: string;
+  } | null> => {
+    const c = await togetherCtx();
+    if (!c || c.personId === partnerId) return null;
+    if (!(await togetherEdgeLive(c.fs, c.key, c.personId, [partnerId]))) return null;
+    if (!(await allAdultAcknowledged(c.fs, c.key, [c.personId, partnerId]))) return null;
+    const partner = await getPerson(c.fs, c.key, partnerId);
+    if (!partner) return null;
+    return {
+      fs: c.fs,
+      key: c.key,
+      personId: c.personId,
+      pairKey: pairKeyFor(c.personId, partnerId),
+      partnerName: partner.displayName,
     };
   };
 
@@ -2573,6 +2634,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onMemoryChunk: (listener) => host.onStreamChunk('memory', listener),
     onStoryProgress: (listener) => host.onStoryProgress(listener),
     onImageProgress: (listener) => host.onImageProgress(listener),
+    onSayLinesProgress: (listener) => host.onSayLinesProgress(listener),
     platform: host.platform,
     // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
     onFullscreenChanged: () => () => {},
@@ -4001,6 +4063,114 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         },
         new Date(),
       );
+    },
+
+    // --- 75 — "say something to your partner" -------------------------------------------------------
+
+    togetherSayLinesState: async (input): Promise<SayLinesView> => {
+      const { partnerId } = SayLinesRefSchema.parse(input);
+      const gate = await sayLinesGate(partnerId);
+      if (!gate) return { partnerId, partnerName: '', ready: false, kept: [] };
+      const [signal, store] = await Promise.all([
+        // `true` is not a bypass: `sayLinesGate` has just re-derived BOTH acks (and the live edge) above,
+        // and the signal re-checks the edge itself. Passing what was already resolved, not asserting it.
+        partnerLandingSignal(gate.fs, gate.key, gate.personId, partnerId, true),
+        readSayLines(gate.fs, gate.key, gate.personId, gate.pairKey),
+      ]);
+      return {
+        partnerId,
+        partnerName: gate.partnerName,
+        // Only WHETHER there is anything to draw on — never what. The signal itself stops here (75 §6).
+        ready: signal !== null,
+        kept: store.lines,
+        ...(store.lastBrief ? { lastBrief: store.lastBrief } : {}),
+      };
+    },
+
+    togetherSayLines: async (input): Promise<SayLinesResult> => {
+      const parsed = SayLinesGenerateInputSchema.parse(input);
+      const gate = await sayLinesGate(parsed.partnerId);
+      if (!gate)
+        return { ok: false, lines: [], kept: [], degraded: true, message: SAY_LINES_UNAVAILABLE };
+      // Keyed by PARTNER, not pairKey: the renderer knows the partner id and never sees a pairKey, and
+      // one id per partner is already enough to keep two surfaces' progress apart.
+      const progressId = `sayLines:${parsed.partnerId}`;
+      host.emitSayLinesProgress({ id: progressId, phase: 'gathering' });
+      const finish = (result: SayLinesResult): SayLinesResult => {
+        host.emitSayLinesProgress({ id: progressId, phase: result.ok ? 'done' : 'error' });
+        return result;
+      };
+      const kept = (await readSayLines(gate.fs, gate.key, gate.personId, gate.pairKey)).lines;
+      // `true` is what `sayLinesGate` just resolved (both acks + the live edge), not an assertion — and
+      // `partnerLandingSignal` re-checks the edge itself regardless.
+      const signal = await partnerLandingSignal(
+        gate.fs,
+        gate.key,
+        gate.personId,
+        parsed.partnerId,
+        true,
+      );
+      // Indistinguishable from a failed gate on purpose (75 §5.1) — the empty state must not reveal which.
+      if (!signal)
+        return finish({
+          ok: false,
+          lines: [],
+          kept,
+          degraded: true,
+          message: SAY_LINES_UNAVAILABLE,
+        });
+      const deps = await aiDeps('together.own');
+      if (!deps)
+        return finish({
+          ok: false,
+          lines: [],
+          kept,
+          degraded: true,
+          message: AI_UNAVAILABLE_FOR_PHASE,
+        });
+      host.emitSayLinesProgress({ id: progressId, phase: 'writing' });
+      // Their OWN lexicon, for the say-side half of the both-ways suppression (75 §8.2): a line here is said
+      // by them and heard by their partner, so both boundary sets apply and both are absolute.
+      const own = await readLexicon(gate.fs, gate.key, gate.personId);
+      const brief = parsed.brief ?? '';
+      const out = await runSayLinesPhase(deps, signal, own, brief, parsed.exclude ?? []);
+      // What they ASKED for, remembered — written on generate rather than on every keystroke, so it records
+      // what was actually asked and not what was typed and abandoned (75 §11.1-10).
+      await rememberBrief(gate.fs, gate.key, gate.personId, gate.pairKey, brief);
+      // $ is admin-only (the `budgets.manage` gate), redacted here like everywhere else (06).
+      const showCost = await activePersonCan(gate.fs, gate.key, 'budgets.manage');
+      return finish({
+        ok: out.ok,
+        lines: out.value ?? [],
+        kept,
+        degraded: out.degraded,
+        ...(out.reason ? { reason: out.reason } : {}),
+        ...(out.message ? { message: out.message } : {}),
+        ...(showCost ? { costUsd: out.costUsd } : {}),
+      });
+    },
+
+    togetherStarLine: async (input): Promise<StarredLine[]> => {
+      const parsed = SayLinesStarInputSchema.parse(input);
+      const gate = await sayLinesGate(parsed.partnerId);
+      if (!gate) return [];
+      const store = await starLine(
+        gate.fs,
+        gate.key,
+        gate.personId,
+        gate.pairKey,
+        parsed.text,
+        parsed.brief,
+        new Date(),
+      );
+      return store.lines;
+    },
+
+    togetherUnstarLine: async (input): Promise<StarredLine[]> => {
+      const parsed = SayLinesUnstarInputSchema.parse(input);
+      const gate = await sayLinesGate(parsed.partnerId);
+      if (!gate) return [];
+      return (await unstarLine(gate.fs, gate.key, gate.personId, gate.pairKey, parsed.id)).lines;
     },
 
     // --- Session image attachments (45 §6) — gated by `sessions.own`, scoped to the active person ---

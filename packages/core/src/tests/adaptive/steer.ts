@@ -260,6 +260,66 @@ export async function buildCouplesLexiconBlock(
  * Gating, all re-checked here so a removed edge or a revoked ack drops it on the very next call:
  * a live `partner` edge, and both 18+ acks (resolved by the caller, which owns the guidance-prefs read).
  */
+/**
+ * 75 §5.1 — what lands for a partner, assembled ONCE.
+ *
+ * Two things read this: {@link buildPartnerSteer}, which renders it as a silent prompt block for their
+ * partner's coach, and the "Say something to them" phase (75), which renders it as generation input. The
+ * assembly is shared rather than copied because 74 §3.6.39 is exactly what happens otherwise — the same rule
+ * written twice, diverging silently, with only one of the copies right.
+ *
+ * `null` means "nothing usable here", for either reason: a gate failed, or they have not marked anything.
+ * Callers must not distinguish the two — a partner with no marks and a partner you are not entitled to read
+ * look identical from the outside, which is what stops the empty state leaking whether a gate exists.
+ */
+export interface PartnerSignal {
+  /** Kept whole: the suppression check needs the boundaries, not just the loved rows. */
+  lexicon: EroticLexicon;
+  hear: LexiconEntry[];
+  callThem: string[];
+  themes: string[];
+  registers: string[];
+  voice?: string;
+}
+
+export async function partnerLandingSignal(
+  fs: FileSystem,
+  key: Uint8Array,
+  requesterId: string,
+  partnerId: string,
+  bothAdultAcked: boolean,
+): Promise<PartnerSignal | null> {
+  if (requesterId === partnerId || !bothAdultAcked) return null;
+  const rels = await listRelationships(fs, key);
+  // Re-derived on every call, so a removed edge drops this immediately rather than leaving stale access.
+  if (!livePartnerEdge(rels, requesterId, partnerId)) return null;
+
+  const lexicon = await readLexicon(fs, key, partnerId);
+  const hear = lovedEntries(lexicon, 'hear');
+  // 74 §3.6.8 — the names their partner likes being CALLED, which is the most directly usable thing here: a
+  // name can go into any line the coach writes, where a loved phrase can only be quoted.
+  const callThem = lexicon.entries
+    .filter((entry) => isNameFamily(entry.family) && entry.hearState === 'love')
+    .map((entry) => entry.text);
+  const registers = registerLines(lexicon);
+  if (
+    hear.length === 0 &&
+    callThem.length === 0 &&
+    lexicon.themes.length === 0 &&
+    registers.length === 0
+  ) {
+    return null;
+  }
+  return {
+    lexicon,
+    hear,
+    callThem,
+    themes: lexicon.themes,
+    registers,
+    ...(lexicon.voice ? { voice: lexicon.voice } : {}),
+  };
+}
+
 export async function buildPartnerSteer(
   fs: FileSystem,
   key: Uint8Array,
@@ -267,25 +327,11 @@ export async function buildPartnerSteer(
   partnerId: string,
   bothAdultAcked: boolean,
 ): Promise<string> {
-  if (requesterId === partnerId || !bothAdultAcked) return '';
-  const rels = await listRelationships(fs, key);
-  if (!livePartnerEdge(rels, requesterId, partnerId)) return '';
-
-  const lexicon = await readLexicon(fs, key, partnerId);
-  const hear = lovedEntries(lexicon, 'hear');
-  // 74 §3.6.8 — the names their partner likes being CALLED, which is the most directly usable thing here: a
-  // name can go into any line the coach writes, where a loved phrase can only be quoted.
-  const callThem = lexicon.entries
-    .filter((entry) => entry.family.startsWith('names-') && entry.hearState === 'love')
-    .map((entry) => entry.text);
-  if (
-    hear.length === 0 &&
-    callThem.length === 0 &&
-    lexicon.themes.length === 0 &&
-    registerLines(lexicon).length === 0
-  ) {
-    return '';
-  }
+  const signal = await partnerLandingSignal(fs, key, requesterId, partnerId, bothAdultAcked);
+  if (!signal) return '';
+  // Read the SIGNAL's own fields, never a fresh computation from the lexicon: recomputing here is what would
+  // let this block and the 75 phase drift apart again, which is the entire reason the assembly was extracted.
+  const { hear, callThem, themes, registers, voice } = signal;
 
   const parts = [
     'WHAT LANDS FOR THEIR PARTNER — when they ask what to say, draw on this. Present it entirely as your own' +
@@ -298,11 +344,11 @@ export async function buildPartnerSteer(
       `Names their partner likes being called — use them by name: ${callThem.slice(0, CAP).join(' · ')}.`,
     );
   }
-  if (lexicon.themes.length > 0) parts.push(`What they respond to: ${lexicon.themes.join(' · ')}.`);
+  if (themes.length > 0) parts.push(`What they respond to: ${themes.join(' · ')}.`);
   // Register matters MORE here than in their own block: this is the half that hands their partner words to
   // say, and the same word in the wrong register is the failure the owner reported.
-  parts.push(...registerLines(lexicon));
-  if (lexicon.voice) parts.push(`How it should sound: ${lexicon.voice}`);
+  parts.push(...registers);
+  if (voice) parts.push(`How it should sound: ${voice}`);
   return parts.join('\n');
 }
 

@@ -9,7 +9,6 @@ const FOCUS_THROTTLE_MS = 30 * 60 * 1000;
  * Drives the Auto check-ins cadence (63-auto-checkins §3.4 — mirrors the coaching/memory/update-check hooks):
  * a non-blocking attempt on launch + on window focus/resume. Each attempt first runs the write-once
  * onboarding-completion seed backfill (§5.1) — so a person who finished onboarding is switched on by default —
- * then nudges the auto run. The BRIDGE owns the real decision (24h throttle, crisis, budget, AI-off), returning
  * a calm no-op when not warranted, so this hook just nudges it. Re-armed on the active-person change (per-person
  * cadence). The manual "Run now" in the panel is separate (forces).
  */

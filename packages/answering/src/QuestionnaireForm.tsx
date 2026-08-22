@@ -16,7 +16,6 @@ import {
   type DeclinedAnswer,
   type Question,
 } from '@selfos/core/schemas';
-import { CrisisFooter } from './CrisisFooter';
 import { QuestionImage, type LoadImage } from './QuestionImage';
 import styles from './styles.module.css';
 
@@ -26,8 +25,7 @@ export type { LoadImage } from './QuestionImage';
  * The shared questionnaire-answering renderer (08-questionnaires §5.3) — the ONE implementation used by
  * preview / test-on-self, the in-app Inbox, AND the relay answering page (one renderer, many hosts). It
  * renders the currently **visible** questions (branch-aware), one control per answer type, and never
- * persists anything: the host owns the `answers` state. The crisis footer + not-medical line are always
- * present (§8.2) — a host may swap in its own `footer`, but one is always shown.
+ * persists anything: the host owns the `answers` state.
  *
  * Self-contained: plain elements + token CSS, depending only on the pure `@selfos/core/questionnaires`
  * `answering` helper — no app design-system — so it bundles into the relay Worker's static page too.
@@ -89,7 +87,7 @@ interface QuestionnaireFormProps {
   loadImage?: LoadImage;
   /** Per-question sharing controls (onboarding only, 43); omit ⇒ no sharing UI. */
   sharing?: QuestionSharing;
-  /** Crisis affordance shown below the questions; defaults to the built-in `CrisisFooter` (§8.2). */
+  /** Optional host-supplied footer rendered below the questions. */
   footer?: ReactNode;
   /**
    * Show a progress indicator (08 §20.5): a slim bar (answered / total visible) at the top, plus a
@@ -100,7 +98,7 @@ interface QuestionnaireFormProps {
   /**
    * Read-only render (08 §20.4): every answer control is inert. Used by the author's Preview — the questions
    * are wrapped in a `<fieldset disabled>`, which natively disables every descendant form control (inputs,
-   * textareas, selects, AND the custom `<button>` controls) with no per-control threading. The crisis footer
+   * textareas, selects, AND the custom `<button>` controls) with no per-control threading. The footer
    * stays OUTSIDE the fieldset, so "Get help now" is never disabled (§8.2). Default false ⇒ interactive
    * (the Inbox + relay answer as before).
    */
@@ -1412,7 +1410,7 @@ function WizardForm({
         )}
       </div>
 
-      {footer ?? <CrisisFooter />}
+      {footer}
     </div>
   );
 }
@@ -1528,7 +1526,7 @@ export function QuestionnaireForm({
         </div>
       ) : null}
       {/* Read-only Preview (08 §20.4): a disabled <fieldset> makes every descendant control inert with no
-          per-control wiring. The crisis footer stays OUTSIDE it, so "Get help now" always works (§8.2). */}
+          per-control wiring. */}
       {disabled ? (
         <fieldset className={styles.fieldset} disabled>
           {questionsBody}
@@ -1536,7 +1534,7 @@ export function QuestionnaireForm({
       ) : (
         questionsBody
       )}
-      {footer ?? <CrisisFooter />}
+      {footer}
     </div>
   );
 }

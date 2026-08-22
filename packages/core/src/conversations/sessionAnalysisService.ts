@@ -43,7 +43,6 @@ import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
  * Session-analysis service (09-session-analysis §5). When a coaching session is completed, AI reads the
  * full transcript **once** and distills it into a `SessionInsight` (`source: 'session'`, auto-approved) —
  * summary, key facts (themes / goals / commitments / follow-ups), a 2D mood signal (`moodValence` +
- * `moodEnergy`) into the shared metrics map, and a crisis flag — that feeds the subject's own coaching
  * context across sessions (08 §4.4). Reuses `05`'s client + `06`'s budgeting/metering (`session.analyze`).
  * The API key never leaves the host.
  */
@@ -62,7 +61,6 @@ markdown fences, no prose outside it) with these keys:
 - "people": names of people the person mentioned (array of short strings)
 - "moodValence": overall emotional tone, -1.0 (very negative) to 1.0 (very positive) (number)
 - "moodEnergy": overall energy/activation, -1.0 (very low/flat) to 1.0 (very high/activated) (number)
-- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
 - "categories": 1-2 life-area tags for this session, from EXACTLY this list: ${LIFE_AREAS.join(', ')} \
 (array of strings)
 - "profileSuggestions": ONLY if the session clearly reveals that a known profile fact has CHANGED or is newly \
@@ -76,8 +74,7 @@ const strList = tolerantArray(z.string(), '', (s) => s.trim() !== '');
 /**
  * AI-output contract for the analysis — validated before it's trusted (the host owns ids/timestamps).
  * Tolerant by design (37 §3.1): require only `summary`; every list is per-element salvaging; mood numbers
- * `.catch` to neutral; `crisisFlag` is preserved (.catch(undefined), never coerced — §8) so a per-element
- * salvage can't drop the crisis signal.
+ * `.catch` to neutral, so a per-element
  */
 const SessionAnalysisDraftSchema = z.object({
   summary: z.string().min(1),
@@ -87,7 +84,6 @@ const SessionAnalysisDraftSchema = z.object({
   people: strList,
   moodValence: z.number().catch(0).default(0),
   moodEnergy: z.number().catch(0).default(0),
-  crisisFlag: z.boolean().optional().catch(undefined),
   categories: strList,
   profileSuggestions: tolerantArray(
     RawProfileSuggestionSchema,
@@ -275,8 +271,7 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   // (TRUNCATED vs MALFORMED vs REFUSED) — distinct reasons, never a misleading catch-all (37 §3.2).
   let draft = SessionAnalysisDraftSchema.safeParse(extractJsonObject(result.text)).data;
   // Summary-only salvage is for a complete-but-malformed reply (e.g. an off-spec field). Do NOT salvage a
-  // TRUNCATED reply: `crisisFlag` is the LAST key in the contract, so a cut-off reply would yield a partial
-  // insight with the crisis signal silently dropped. Report TRUNCATED instead so the user re-runs and the
+  // TRUNCATED reply: a cut-off reply would yield a partial
   // flag can surface — matching the dream-synthesis path's truncation handling (37 §8 safety). (Dream
   // synthesis is stricter still: it never salvages a summary; session analysis keeps that for MALFORMED.)
   if (!draft && classifyParseFailure(result.text) !== 'TRUNCATED') {
@@ -350,7 +345,6 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
       // restricted path, §8.4) — the renderer offers "Talk it through" only for non-adult challenges.
       ...(conversation.challengeId ? { challengeId: conversation.challengeId } : {}),
     },
-    ...(draft.crisisFlag !== undefined ? { crisisFlag: draft.crisisFlag } : {}),
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
   };

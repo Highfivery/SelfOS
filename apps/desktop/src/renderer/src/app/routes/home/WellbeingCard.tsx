@@ -11,7 +11,7 @@ import styles from './Home.module.css';
  * check-ins" series, so a self-reported check-in reads distinctly from an AI-inferred session reading. Framed
  * plainly, never clinically (§7): a deterministic one-line read and a not-medical line. Hidden until there are
  * ≥2 points from either source. The recurring-distress supportive banner lives at the Home level (40 §3.5
- * `CrisisSupportBanner`) so it can show even without a mood chart.
+ * so it can show even without a mood chart.
  */
 export function WellbeingCard({
   points,

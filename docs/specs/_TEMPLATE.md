@@ -56,7 +56,7 @@ behavior.
 
 ## 8. Safety (required if this touches wellbeing or conversation)
 
-The not-medical boundary as surfaced here; crisis/self-harm detection and routing to professional
+The not-medical boundary as surfaced here. (There is no crisis system — `CLAUDE.md` §1.) Professional
 resources; handling of sensitive content. Omit only for purely technical features (state why).
 
 ## 9. Accessibility

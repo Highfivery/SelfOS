@@ -5,7 +5,6 @@ import { Heading, Text } from '../../../design-system/components';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { PrivacyChip } from './PrivacyChip';
 import type { PrivacyBadge } from './privacyBadge';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './Questionnaires.module.css';
 
 /**
@@ -17,7 +16,6 @@ import styles from './Questionnaires.module.css';
  * is interactive; nothing is ever saved.
  *
  * The reading flow shows EVERY question, including branch-gated follow-ups (the author sees all questions;
- * a follow-up carries a subtle "Shown if …" caption so the conditional nature is clear — §20.4). The crisis
  * footer stays present + interactive (§8.2).
  */
 export function QuestionnairePreview({
@@ -102,8 +100,6 @@ export function QuestionnairePreview({
         This is a read-only preview
         {recipientLabel ? ` — ${recipientLabel} hasn’t answered yet.` : '.'}
       </Text>
-
-      <CrisisFooter />
     </div>
   );
 }

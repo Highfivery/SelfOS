@@ -31,8 +31,6 @@ import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
  */
 
 /** The recurring-nightmare deterministic backstop (12 §8.2): N nightmares within a recent window. */
-export const NIGHTMARE_NUDGE_COUNT = 3;
-export const NIGHTMARE_NUDGE_WINDOW_DAYS = 14;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TOP_N = 8; // how many ranked entries each frequency list keeps
@@ -143,14 +141,6 @@ export function computePatternStats(
       ? allEntries
       : allEntries.filter(({ dream }) => new Date(occurredDate(dream)).getTime() >= start);
 
-  const nudgeStart = now.getTime() - NIGHTMARE_NUDGE_WINDOW_DAYS * DAY_MS;
-  const recent = allEntries.filter(
-    ({ dream }) => new Date(occurredDate(dream)).getTime() >= nudgeStart,
-  );
-  const recentNightmares = recent.filter(({ dream }) => dream.nightmare).length;
-  const recentDistress = recent.some(({ analysis }) => analysis?.distressSignal === true);
-  const nightmareNudge = recentNightmares >= NIGHTMARE_NUDGE_COUNT || recentDistress;
-
   return {
     window,
     dreamCount: windowed.length,
@@ -163,7 +153,6 @@ export function computePatternStats(
     nightmareCount: windowed.filter(({ dream }) => dream.nightmare).length,
     moodTrend: trend(windowed, (d) => d.mood),
     vividnessTrend: trend(windowed, (d) => d.vividness),
-    nightmareNudge,
   };
 }
 
@@ -188,9 +177,7 @@ export async function getPatternStats(
 const PATTERNS_GUIDANCE = `The person has been keeping a dream journal. Below is a digest of their recent \
 dreams. Reflect gently on what you notice ACROSS them — recurring images, emotional threads, or shifts \
 over time — in a warm, brief paragraph or two. Offer it as something to wonder about, never as a fixed \
-reading or diagnosis. If recurring distress or nightmares stand out, note it kindly and suggest that \
-persistent distressing dreams can be worth talking through with a professional. Write only the reflection, \
-no preamble.`;
+reading or diagnosis. Write only the reflection, no preamble.`;
 
 /** A compact, bounded digest of recent dreams for the narrative prompt (structured, not raw transcripts). */
 function buildDigest(entries: PatternEntry[]): string {

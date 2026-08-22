@@ -192,10 +192,10 @@ async function performSend(deps: {
 
 /**
  * The one send-and-log orchestrator (67 §5.2) — every family routes through it, so gating + logging can't
- * be bypassed. Gating order: crisis (suppresses ALL email, §8.1) → configured (key + from-line) → the
+ * be bypassed. Gating order: configured (key + from-line) → the
  * person's engagement address (fail-closed, §4.2) → the per-family opt-in → the global pause. A gating
  * miss is NOT logged (no send attempted); an actual send attempt (success or Resend failure) writes an
- * `EmailActivityEntry`. The composed content + `crisisSuppressed` are computed by the caller (the bridge).
+ * `EmailActivityEntry`. The composed content is computed by the caller (the bridge).
  */
 export async function sendFamilyEmail(deps: {
   fs: FileSystem;
@@ -205,15 +205,12 @@ export async function sendFamilyEmail(deps: {
   personId: string;
   family: EmailFamily;
   composed: ComposedEmail;
-  crisisSuppressed: boolean;
   scheduledAt?: string;
   tokens?: string[];
   sourceKey?: string;
   now: Date;
 }): Promise<EmailSendResult> {
   const { fs, key, email, resendKey, personId, family, composed, now } = deps;
-
-  if (deps.crisisSuppressed) return { ok: false, reason: 'CRISIS' };
 
   const config = await readEmailConfig(fs, key);
   const from = fromLineOf(config);
@@ -244,7 +241,7 @@ export async function sendFamilyEmail(deps: {
 /**
  * Family B — a transactional alert (67 §3.2 / Phase 2). An engagement family, so — unlike family A — it
  * routes through `sendFamilyEmail` (the person's own engagement address + the `transactional` opt-in +
- * pause). Per §7 it is NOT crisis-suppressed (crisis suppresses only C/D/E/F). It is **idempotent on
+ * pause). It is **idempotent on
  * `sourceKey`** (the source notification's `coalesceKey#signature`): if a non-failed transactional entry
  * with this key is already logged, it no-ops — so a re-open never re-sends the same alert, while a changed
  * signature (a genuinely new event) is a new key and sends again. A prior FAILED send is retryable.
@@ -273,7 +270,6 @@ export async function sendTransactionalEmail(deps: {
     personId: deps.personId,
     family: 'transactional',
     composed: deps.composed,
-    crisisSuppressed: false, // §7 — transactional is not one of the crisis-suppressed families (C/D/E/F)
     sourceKey: deps.sourceKey,
     now: deps.now,
   });
@@ -284,7 +280,7 @@ export async function sendTransactionalEmail(deps: {
  * its own user, so its gating differs from the engagement families: it goes to the recipient's CONTACT
  * address (passed in, not the sender's engagement `EmailPrefs.address`), it is NOT gated on the recipient's
  * per-family opt-in / pause (they may not even be a SelfOS person — it's a delivery mechanism), and it is
- * NOT crisis-suppressed (crisis suppresses only the engagement families C/D/E/F, §7). The only gates are:
+ * The only gates are:
  * the household is configured (a resolvable key + a from-line) and a recipient address is present. The
  * activity entry is logged under the SENDER (the person who triggered the delivery), with the recipient's
  * address as `toAddress` — so the owner view attributes it to who sent it (67 §3.7).
@@ -330,7 +326,7 @@ export async function sendQuestionnaireDeliveryEmail(deps: {
  *
  * Shares family A's gating profile, not the engagement families': it goes to the recipient's CONTACT
  * address (`Person.email`, passed in), is NOT gated on their per-family opt-in or `paused`, and is not
- * crisis-suppressed. The owner sets the address and the note is not refusable — an owner decision
+ * The owner sets the address and the note is not refusable — an owner decision
  * (76 §8.3), recorded there along with its deliverability cost.
  *
  * The activity entry is logged under the **SENDER** with `recipientPersonId` stamped. That is what makes

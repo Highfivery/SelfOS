@@ -311,13 +311,6 @@ export function InsightCard({
   return (
     <Card>
       <Stack gap={3}>
-        {insight.crisisFlag ? (
-          <Banner tone="danger">
-            This may reflect distress. Be gentle — if anyone is in immediate danger, call your local
-            emergency number; in the US &amp; Canada call or text <strong>988</strong>.
-          </Banner>
-        ) : null}
-
         {/* Header: what produced this + who it's about + the edit pencil; then the linked source. */}
         <div className={styles.head}>
           <div className={styles.headMain}>

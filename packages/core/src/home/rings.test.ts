@@ -20,7 +20,6 @@ describe('computeLifeRings', () => {
     expect(ring?.value).toBe(1);
     expect(ring?.pct).toBe(100);
     expect(ring?.levelLabel).toBe('Thriving');
-    expect(ring?.softened).toBe(false);
   });
 
   it('a low mood reads as a gentle low band, never a negative/failing word', () => {
@@ -46,21 +45,5 @@ describe('computeLifeRings', () => {
         },
       }),
     ).toEqual(['wellbeing', 'connection', 'reflection', 'growth']);
-  });
-
-  it('softens every ring during a crisis (score hidden by the caller)', () => {
-    const rings = computeLifeRings({
-      crisis: true,
-      signals: {
-        moodValenceMean: 0.9,
-        hasRelationships: true,
-        sessionsRecent: 4,
-        areasExplored: 5,
-      },
-    });
-    expect(rings).toHaveLength(4);
-    expect(rings.every((r) => r.softened)).toBe(true);
-    // levelLabel is still present so the caller can show a supportive word without a number.
-    expect(rings.every((r) => r.levelLabel.length > 0)).toBe(true);
   });
 });

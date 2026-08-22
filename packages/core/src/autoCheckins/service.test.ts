@@ -174,7 +174,6 @@ function runInput(
     model: 'claude-sonnet-4-6',
     personId: author,
     now,
-    crisis: false,
     auto: true,
     ...over,
   };
@@ -220,16 +219,6 @@ describe('runAutoCheckins — self stream', () => {
     if (!result.ok) return;
     expect(result.created.length).toBeGreaterThan(0);
     expect(result.created.some((c) => c.intent === 'intimacy')).toBe(false);
-  });
-
-  it('pauses everything during a crisis (no generation)', async () => {
-    const fs = memFileSystem();
-    const author = await seedPerson(fs, { name: 'Ben', ack: true });
-    await setAutoCheckinConfig(fs, key, author, { enabled: true, targets: [selfTarget()] });
-
-    const result = await runAutoCheckins(runInput(fs, author, { crisis: true }));
-    expect(result).toMatchObject({ ok: false, reason: 'CRISIS' });
-    expect(await listAssignments(fs, key, { recipientPersonId: author })).toHaveLength(0);
   });
 
   it('reports AI_OFF when there is no API key', async () => {

@@ -6,8 +6,7 @@
  */
 
 const NOT_MEDICAL =
-  'SelfOS is wellness support, not medical care, and not a substitute for professional help. ' +
-  'If you’re in crisis, contact your local emergency services or a crisis line.';
+  'SelfOS is wellness support, not medical care, and not a substitute for professional help.';
 
 /** Minimal HTML entity escaping for interpolated user text (names). */
 function esc(text: string): string {

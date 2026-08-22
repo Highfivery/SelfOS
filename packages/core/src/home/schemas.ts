@@ -35,7 +35,6 @@ export interface StreakInput {
   /** ISO timestamps of ANY meaningful activity (session/dream/check-in/questionnaire-answer/together/challenge). */
   activity: string[];
   /** Recurring distress (40) — suppress the streak entirely; a struggling person is never streak-shamed (§8). */
-  crisis?: boolean;
 }
 
 /**
@@ -48,8 +47,6 @@ export interface StreakInfo {
   days: number;
   /** ISO local date (YYYY-MM-DD) the current run started; absent when `days === 0`. */
   since?: string;
-  /** True during a crisis signal — the caller hides the streak entirely (§8). */
-  suppressed: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,14 +64,11 @@ export interface LifeRing {
   pct: number;
   /** The headline word (Quiet → Warming → Steady → Active → Thriving). Always present (never color-only, §9). */
   levelLabel: string;
-  /** During a crisis signal the ring is softened: the caller shows only `levelLabel`, no `pct`/bar (§8). */
-  softened: boolean;
 }
 
 /** The minimal signals each ring derives from — the renderer pre-computes these from already-loaded stores. */
 export interface LifeRingsInput {
   /** Recurring distress (40) — soften every ring to a supportive, score-free presentation (§8). */
-  crisis?: boolean;
   signals: {
     /** Mean session/check-in mood valence, −1..1, over the recent window. Undefined ⇒ wellbeing ring absent. */
     moodValenceMean?: number;

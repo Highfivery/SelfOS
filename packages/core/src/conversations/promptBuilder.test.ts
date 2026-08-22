@@ -26,12 +26,11 @@ function person(id: string, name: string, extra: Partial<Person> = {}): Person {
 }
 
 describe('buildSystemPrompt', () => {
-  it('includes the persona, the safety boundary, and the person context', async () => {
+  it('includes the persona, the not-medical boundary, and the person context', async () => {
     await savePerson(fs, key, person('p1', 'Alex', { notes: 'enjoys hiking' }));
     const prompt = await buildSystemPrompt(fs, key, 'p1');
     expect(prompt).toContain('wellness'); // persona/safety
     expect(prompt.toLowerCase()).toContain('not medical'); // safety boundary
-    expect(prompt).toContain('crisis'); // crisis routing
     expect(prompt).toContain('Alex'); // context
     expect(prompt).toContain('enjoys hiking'); // shareable context
   });
@@ -101,7 +100,6 @@ describe('buildSystemPrompt', () => {
     };
     const prompt = await buildSystemPrompt(fs, key, 'p1', undefined, depthAsk);
     expect(prompt).toContain('Family & roots'); // the invited area is named
-    expect(prompt).toMatch(/crisis/i); // crisis always takes precedence in the ask
     // The boundary still leads — the ask comes after persona + safety.
     expect(prompt.indexOf(SAFETY)).toBeLessThan(prompt.indexOf('Family & roots'));
   });

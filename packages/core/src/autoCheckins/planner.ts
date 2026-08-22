@@ -136,7 +136,6 @@ export interface ShouldRunInput {
 
 /**
  * The engine cadence gate (§3.4) — the `shouldAutoReconcile` sibling. False when the master toggle is off,
- * there are no enabled targets, or the device already ran within the throttle window. The crisis / AI /
  * budget gates are the orchestrator's job (this is purely the cadence).
  */
 export function shouldRunAutoCheckins(input: ShouldRunInput): boolean {

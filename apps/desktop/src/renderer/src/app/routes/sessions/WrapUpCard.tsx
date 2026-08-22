@@ -12,14 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Insight } from '@shared/schemas';
-import {
-  Banner,
-  Button,
-  Heading,
-  IconButton,
-  Markdown,
-  Text,
-} from '../../../design-system/components';
+import { Button, Heading, IconButton, Markdown, Text } from '../../../design-system/components';
 import { groupWrapUpFacts, type WrapUpFact } from './wrapUpGroups';
 import styles from './sessionLifecycle.module.css';
 
@@ -46,7 +39,6 @@ function Chips({ items }: { items: WrapUpFact[] }): JSX.Element {
 }
 
 /**
- * The inline wrap-up card shown after a session is summarized (09 §3.1). Leads with crisis resources if the
  * analysis flagged a concern (§7), then the summary and mood, then the facts GROUPED into scannable sections —
  * Goals first (your takeaways), then Themes (chips), Follow-ups (collapsed), and People (chips) — rather than
  * one flat bullet wall. The durable record lives in Memory; a link points there. Dismissible.
@@ -77,14 +69,6 @@ export function WrapUpCard({
           <X size={16} aria-hidden="true" />
         </IconButton>
       </div>
-
-      {insight.crisisFlag ? (
-        <Banner tone="warning">
-          It sounds like things are really heavy right now. You deserve support from someone who can
-          help directly — please consider reaching out to a crisis line (US &amp; Canada: call or
-          text <strong>988</strong>) or your local emergency services.
-        </Banner>
-      ) : null}
 
       <Markdown>{insight.summary}</Markdown>
 

@@ -205,6 +205,12 @@ guardrails:
 
 ### 3.5 Cross-insight crisis awareness
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Separate from the cheerful nudges, a **deterministic** (no-AI) aggregation reads the **recent**
 insights' `crisisFlag` (+ the dream nightmare nudge, 12 §8.2) and, when distress **recurs** across a
 bounded recent window (candidate: ≥ N crisis-flagged insights in the last M days OR the nightmare

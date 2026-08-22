@@ -638,6 +638,12 @@ every prompt** (the addendum is appended **after** PERSONA + SAFETY + context).
 
 ### 8.2 Crisis routing (unchanged, non-negotiable)
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Pushing into discomfort can surface acute distress. Crisis handling is unchanged (`05` §7 / `09` §7): warmth,
 take it seriously, route to professional/emergency help, never manage a crisis alone — and the push **always
 yields** to it. Specifically: if the person expresses distress while co-creating or reflecting, the coach

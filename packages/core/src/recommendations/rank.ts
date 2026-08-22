@@ -12,7 +12,7 @@ export interface RankOptions {
 
 /**
  * The pure ranking engine (53 §5.2). Synchronous, no AI, no I/O, deterministic + stable for the same state.
- * Pipeline: filter (capability + 18+) → gather → crisis de-escalation → proactivity gate → apply dismissals
+ * Pipeline: filter (capability + 18+) → gather → proactivity gate → apply dismissals
  * → rank by score → variety-dedup → take top N. Returns the "For you" cards; `[]` means the section won't
  * render. The renderer feeds `state` it already assembled from its stores.
  */
@@ -23,7 +23,7 @@ export function rankRecommendations(
 ): Recommendation[] {
   // 4 (early): proactivity off ⇒ no "For you" section at all; a brand-new person sees getting-started, not
   // pushes; a distress moment leads with support, not nudges. All three suppress the whole section (§3.7/§7/§8).
-  if (state.proactivity === 'off' || state.isNew || state.crisis) return [];
+  if (state.proactivity === 'off' || state.isNew) return [];
 
   const dismissed = opts.dismissed ?? new Set<string>();
 

@@ -250,7 +250,6 @@ export interface DepthAskContext {
  * persona + safety + context (it steers, never overrides). The coach may weave ONE gentle question into a
  * RELEVANT session, then drop it. Heavier/adult sections are excluded unless gated (the caller filters adult by
  * the 18+ ack); restricted-but-not-adult areas (e.g. difficult experiences) are only raised if the person opens
- * that door. Crisis always takes precedence. Returns '' when there's nothing to invite.
  */
 export function depthAskInstruction(ctx: DepthAskContext): string {
   const sections = ctx.sections;
@@ -262,5 +261,5 @@ MOST ONCE, to share a little more about it (e.g. "we keep coming back to your fa
 me a bit more about them sometime?"). Offer it once; if they don't take it up or say not now, let it go and \
 stay with what they came to talk about — never derail the session. Never raise a heavier or sensitive area \
 (difficult experiences, intimacy) unless the person clearly opens that door first. This NEVER takes precedence \
-over safety: if they express any distress or crisis, drop the invitation entirely and respond with care.`;
+over safety: if they express any distress, drop the invitation entirely and respond with care.`;
 }

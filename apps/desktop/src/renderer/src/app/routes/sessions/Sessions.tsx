@@ -31,7 +31,6 @@ import {
 import { Composer } from './Composer';
 import type { PendingAttachment } from './downscaleImage';
 import { MessageAttachments } from './MessageAttachments';
-import { CrisisFooter } from './CrisisFooter';
 import { SessionLauncher } from './SessionLauncher';
 import { GuidedStepper } from './GuidedStepper';
 import { SessionStatusPill } from './SessionStatusPill';
@@ -160,7 +159,6 @@ export function Sessions(): JSX.Element {
     threadRef.current?.scrollTo?.(0, threadRef.current.scrollHeight);
   }, [messages, streaming]);
   // When a wrap-up card appears (summarized), scroll it to the TOP of the thread so its heading leads — it
-  // lives inside the scroll container (not below it), so it can never overflow onto the pinned crisis footer.
   useEffect(() => {
     if (wrapUp) wrapUpRef.current?.scrollIntoView?.({ block: 'start' });
   }, [wrapUp]);
@@ -437,8 +435,7 @@ export function Sessions(): JSX.Element {
                   ) : null}
                 </Stack>
               )}
-              {/* The wrap-up card lives INSIDE the scroll container so a tall summary scrolls with the thread
-                  and can never overflow its grid row onto the pinned crisis footer below. */}
+              {/* The wrap-up card lives INSIDE the scroll container so a tall summary scrolls with the thread */}
               {wrapUp ? (
                 <div ref={wrapUpRef} className={styles.wrapCardSlot}>
                   <WrapUpCard insight={wrapUp} onDismiss={dismissWrapUp} />
@@ -531,10 +528,6 @@ export function Sessions(): JSX.Element {
           </>
         )}
       </section>
-
-      <div className={styles.crisisWrap}>
-        <CrisisFooter />
-      </div>
     </div>
   );
 }

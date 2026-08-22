@@ -311,6 +311,12 @@ override them. Copy frames it as "helping SelfOS understand you," never "evaluat
 
 ### 8.2 Crisis & trauma-informed conduct
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 - Heavy sections open with a kind content note; **everything is skippable**; the interviewer **never pressures**
   for detail and validates "I'd rather not."
 - **Crisis routing** is unchanged and non-negotiable ([`05`](05-conversations.md) §7): if the person discloses

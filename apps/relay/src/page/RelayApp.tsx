@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CrisisFooter, Markdown, QuestionnaireForm } from '@selfos/answering';
+import { Markdown, QuestionnaireForm } from '@selfos/answering';
 import {
   contentKeyFromFragment,
   openContent,
@@ -66,7 +66,6 @@ function Message({
       <h1 className="title">{title}</h1>
       <p className="subtitle">{body}</p>
       {children}
-      <CrisisFooter />
     </div>
   );
 }
@@ -100,7 +99,6 @@ function ResultView({ result }: { result: RelayResult }): JSX.Element {
           ))}
         </ul>
       ) : null}
-      <CrisisFooter />
     </div>
   );
 }
@@ -148,7 +146,6 @@ function PinGate({
           </button>
         </div>
       </form>
-      <CrisisFooter />
     </div>
   );
 }
@@ -253,7 +250,6 @@ function ConsentScreen({
           Continue
         </button>
       </div>
-      <CrisisFooter />
     </div>
   );
 }
@@ -407,7 +403,6 @@ function FormScreen({
               Back
             </button>
           </div>
-          <CrisisFooter />
         </div>
       ) : (
         /* One question at a time (08 §21.3): the shared wizard owns Back/Next + the action bar. An

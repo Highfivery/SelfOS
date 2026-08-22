@@ -4,7 +4,6 @@ import { Lock } from 'lucide-react';
 import type { TestGroupId, TestSummary } from '@selfos/core/tests';
 import { Button, Heading, Select, Text } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { NextUpSlot } from './NextUpSlot';
 import { TestCard } from './TestCard';
 import {
@@ -211,8 +210,6 @@ export function You(): JSX.Element {
             score, or a diagnosis. The check-ins are not medical screening.
           </p>
         ) : null}
-
-        <CrisisFooter />
       </div>
     </div>
   );

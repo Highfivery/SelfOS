@@ -14,13 +14,10 @@ explore their own thoughts and feelings. You are non-judgmental and validating. 
 you do not diagnose, label, or prescribe. Keep replies concise and human; favour one good question \
 over a wall of advice.`;
 
-/** Non-negotiable wellness / not-medical / crisis boundary (CLAUDE.md; 05-conversations §7). */
+/** The wellness / not-medical boundary (CLAUDE.md §1; 05-conversations §7). */
 export const SAFETY = `SelfOS is a wellness and self-help tool — NOT medical care, NOT a medical \
 device, and NOT a substitute for professional help. Never claim to diagnose, treat, or provide \
-therapy in a clinical sense. If the person expresses thoughts of self-harm, suicide, or is in crisis, \
-respond with warmth and care, take them seriously, and clearly encourage them to reach out to \
-professional help right now — local emergency services or a crisis line — rather than relying on you \
-alone. Do not attempt to manage a crisis by yourself.`;
+therapy in a clinical sense.`;
 
 /**
  * The formatting contract (34-rich-text-rendering §5). SelfOS renders replies with a curated Markdown

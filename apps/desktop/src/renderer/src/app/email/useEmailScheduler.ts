@@ -7,7 +7,6 @@ const FOCUS_THROTTLE_MS = 30 * 60 * 1000;
 /**
  * The no-backend email cadence (67 §3.4 / Phase 3 — the `useAutoCheckins` template): a non-blocking
  * `email:scheduleReconcile({ auto: true })` on launch + on window focus/resume. The BRIDGE owns the real
- * decision (a 24h per-person throttle, config/crisis/opt-in gates), returning a calm no-op when not
  * warranted, so this hook just nudges it. Each run polls Resend delivery status + reconciles the scheduled
  * families (digest / re-engagement via `scheduledAt`/cancel) + cancels answered questionnaire reminders.
  * Re-armed on the active-person change (per-person cadence). Gated on the person holding `email.own`.

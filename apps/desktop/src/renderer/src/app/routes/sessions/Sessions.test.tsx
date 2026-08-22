@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe('Sessions', () => {
-  it('shows the launcher with a calm connect state when AI is off, plus the catalog + crisis footer', async () => {
+  it('shows the launcher with a calm connect state when AI is off, plus the catalog', async () => {
     installMockBridge({ secretHas: () => Promise.resolve(false) });
     setAiEnabled(false);
     renderSessions();
@@ -46,7 +46,6 @@ describe('Sessions', () => {
     expect(await screen.findByText('What do you want to work through?')).toBeInTheDocument();
     expect(screen.getByText(/browse and start guided sessions below/i)).toBeInTheDocument();
     expect(screen.getByText('Reflective & therapy-informed')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
   it('sends a message and shows the reply', async () => {
@@ -362,23 +361,6 @@ describe('Sessions', () => {
     await waitFor(() =>
       expect(conversationsRename).toHaveBeenCalledWith({ id: 'c1', title: 'New title' }),
     );
-  });
-
-  it('expands crisis resources', async () => {
-    installMockBridge({
-      secretHas: () => Promise.resolve(true),
-      aiKeyStatus: () =>
-        Promise.resolve({
-          hasSharedKey: false,
-          hasDeviceOverride: true,
-          resolvedReady: true,
-          source: 'device' as const,
-        }),
-    });
-    setAiEnabled(true);
-    renderSessions();
-    await userEvent.click(screen.getByRole('button', { name: /get help now/i }));
-    expect(screen.getByText(/988/)).toBeInTheDocument();
   });
 
   it('shows status pills and filters the list by status', async () => {

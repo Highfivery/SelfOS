@@ -215,7 +215,7 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(kinds).not.toContain('send-questionnaire');
   });
 
-  it('your goals stay visible even under a recurring crisis — your own commitment, not an AI push', () => {
+  it('your goals stay visible — your own commitment, not an AI push', () => {
     const kinds = needsAttention(
       base({ suppressNudges: true, goals: [goal({ id: 'g', due: '2026-06-01' })] }),
     ).map((i) => i.kind);
@@ -232,13 +232,11 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(item?.nudge).toBeUndefined(); // NOT a nudge — stays top of mind regardless of proactivity
   });
 
-  it('stays visible under proactivity-off AND under crisis (your own commitment); generalizes for many partners', () => {
+  it('stays visible under proactivity-off (your own commitment); generalizes for many partners', () => {
     const many = base({ agreements: [agreement('Angel'), agreement('Cass', 'cass')] });
     const item = needsAttention(many).find((i) => i.kind === 'agreement');
     expect(item?.label).toBe('Following through on your agreements');
     expect(item?.detail).toBe('2 standing agreements to keep up');
-    // Non-nudge → NOT dropped when proactivity is off / a crisis is active (the user's "top of mind" ask).
-    // It's the couple's own commitment, not an AI push, so a crisis signal never hides it.
     expect(needsAttention({ ...many, suppressNudges: true }).map((i) => i.kind)).toContain(
       'agreement',
     );

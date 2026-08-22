@@ -14,8 +14,6 @@ interface BannerProps {
   tone?: Tone;
   children: ReactNode;
   /**
-   * The live-region role. Defaults to a polite `status`; pass `alert` for a crisis/safety surface that must
-   * be announced assertively (51 §9 — the wellbeing crisis interception), or `none` for a banner that is
    * STATIC guidance rather than something that just happened. A live region announces CHANGE, so standing
    * instructions in one are both noise for a screen reader and a magnet for any `getByRole('status')`
    * looking for the real one on the same screen.

@@ -195,8 +195,6 @@ describe('Home — hierarchy & status grid', () => {
     expect(screen.getByRole('button', { name: /start a session/i })).toBeInTheDocument();
     // The encouragement zone is suppressed for a brand-new person (getting-started owns the screen).
     expect(forYouRegion()).toBeNull();
-    // Crisis footer is always present (§7).
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
   it('renders the status grid a seeded person has, with a "For you" zone above it', async () => {
@@ -560,82 +558,5 @@ describe('Home — proactivity & safety', () => {
     });
     renderHome();
     expect(await screen.findByText(/10 sessions in/i)).toBeInTheDocument();
-  });
-
-  it('surfaces the supportive crisis banner on recurring distress, and suppresses "For you"', async () => {
-    const recentCrisis = (id: string, daysAgo: number): Insight => ({
-      id,
-      schemaVersion: 1,
-      source: 'session',
-      subjectPersonId: ME.id,
-      summary: 'A heavy check-in',
-      facts: [],
-      confidence: 'medium',
-      categories: [],
-      approved: true,
-      crisisFlag: true,
-      provenance: {
-        conversationId: id,
-        at: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      createdAt: 'now',
-      updatedAt: 'now',
-    });
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    installMockBridge({
-      goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
-      insightsList: () => Promise.resolve([recentCrisis('x1', 1), recentCrisis('x2', 5)]),
-      // A live 2-day activity run — WITHOUT crisis this would show a rhythm streak pill; crisis must suppress
-      // it (§8, the top gamification guardrail — a struggling person is never streak-shamed).
-      conversationsList: () =>
-        Promise.resolve([
-          {
-            id: 'c1',
-            title: 'A',
-            updatedAt: new Date().toISOString(),
-            status: 'complete' as const,
-          },
-          { id: 'c2', title: 'B', updatedAt: yesterday, status: 'complete' as const },
-        ]),
-    });
-    renderHome();
-    expect(await screen.findByText(/carrying a lot/i)).toBeInTheDocument();
-    expect(screen.getByText('988')).toBeInTheDocument();
-    // Encouragement de-escalates: no "For you" pushes during distress, no rhythm streak, and the gentle AI
-    // "Needs attention" nudges (check-in / ask-someone) are suppressed (§8). BUT your own commitments — your
-    // goals + Together agreements — still show: they're grounding, not AI pushes, and the crisis banner
-    // already leads with support (the user's repeated ask; hiding your own goals was over-aggressive).
-    expect(forYouRegion()).toBeNull();
-    expect(screen.getByText(/a goal needs a check-in/i)).toBeInTheDocument();
-    expect(screen.queryByText(/check in on how you.re doing/i)).toBeNull();
-    expect(screen.queryByText(/rhythm/i)).toBeNull();
-  });
-
-  it('does not surface the crisis banner for a single recent flag', async () => {
-    const recentCrisis = (id: string, daysAgo: number): Insight => ({
-      id,
-      schemaVersion: 1,
-      source: 'session',
-      subjectPersonId: ME.id,
-      summary: 'A heavy check-in',
-      facts: [],
-      confidence: 'medium',
-      categories: [],
-      approved: true,
-      crisisFlag: true,
-      provenance: {
-        conversationId: id,
-        at: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      createdAt: 'now',
-      updatedAt: 'now',
-    });
-    installMockBridge({
-      conversationsList: () => Promise.resolve([meta('c1', 'A week', 'inProgress')]),
-      insightsList: () => Promise.resolve([recentCrisis('x1', 1)]),
-    });
-    renderHome();
-    await screen.findByRole('heading', { name: /pick up where/i });
-    expect(screen.queryByText(/carrying a lot/i)).toBeNull();
   });
 });

@@ -265,7 +265,6 @@ export function webFakeClaudeClient(): ClaudeClient {
             summary:
               'You two are largely aligned, with **a few differences** worth talking through.',
             items: [],
-            crisisFlag: false,
             facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
           }),
           usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -309,7 +308,6 @@ export function webFakeClaudeClient(): ClaudeClient {
             people: [],
             moodValence: -0.2,
             moodEnergy: 0.1,
-            crisisFlag: false,
           }),
           usage: { inputTokens: 180, outputTokens: 70, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
@@ -382,8 +380,6 @@ export function webFakeClaudeClient(): ClaudeClient {
             people: [],
           },
           metrics: { emotionalIntensity: 0.5, valence: 0 },
-          crisisFlag: false,
-          distressSignal: false,
         });
         return Promise.resolve({
           text: draft,

@@ -11,7 +11,6 @@ import styles from './Home.module.css';
  * preserved action. When there's nothing worth recommending it shows a calm, satisfied line ("you're all set
  * for now"), never a forced suggestion or a dead-end (§7). A labelled region for a11y (§9).
  *
- * The caller only mounts this when the section is allowed (not proactivity-off, not crisis, not brand-new) —
  * those cases suppress the whole zone upstream (§3.7/§7/§8).
  */
 export function ForYou({

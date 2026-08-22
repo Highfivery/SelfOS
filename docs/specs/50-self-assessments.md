@@ -640,6 +640,12 @@ display gates on). `normalized` keeps the floor for arithmetic. Three consequenc
 
 ### 8.2 Crisis routing
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Every test/result/answer surface shows the always-present **"Get help now"** crisis footer + curated resources
 (static; consistent with [`05`](05-conversations.md)/[`08`](08-questionnaires.md) — no model call needed). A
 **crisis-adjacent** answer (an extreme distress/self-harm response an attachment/intimacy item could surface)

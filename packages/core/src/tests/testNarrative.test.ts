@@ -174,10 +174,9 @@ describe('narrateResult — the only metered call', () => {
   it('a wellbeing instrument bounds the prompt + NEVER sends the internal clinical key (51 §8.1)', async () => {
     const fs = memFileSystem();
     const def = getTest('phq9')!;
-    // A crisis-flagging take (every item maxed) → 'severe' clinicalKey + crisisFlag.
+    // Every item maxed → the 'severe' clinicalKey.
     const result = await seedResult(fs, 'phq9');
     expect(result.scores[0]!.band).toBe('severe'); // the INTERNAL clinicalKey
-    expect(result.crisisFlag).toBe(true);
     const captured: { system?: string; user?: string } = {};
     await narrateResult({
       fs,
@@ -192,10 +191,9 @@ describe('narrateResult — the only metered call', () => {
       now,
       overBudget: false,
     });
-    // The extra-careful wellbeing bounding + crisis lead are in the system prompt.
+    // The extra-careful wellbeing bounding is in the system prompt.
     expect(captured.system).toContain('WELLBEING REFLECTION');
     expect(captured.system).toContain('NEVER say "you have"');
-    expect(captured.system?.toLowerCase()).toContain('lead with warmth and concern'); // crisis lead
     // The digest sent to the model carries the GENTLE display copy, never the clinical key.
     expect(captured.user).not.toContain('severe');
     expect(captured.user).toContain('really heavy time'); // the gentle 'severe' display copy

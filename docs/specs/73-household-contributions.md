@@ -281,6 +281,12 @@ model is untouched.
 
 ### 8.4 Crisis
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 The `CrisisFooter` renders on the contribute route like every other conversational surface. If a contribution
 trips the shared crisis signal on the author's next analysis pass, existing routing applies unchanged.
 

@@ -195,6 +195,12 @@ CLAUDE.md §7): every item visible, no `<details>` defaulting closed, Score reac
 
 ### 3.3 The result — a gentle band, the help line always, crisis when triggered
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 On `/you/:testId` (the spec-50 result screen, with the wellbeing handling):
 
 - **Header** — the reflective name (e.g. "Your mood check-in"), `takenAt`, and a **non-diagnostic preamble**:
@@ -389,6 +395,12 @@ in scoring, the wellbeing-trend feed, and the extra-careful narrative bounding. 
 
 ### 5.2 The crisis-detection hook in scoring (`@selfos/core/tests/wellbeingCrisis.ts`)
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 A pure, deterministic, **AI-free** helper — the heart of this spec's safety:
 
 ```ts
@@ -545,6 +557,12 @@ Per `00` §7 — every surface handles loading / empty / error / offline. Specif
 
 ## 8. Safety, the non-diagnostic reframe & crisis routing
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 **This is the largest, most important section.** SelfOS embeds clinically-validated instruments while **refusing
 to diagnose** with them. Everything here is a hard requirement, not a preference (CLAUDE.md §1; `05` §7; `40` §8).
 
@@ -589,6 +607,12 @@ and **always routed to a professional** — so it never claims to diagnose, scre
 boundary CLAUDE.md §1 mandates; this spec makes it concrete for the highest-risk content.
 
 ### 8.2 Crisis routing — mandatory, never optional
+
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
 
 Crisis routing is the **non-negotiable** core of this feature (CLAUDE.md §1; `05` §7; `40` §3.5):
 

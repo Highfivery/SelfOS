@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { MemoryCollection } from './MemoryCollection';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
 import styles from './Books.module.css';
@@ -35,7 +34,6 @@ export function StoryMemories({ hasBook }: { hasBook: boolean }): JSX.Element {
   if (panel) {
     return (
       <div className={styles.page}>
-        {/* No CrisisFooter here — ShareMemoryPanel renders its own, and two would stack (§8.2/§7). */}
         <ShareMemoryPanel
           key={panel.memoryId ?? 'new'}
           {...(panel.memoryId ? { memoryId: panel.memoryId } : {})}
@@ -83,7 +81,6 @@ export function StoryMemories({ hasBook }: { hasBook: boolean }): JSX.Element {
           }
         />
       </Stack>
-      <CrisisFooter />
     </div>
   );
 }

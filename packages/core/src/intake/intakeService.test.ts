@@ -40,7 +40,6 @@ const PORTRAIT = {
   ],
   metrics: { valence: 0.2 },
   inferred: { communicationStyle: 'direct and warm', goals: 'feel less alone' },
-  crisisFlag: false,
 };
 
 /** Fake client: portrait JSON when asked for the closing portrait, reflection JSON for a reflection, else a reply. */
@@ -772,8 +771,7 @@ describe('intakeService', () => {
         { text: 'Works as a nurse', section: 'basics' },
         { notText: 'malformed — no text field' }, // dropped, not fatal
       ],
-      metrics: { valence: 0.4, mood: 'calm' }, // 'calm' is non-numeric → metrics salvaged away
-      crisisFlag: 'no', // non-boolean → ignored
+      metrics: { valence: 0.4, mood: 'calm' }, // 'calm' is non-numeric → metrics salvaged away // non-boolean → ignored
     };
     const res = await synthesizeIntake(synth(fs, fakeClient({ portrait: offSpec })));
     expect(res.ok).toBe(true); // salvaged, not rejected
@@ -889,7 +887,6 @@ describe('intakeService', () => {
               { text: 'Uses cannabis occasionally', section: 'health-sensitive' },
               { text: 'Sleeps reasonably well', section: 'health' },
             ],
-            crisisFlag: false,
           });
           onDelta(text);
           return Promise.resolve({ text, usage });
@@ -947,7 +944,7 @@ describe('intakeService', () => {
         if (flattenContent(options.messages.at(-1)?.content ?? '').includes('closing portrait')) {
           captured = options.messages.map((m) => flattenContent(m.content)).join('\n');
         }
-        const text = JSON.stringify({ portrait: 'p', facts: [], crisisFlag: false });
+        const text = JSON.stringify({ portrait: 'p', facts: [] });
         onDelta(text);
         return Promise.resolve({ text, usage });
       },

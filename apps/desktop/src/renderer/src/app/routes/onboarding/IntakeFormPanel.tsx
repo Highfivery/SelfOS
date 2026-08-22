@@ -56,7 +56,6 @@ function cleanAnswers(src: AnswerMap): Record<string, IntakeAnswerValue> {
  * A structured **form** intake section (18-personal-onboarding §14.3/§14.6) — renders the section's questions
  * through the shared `@selfos/answering` `QuestionnaireForm` (branch-aware, the host owns the answer state),
  * with Continue (submit, fills the profile, no AI) + Skip. The intimacy block is gated behind the one-time 18+
- * acknowledgement first. The crisis footer lives in the container, always present.
  *
  * 43 — each question carries a relationship-type sharing chip (defaulted by category, share-by-default), with a
  * per-section bulk control + the honest "informs their AI, never shown to them" explainer; the chosen scopes

@@ -5,8 +5,6 @@ import type { TestDefinition } from '../types';
  * Mood check-in — PHQ-9 (51-wellbeing-neurodivergence-reflections §1.2). The Patient Health Questionnaire-9,
  * developed by Drs. Robert L. Spitzer, Janet B.W. Williams, Kurt Kroenke and colleagues with an educational
  * grant from Pfizer Inc. — free to use, no permission required. Nine items on the standard 0–3 frequency scale
- * ("Over the last 2 weeks, how often…"). Item 9 (`phq9-9`, thoughts of self-harm) is the CRISIS trigger
- * (§5.2/§8.2): any non-"Not at all" answer raises `crisisFlag` immediately, mid-check-in.
  *
  * Reframed as a non-diagnostic REFLECTION (§8.1): the internal clinical severity bands are kept on the result
  * for trends only; the person sees a gentle, plain-language range and the always-present professional-help
@@ -67,7 +65,6 @@ export const PHQ9: TestDefinition = {
   attribution:
     'Based on the PHQ-9, developed by Drs. Robert L. Spitzer, Janet B.W. Williams, Kurt Kroenke, and colleagues, with an educational grant from Pfizer Inc. No permission required to reproduce, translate, display, or distribute.',
   items: [items],
-  crisisItems: [{ questionId: 'phq9-9', atOrAbove: 1 }],
   bands: [
     {
       upToRaw: 4,
@@ -95,7 +92,6 @@ export const PHQ9: TestDefinition = {
       clinicalKey: 'severe',
       display:
         'Your answers suggest you’ve been going through a really heavy time. You don’t have to carry that alone.',
-      crisis: true,
     },
   ],
   scoring: {

@@ -310,7 +310,7 @@ describe('Together home — tabbed IA (§3.2a)', () => {
     await waitFor(() => expect(within(tab).getByText('1')).toBeInTheDocument());
   });
 
-  it('keeps the joint challenge on the Sessions tab, and the crisis footer on every tab', async () => {
+  it('keeps the joint challenge on the Sessions tab', async () => {
     installMockBridge({
       togetherYnmStatus: () => Promise.resolve(ynmLocked()),
       togetherJointChallenges: () =>
@@ -331,9 +331,7 @@ describe('Together home — tabbed IA (§3.2a)', () => {
     // Joint challenge sits under Sessions (the "what's active between us" tab).
     expect(await screen.findByText('Share one appreciation a day')).toBeInTheDocument();
     // The not-medical line is present regardless of tab (§8.2).
-    expect(screen.getByText(/wellness support, not medical care/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: /Pulse/ }));
-    expect(screen.getByText(/wellness support, not medical care/i)).toBeInTheDocument();
   });
 });
 

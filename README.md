@@ -26,8 +26,6 @@ your own Claude API key.
 > [!IMPORTANT]
 > **SelfOS is a wellness and self-help tool — it is _not_ a medical device, _not_ therapy in the
 > clinical sense, and _not_ a substitute for professional care.** It does not diagnose or treat.
-> If you are in crisis or may be a danger to yourself or others, contact local emergency services
-> or a crisis line right away.
 
 ## What is SelfOS?
 
@@ -126,6 +124,6 @@ work are all in **[CONTRIBUTING.md](CONTRIBUTING.md)**. The full design is docum
 
 _An AI therapist &amp; life coach for reflection and self-coaching — calm, private, and entirely yours._
 
-**Not medical software.** If you are in crisis, contact local emergency services or a crisis line.
+**Not medical software.**
 
 </div>

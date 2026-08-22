@@ -27,7 +27,6 @@ import {
   Textarea,
 } from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { QuestionnaireForm } from '@selfos/answering';
 import { AlignmentReportView, AnswerList } from '../questionnaires/AlignmentReportView';
 import styles from './Inbox.module.css';
@@ -338,7 +337,6 @@ export function InboxAnswer({
             Back to Inbox
           </Button>
         </div>
-        <CrisisFooter />
       </Stack>
     );
   }
@@ -521,7 +519,6 @@ export function InboxAnswer({
             Back to Inbox
           </Button>
         </div>
-        <CrisisFooter />
       </Stack>
     );
   }
@@ -564,7 +561,6 @@ export function InboxAnswer({
               Back
             </Button>
           </div>
-          <CrisisFooter />
         </div>
       ) : (
         <>
@@ -583,7 +579,6 @@ export function InboxAnswer({
             answers={answers}
             loadImage={loadImage}
             onChange={onChange}
-            footer={<CrisisFooter />}
             wrongFact={{
               onOpen: (q) => {
                 setWrongFactQ(q);

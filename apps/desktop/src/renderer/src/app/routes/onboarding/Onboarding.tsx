@@ -16,7 +16,6 @@ import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { Switcher } from '../../Switcher';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { IntakeSectionPanel } from './IntakeSectionPanel';
 import { IntakeFormPanel } from './IntakeFormPanel';
 import { ClosingPortrait } from './ClosingPortrait';
@@ -29,7 +28,6 @@ type SectionStatus = 'notStarted' | 'inProgress' | 'skipped' | 'complete';
  * Personal onboarding — the "getting to know you" intake surface (18-personal-onboarding §3/§14). A hybrid of
  * quick structured **forms** and AI **chat**: a short gated `core` of forms produces a starter portrait that
  * releases the Member gate, while deeper/sensitive `invited` sections are offered anytime afterward. AI is
- * required for the chat sections + synthesis (§7); the crisis footer + not-medical line are always present.
  */
 export function Onboarding(): JSX.Element {
   const navigate = useNavigate();
@@ -185,7 +183,6 @@ export function Onboarding(): JSX.Element {
             <AiUnavailableNotice />
           </div>
         </Card>
-        <CrisisFooter />
         {switcherOverlay}
       </div>
     );
@@ -456,8 +453,6 @@ export function Onboarding(): JSX.Element {
           </div>
         </>
       )}
-
-      <CrisisFooter />
       {switcherOverlay}
       {portraitModal}
     </div>

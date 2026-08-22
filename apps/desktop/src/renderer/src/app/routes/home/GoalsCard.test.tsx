@@ -34,10 +34,10 @@ const goal = (over: Partial<Goal> & { id: string; text: string }): Goal => ({
   ...over,
 });
 
-function renderCard(props: { configured?: boolean; crisis?: boolean } = {}): void {
+function renderCard(props: { configured?: boolean } = {}): void {
   render(
     <MemoryRouter>
-      <GoalsCard configured={props.configured ?? true} crisis={props.crisis ?? false} />
+      <GoalsCard configured={props.configured ?? true} />
     </MemoryRouter>,
   );
 }
@@ -138,25 +138,6 @@ describe('GoalsCard (60 §3.1.3)', () => {
         expect.objectContaining({ text: 'Call your sister this week' }),
       ),
     );
-  });
-
-  it('hides the completion bar + AI suggest during a crisis, keeping the calm list (§8)', () => {
-    installMockBridge();
-    useGoalStore.setState({
-      goals: [
-        goal({
-          id: 'g1',
-          text: 'be gentle with yourself',
-          lastTouchedAt: new Date().toISOString(),
-        }),
-      ],
-      loaded: true,
-    });
-    renderCard({ configured: true, crisis: true });
-    expect(screen.queryByText(/of .* done/i)).toBeNull();
-    expect(screen.queryByRole('button', { name: /suggest goals/i })).toBeNull();
-    expect(screen.getByText('be gentle with yourself')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /new goal/i })).toBeInTheDocument();
   });
 
   it('hides AI suggest when AI is not configured', () => {

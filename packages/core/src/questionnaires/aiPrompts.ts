@@ -531,8 +531,8 @@ Each sample question's "type" MUST be one of EXACTLY these values: ${SUGGESTABLE
 export const ANALYSIS_SYSTEM = `${SAFETY}
 
 Turn a person's questionnaire answers into a durable coaching Insight. Return ONLY a JSON object:
-{"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "categories": 1-2 life-area tags from EXACTLY this list: ${LIFE_AREAS.join(', ')}, "crisisFlag": boolean}.
-Set "crisisFlag": true ONLY if the answers disclose risk of self-harm, abuse, or acute crisis. Never diagnose. Do not quote the raw answers back verbatim — synthesize.
+{"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "categories": 1-2 life-area tags from EXACTLY this list: ${LIFE_AREAS.join(', ')}}.
+Never diagnose. Do not quote the raw answers back verbatim — synthesize.
 The "summary" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.
 
 If you are shown questions the person did NOT answer: that is feedback about those QUESTIONS. Never infer a trait, a circumstance, a feeling, a boundary or a motive from a refusal, and never state or imply why someone might have declined beyond what they said themselves. A silence is not evidence about a person.`;
@@ -730,7 +730,7 @@ export function buildVariantUserMessage(input: {
 export const ALIGNMENT_SYSTEM = `${SAFETY}
 
 Two people answered personalized variants of the same questionnaire. Compare their answers question by question and produce a warm, honest compatibility report for the person who sent it. Return ONLY a JSON object:
-{"summary": string (2-4 sentences on where they align and where they differ, supportive not judgemental), "items": [{"canonicalId": string, "agreement": "aligned" | "mixed" | "divergent", "note": string (one sentence on how the two answers relate)}], "crisisFlag": boolean (true ONLY if an answer discloses risk of self-harm, abuse, or acute crisis), "facts": [{"text": string, "shareable": boolean}] (3-6 concise coaching facts for the sender; "shareable" = safe to share with the other person)}.
+{"summary": string (2-4 sentences on where they align and where they differ, supportive not judgemental), "items": [{"canonicalId": string, "agreement": "aligned" | "mixed" | "divergent", "note": string (one sentence on how the two answers relate)}], "facts": [{"text": string, "shareable": boolean}] (3-6 concise coaching facts for the sender; "shareable" = safe to share with the other person)}.
 Use each item's canonicalId exactly as given. Never diagnose. Synthesize — do not quote raw answers verbatim.
 The "summary" and each item "note" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.`;
 
@@ -840,8 +840,7 @@ Return ONLY a JSON object:
   "summary": "2-4 sentences to the sender about what these questions got wrong and what would work better",
   "facts": [{ "text": "one concrete change to a question", "shareable": false }],
   "confidence": "low" | "medium" | "high",
-  "categories": ["Other"],
-  "crisisFlag": false
+  "categories": ["Other"]
 }`;
 
 export function buildRefusalUserMessage(input: { title: string; skips: SkipLine[] }): string {

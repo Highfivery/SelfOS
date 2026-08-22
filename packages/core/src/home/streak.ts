@@ -16,14 +16,11 @@ function dayKey(d: Date): string {
  *   morning doesn't zero an otherwise-live streak). If the most recent active day is older than yesterday,
  *   the run is over and it returns `{ days: 0 }` — the caller simply shows nothing. It **never** returns a
  *   gap, a "broken"/"lost" flag, or a missed-day count.
- * - During a crisis signal it is **suppressed** (`{ days: 0, suppressed: true }`) — a struggling person is
  *   never shown a streak (§8, the safety guardrail, enforced here so it's unit-testable).
  *
  * Pure. Future-dated activity (> today) is ignored.
  */
 export function computeStreak(input: StreakInput): StreakInfo {
-  if (input.crisis) return { days: 0, suppressed: true };
-
   const active = new Set<string>();
   for (const iso of input.activity) {
     const t = Date.parse(iso);
@@ -42,7 +39,7 @@ export function computeStreak(input: StreakInput): StreakInfo {
   } else if (active.has(yesterday)) {
     anchor.setDate(anchor.getDate() - 1);
   } else {
-    return { days: 0, suppressed: false };
+    return { days: 0 };
   }
 
   // Walk backward by CALENDAR day at local noon — `setDate` handles month/DST boundaries so a near-midnight
@@ -57,5 +54,5 @@ export function computeStreak(input: StreakInput): StreakInfo {
     cursor.setDate(cursor.getDate() - 1);
   }
 
-  return { days, since, suppressed: false };
+  return { days, since };
 }

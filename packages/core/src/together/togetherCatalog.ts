@@ -60,7 +60,7 @@ function frame(framework: string): string {
   return `This is a Together guided practice for the two of you, inspired by ${framework} — it is NOT couples \
 therapy, diagnosis, or treatment, and you are an AI facilitator, not a clinician. The persona and safety \
 guidance above always take precedence: stay balanced, never take a side, hold space so both are heard, and \
-route any crisis to professional help. Move at their pace, one gentle step at a time; they can go off-script \
+Move at their pace, one gentle step at a time; they can go off-script \
 anytime and you follow them.`;
 }
 

@@ -189,7 +189,6 @@ import { NamesPhase } from './NamesPhase';
 import { TakeMap } from './TakeMap';
 import { StepActions, StepEyebrow, TakeRail, Tally } from './TakeRail';
 import { nextStepAfter, phaseForStep, stepStatuses, TAKE_STEPS, type StepId } from './takeSteps';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
@@ -2505,11 +2504,9 @@ export function AdaptiveTake(): JSX.Element {
           {/*
            * ONE footer for every phase, not one per phase. It used to be rendered inside the intro, address
            * and bank branches only — so it disappeared exactly where a disclosure happens: the probe and
-           * scenario phases are the free-text ones (`readsAsDistress` runs on a probe answer), and `done` is
-           * where someone lands after a heavy take. The Together lesson, one level down: a crisis affordance
+           * scenario phases are the free-text ones, and `done` is
            * belongs OUTSIDE the pane that changes, or a restructure silently drops it from most views.
            */}
-          <CrisisFooter />
         </Stack>
       </div>
     </div>

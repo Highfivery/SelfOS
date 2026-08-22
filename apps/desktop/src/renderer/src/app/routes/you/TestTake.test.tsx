@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { TestForm } from '@selfos/core/tests';
 import { TestTake } from './TestTake';
@@ -11,8 +10,6 @@ afterEach(() => {
   clearMockBridge();
   useTestStore.getState().reset();
 });
-
-/** A minimal PHQ-9 check-in form: two mood rows + the crisis item 9, on the 0–3 frequency scale. */
 const phq9Form: TestForm = {
   id: 'phq9',
   group: 'wellbeing',
@@ -27,7 +24,6 @@ const phq9Form: TestForm = {
   subscales: [{ key: 'phq9.total', label: 'Mood', signed: false }],
   wellbeing: true,
   attribution: 'Based on the PHQ-9 (Pfizer). No permission required.',
-  crisisItems: [{ questionId: 'phq9-9', atOrAbove: 1 }],
   items: [
     {
       id: 'phq9',
@@ -72,24 +68,5 @@ describe('TestTake — wellbeing check-in (51 §3.2)', () => {
     );
     expect(screen.getByText(/No permission required/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Begin' })).toBeInTheDocument();
-  });
-
-  it('escalates a prominent crisis banner the instant PHQ-9 item 9 is answered positive (§3.2 step 3)', async () => {
-    installMockBridge({ testsGet: () => Promise.resolve(phq9Form) });
-    renderTake();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Begin' })).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: 'Begin' }));
-
-    // No crisis surface yet.
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-
-    // Answer item 9 with any non-"Not at all" value → the crisis banner appears immediately, mid-check-in.
-    const item9 = screen.getByRole('radiogroup', { name: /better off dead/i });
-    await userEvent.click(within(item9).getByRole('radio', { name: 'Several days' }));
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent(/please reach out to someone who can help/i);
-    // The crisis surface is independent of finishing — "Stop check-in" is available.
-    expect(screen.getByRole('button', { name: 'Stop check-in' })).toBeInTheDocument();
   });
 });

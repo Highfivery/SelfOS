@@ -33,7 +33,6 @@ const KIND_ICON: Record<AttentionKind, LucideIcon> = {
  * your goals, the weekly check-in, a soft "ask someone" nudge). Distinct from the growth-oriented "For you" band
  * (the overlapping items
  * are filtered out of it so nothing nags twice). Each row deep-links to where the action happens. Self-hides
- * when the queue is clear. Per-person + crisis/proactivity-aware (the nudges are pre-filtered by the caller).
  */
 export function NeedsAttentionCard({ items }: { items: AttentionItem[] }): JSX.Element | null {
   const navigate = useNavigate();

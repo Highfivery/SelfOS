@@ -10,7 +10,6 @@ export const CELEBRATION_WINDOW_DAYS = 3;
  * eligible one wins. The renderer shows a transient toast and records the returned `key` (device-local,
  * per-person) so a re-visit doesn't re-celebrate.
  *
- * The caller is responsible for suppressing celebration entirely during crisis / proactivity-off / brand-new
  * (§3.5/§8) — this helper only chooses WHICH completion, never WHETHER the surface is allowed.
  */
 export function pendingCelebration(

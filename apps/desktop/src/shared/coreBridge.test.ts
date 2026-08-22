@@ -271,7 +271,6 @@ function makeHost(): {
           text: JSON.stringify({
             summary: 'Largely aligned, with one difference.',
             items: [],
-            crisisFlag: false,
             facts: [{ text: 'They differ on pace.', shareable: true }],
           }),
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -298,21 +297,16 @@ function makeHost(): {
             people: [],
             moodValence: -0.3,
             moodEnergy: 0.1,
-            crisisFlag: false,
           }),
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
       // Together wrap-up (58 §3.8): "write the wrap-up for this session between A and B" → a per-partner
-      // report. crisisFlag is set for a partner whose attributed lines contain "CRISIS" so a test can assert
-      // crisis routes to that twin only; the SHARED summary never carries the word.
       const wrapMatch = /write the wrap-up for this session between (.+?) and (.+?)\./.exec(
         userText,
       );
       if (wrapMatch) {
         const [, nameA, nameB] = wrapMatch;
-        const crisisFor = (name: string): boolean =>
-          new RegExp(`^${name}: .*CRISIS`, 'm').test(userText);
         return Promise.resolve({
           text: JSON.stringify({
             summary: 'You both showed up honestly.',
@@ -326,14 +320,12 @@ function makeHost(): {
                 reflection: `A reflection for ${nameA}.`,
                 facts: ['wants more time'],
                 sensitiveFacts: [],
-                crisisFlag: crisisFor(nameA ?? ''),
               },
               {
                 name: nameB,
                 reflection: `A reflection for ${nameB}.`,
                 facts: ['values reassurance'],
                 sensitiveFacts: ['a desire preference'],
-                crisisFlag: crisisFor(nameB ?? ''),
               },
             ],
             // Concrete next steps → deduped standing pair agreements (§3.9). Same on every run, so a
@@ -529,8 +521,6 @@ function makeHost(): {
             metrics: { emotionalIntensity: 0.4, valence: -0.1 },
             // 66 §3.4 — a voiced commitment, so the synthesis pass also produces a tracked Goal.
             goals: ['Notice one steady thing each evening'],
-            crisisFlag: false,
-            distressSignal: false,
           })
         : // A guided couples turn: append a step marker when the user asks to move to "step two" (§3.10),
           // so the derived-step test bites. Stripped from the saved text by the service.
@@ -2131,62 +2121,6 @@ describe('createCoreBridge', () => {
     await bridge.coachingSetPrefs({ proactivity: 'off' });
     expect((await bridge.coachingSynthesize({})).ok).toBe(false);
     expect((await bridge.coachingGetSynthesis())?.observation).toContain('Connection');
-  });
-
-  it('the daily-reflection toggle + crisis suppress the AUTO reflection without spending (60 §6.3/§8)', async () => {
-    const { bridge, host, ownerId } = await freshOwner();
-    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
-    const ctx = (await host.host.vaultAndKey())!;
-    let synthesisCalls = 0;
-    host.host.claude = {
-      send: () => Promise.resolve(''),
-      stream: () => {
-        synthesisCalls += 1;
-        return Promise.resolve({
-          text: JSON.stringify({ observation: 'x', sources: [] }),
-          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
-        });
-      },
-    };
-    const seed = (id: string, crisisFlag = false): Promise<void> =>
-      saveInsight(ctx.fs, ctx.key, {
-        id,
-        schemaVersion: 1,
-        source: 'session',
-        subjectPersonId: ownerId,
-        summary: `reflected on ${id}`,
-        facts: [],
-        confidence: 'medium',
-        categories: ['Relationships'],
-        approved: true,
-        ...(crisisFlag ? { crisisFlag: true } : {}),
-        provenance: { conversationId: id, at: new Date().toISOString() },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    await seed('a');
-    await seed('b');
-    await seed('c');
-
-    // Daily reflection OFF → the auto pass is a calm no-op (proactivity stays gentle); zero spend.
-    await bridge.coachingSetPrefs({ dailyReflection: false });
-    expect(await bridge.coachingSynthesize({ auto: true })).toMatchObject({
-      ok: false,
-      reason: 'EMPTY',
-    });
-    expect(synthesisCalls).toBe(0);
-    // The toggle merged — proactivity is untouched.
-    expect((await bridge.coachingGetPrefs())?.proactivity ?? 'gentle').toBe('gentle');
-
-    // Re-enable, but a recurring-crisis signal (≥2 flags in 14 days) suppresses the auto reflection.
-    await bridge.coachingSetPrefs({ dailyReflection: true });
-    await seed('x1', true);
-    await seed('x2', true);
-    expect(await bridge.coachingSynthesize({ auto: true })).toMatchObject({
-      ok: false,
-      reason: 'EMPTY',
-    });
-    expect(synthesisCalls).toBe(0);
   });
 
   describe('auto check-ins (63)', () => {
@@ -7519,7 +7453,6 @@ describe('createCoreBridge', () => {
             { text: 'Works as a nurse', section: 'basics' },
             { text: 'Enjoys being dominant in bed', section: 'intimacy' },
           ],
-          crisisFlag: false,
         });
         onDelta(text);
         return Promise.resolve({
@@ -7581,7 +7514,6 @@ describe('createCoreBridge', () => {
         const text = JSON.stringify({
           portrait: 'You value honesty.',
           facts: [{ text: 'Values honesty above all', section: 'values' }],
-          crisisFlag: false,
         });
         onDelta(text);
         return Promise.resolve({
@@ -9172,31 +9104,6 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.togetherGet(sessionId))?.status).toBe('complete');
     await asPerson(host, angel);
     expect((await bridge.togetherGet(sessionId))?.status).toBe('complete');
-  });
-
-  it('a crisis flag routes to the affected partner’s twin ONLY, never into the shared report (§8.5)', async () => {
-    const { host, bridge, ben, angel } = await seedPair();
-    const created = await bridge.togetherCreate({ partnerPersonId: angel });
-    const sessionId = created.ok ? created.session.id : '';
-    await asPerson(host, angel);
-    await bridge.togetherAccept(sessionId);
-    // Angel discloses crisis in a SHARED message (the fake flags a partner whose line contains "CRISIS").
-    await bridge.togetherSendMessage({ sessionId, text: 'CRISIS I feel hopeless.' });
-
-    await asPerson(host, ben);
-    const wrap = await bridge.togetherWrapUp({ sessionId });
-    expect(wrap.ok).toBe(true);
-    if (wrap.ok) expect(wrap.report.summary).not.toContain('CRISIS');
-    const ctx = (await host.host.vaultAndKey())!;
-    // The crisisFlag lands on the MAIN twin (the non-restricted one); scope past any intimacy companion.
-    const angelMain = (await listInsightsForPerson(ctx.fs, ctx.key, angel)).find(
-      (i) => i.source === 'together' && !i.facts.some((f) => f.restricted),
-    );
-    const benMain = (await listInsightsForPerson(ctx.fs, ctx.key, ben)).find(
-      (i) => i.source === 'together' && !i.facts.some((f) => f.restricted),
-    );
-    expect(angelMain?.crisisFlag).toBe(true);
-    expect(benMain?.crisisFlag).toBeUndefined();
   });
 
   it('agreements round-trip inline (create → edit → retire); report staleness derives; a non-participant is refused (§3.9/§11 #2)', async () => {
@@ -10995,76 +10902,6 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // A manual "Refresh now" never touches the throttle stamp.
     await bridge.booksRefreshCheck({ bookId, auto: false });
     expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
-  });
-
-  it('story: recurring crisis suppresses the AUTO rewrite (host-side, §8) but a manual refresh still rewrites', async () => {
-    const { host, bridge, ownerId } = await freshOwner();
-    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
-    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const ctx = (await host.host.vaultAndKey())!;
-    const book = await bridge.booksCreate({
-      type: 'biography',
-      title: 'The Story of Ben',
-      config: {
-        voice: 'third',
-        style: 'warm',
-        length: 'standard',
-        autoRefresh: true,
-        typeOptions: {},
-        sourceIds: [],
-      },
-    });
-    const bookId = book!.id;
-    const gen = await bridge.booksGenerateFoundations({ bookId });
-    if (!gen.ok) throw new Error('foundations failed');
-    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.booksGenerateChapters({ bookId });
-    if (!chapters.ok) throw new Error('chapters failed');
-    const chapterId = chapters.bundle.chapters[0]!.id;
-
-    // Induce drift (a rewrite candidate) via an exclusion.
-    await bridge.booksExclude({ bookId, kind: 'topic', value: 'warm oil' });
-    expect((await bridge.booksNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
-      chapterId,
-    ]);
-
-    // Seed a recurring-crisis signal (≥2 approved crisis flags in 14 days) on the person's OWN insights.
-    const seedCrisis = (id: string): Promise<void> =>
-      saveInsight(ctx.fs, ctx.key, {
-        id,
-        schemaVersion: 1,
-        source: 'session',
-        subjectPersonId: ownerId,
-        summary: `hard week ${id}`,
-        facts: [],
-        confidence: 'medium',
-        categories: ['Emotions & patterns'],
-        approved: true,
-        crisisFlag: true,
-        provenance: { conversationId: id, at: new Date().toISOString() },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    await seedCrisis('x1');
-    await seedCrisis('x2');
-
-    // The AUTO cadence must NOT spend during recurring distress — the stale chapter stays stale, nothing rewrites.
-    const auto = await bridge.booksRefreshCheck({ bookId, auto: true });
-    expect(auto.rewritten).toBe(0);
-    // Detection is free, so it still ran — but nothing was spent and nothing was rewritten.
-    expect((await bridge.booksNewMaterial({ bookId })).length).toBeGreaterThan(0);
-
-    // Accepting is the explicit act that spends — and it is the ONLY thing that rewrites (72 §3.6). The
-    // offline fake returns the same prose each pass, so the tell is the revision bump, not the text.
-    const before = auto.bundle?.chapters.find((c) => c.id === chapterId)?.revision ?? 0;
-    const accepted = await bridge.booksAcceptMaterial({ bookId, chapterId });
-    expect(accepted.ok).toBe(true);
-    const after = await bridge.booksGet({ bookId });
-    expect(after?.chapters.find((c) => c.id === chapterId)?.revision).toBeGreaterThan(before);
-    // The proposal clears once it's been woven in.
-    expect((await bridge.booksNewMaterial({ bookId })).map((e) => e.chapterId)).not.toContain(
-      chapterId,
-    );
   });
 
   it('story: the title workshop — N candidates + essence regen, gated + honest AI-off (§16.4)', async () => {

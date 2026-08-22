@@ -4,15 +4,13 @@ import { listGoals } from '../goals/goalService';
 import { listConversations } from '../conversations/conversationService';
 import { listDreams } from '../dreams/dreamService';
 import { listBooks } from '../books/storyService';
-import { listInsightsForPerson } from '../insights/insightStore';
 import { computeStreak } from '../home/streak';
-import { aggregateCrisisSignal } from '../coaching/crisisSignal';
 
 /**
  * Milestone detection for family F (67 §3.2) — deterministic, no AI. A milestone is a genuine, celebratory
  * moment worth an email: a goal reached, a streak crossed, a Story book published ("ready to read"). Each
  * carries a STABLE `sourceKey` so `sendFamilyEmail`'s idempotency sends it exactly once. Nothing is sent
- * here — the reconcile does that, gated on the family opt-in + engagement readiness (crisis-suppressed, §7).
+ * here — the reconcile does that, gated on the family opt-in + engagement readiness (§7).
  */
 
 /** The streak lengths worth celebrating (days). */
@@ -27,9 +25,7 @@ export interface EmailMilestone {
 }
 
 /**
- * Detect the person's currently-reached milestones (67 §3.2 family F). Deterministic. A crisis suppresses
- * the streak (a struggling person is never streak-shamed, §8); goals + a published book still count (they're
- * unambiguously positive, and the reconcile's own crisis gate suppresses the SEND anyway).
+ * Detect the person's currently-reached milestones (67 §3.2 family F). Deterministic.
  */
 export async function detectMilestones(
   fs: FileSystem,
@@ -37,14 +33,12 @@ export async function detectMilestones(
   personId: string,
   now: Date,
 ): Promise<EmailMilestone[]> {
-  const [goals, conversations, dreams, books, insights] = await Promise.all([
+  const [goals, conversations, dreams, books] = await Promise.all([
     listGoals(fs, key, personId),
     listConversations(fs, key, personId),
     listDreams(fs, key, personId),
     listBooks(fs, key, personId),
-    listInsightsForPerson(fs, key, personId),
   ]);
-  const crisis = aggregateCrisisSignal({ insights, now, nightmareNudge: false }).recurring;
   const out: EmailMilestone[] = [];
 
   // Goals reached — one celebration per done goal.
@@ -66,7 +60,6 @@ export async function detectMilestones(
       ...dreams.map((d) => d.createdAt),
       ...goals.map((g) => g.lastTouchedAt ?? g.updatedAt),
     ],
-    crisis,
   });
   const top = STREAK_MILESTONES.filter((t) => streak.days >= t).pop();
   if (top !== undefined)

@@ -19,7 +19,6 @@ import {
   Text,
   TrendLine,
 } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './DreamPatterns.module.css';
 
 const WINDOW_OPTIONS: ReadonlyArray<SegmentOption<DreamPatternWindow>> = [
@@ -87,14 +86,6 @@ export function DreamPatterns(): JSX.Element {
           aria-label="Pattern time window"
         />
       </div>
-
-      {stats?.nightmareNudge ? (
-        <Banner tone="warning">
-          You’ve noted some distressing dreams recently. Recurring nightmares can be worth talking
-          through — with someone you trust, or a professional. There’s support below if you’d like
-          it.
-        </Banner>
-      ) : null}
 
       {empty ? (
         <div className={styles.emptyState}>
@@ -271,8 +262,6 @@ export function DreamPatterns(): JSX.Element {
           </Card>
         </>
       )}
-
-      <CrisisFooter />
     </div>
   );
 }

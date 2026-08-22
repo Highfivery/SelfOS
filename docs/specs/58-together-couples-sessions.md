@@ -1186,6 +1186,12 @@ convenience:
 
 ### 8.5 Escalation, coercion, and crisis in a shared room
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 - **Flooding/escalation**: the addendum instructs the coach to slow down, validate both sides, and
   propose a structured pause (the Gottman flooding protocol) when exchanges escalate — never to
   adjudicate a winner.

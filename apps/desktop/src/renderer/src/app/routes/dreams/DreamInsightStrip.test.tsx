@@ -18,7 +18,6 @@ function stats(overrides: Partial<DreamPatternStats>): DreamPatternStats {
     nightmareCount: 0,
     moodTrend: [],
     vividnessTrend: [],
-    nightmareNudge: false,
     ...overrides,
   };
 }

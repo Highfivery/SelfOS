@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
-import { aggregateCrisisSignal } from '../coaching/crisisSignal';
 import { memFileSystem } from '../host/memFileSystem';
 import { getInsight, listInsightsForPerson } from '../insights';
 import { matrixRowKey } from '../schemas';
 import type { ScoreAnswers } from './scoring';
 import { getTest } from './testCatalog';
-import { deleteResult, listResults, takeTest } from './testService';
+import { listResults, takeTest } from './testService';
 import type { TestDefinition } from './types';
 
 const key = generateMasterKey();
@@ -41,7 +40,6 @@ describe('wellbeing reflections — deterministic band scoring + facts (51 §5.1
 
     expect(result.scores[0]!.raw).toBe(11);
     expect(result.scores[0]!.band).toBe('moderate'); // internal clinicalKey kept (never shown clinically)
-    expect(result.crisisFlag).toBeUndefined();
 
     const insight = await getInsight(fs, key, 'p1', result.insightId!);
     expect(insight?.source).toBe('test');
@@ -60,55 +58,7 @@ describe('wellbeing reflections — deterministic band scoring + facts (51 §5.1
     expect(fact.shareableTypes).toEqual(['partner']);
   });
 
-  it('PHQ-9 item 9 positive raises crisisFlag on BOTH the result and the derived Insight (even at a low band)', async () => {
-    const fs = memFileSystem();
-    const def = getTest('phq9')!;
-    const result = await takeTest(
-      fs,
-      key,
-      def,
-      { personId: 'p1', answers: byRow(def, { 'phq9-9': 1 }) },
-      new Date(),
-      ids,
-    );
-    expect(result.scores[0]!.raw).toBe(1);
-    expect(result.scores[0]!.band).toBe('minimal');
-    expect(result.crisisFlag).toBe(true);
-    const insight = await getInsight(fs, key, 'p1', result.insightId!);
-    expect(insight?.crisisFlag).toBe(true);
-  });
-
-  it('a crisis-flagged wellbeing Insight is counted by aggregateCrisisSignal (40 §3.5) — no change needed', async () => {
-    const fs = memFileSystem();
-    const def = getTest('phq9')!;
-    const now = new Date('2026-06-26T10:00:00Z');
-    // Two crisis-flagged check-ins in-window → recurring distress surfaces the supportive banner.
-    await takeTest(
-      fs,
-      key,
-      def,
-      { personId: 'p1', answers: byRow(def, { 'phq9-9': 2 }) },
-      now,
-      ids,
-    );
-    await takeTest(
-      fs,
-      key,
-      getTest('gad7')!,
-      { personId: 'p1', answers: uniform(getTest('gad7')!, 3) },
-      now,
-      ids,
-    );
-    // The PHQ-9 above is crisis-flagged; add a second crisis flag via another PHQ-9-style insight.
-    const insights = await listInsightsForPerson(fs, key, 'p1');
-    const flagged = insights.filter((i) => i.crisisFlag);
-    expect(flagged.length).toBeGreaterThanOrEqual(1);
-    // One crisis flag alone is not "recurring"; the aggregation reads any-source crisisFlag for free.
-    const signal = aggregateCrisisSignal({ insights, nightmareNudge: false, now });
-    expect(signal.count).toBe(flagged.length);
-  });
-
-  it('GAD-7: uniform answers land each of the four bands; severe is NOT a crisis', async () => {
+  it('GAD-7: uniform answers land each of the four bands', async () => {
     const fs = memFileSystem();
     const def = getTest('gad7')!;
     const cases: [number, string][] = [
@@ -127,7 +77,6 @@ describe('wellbeing reflections — deterministic band scoring + facts (51 §5.1
         ids,
       );
       expect(result.scores[0]!.band).toBe(band);
-      expect(result.crisisFlag).toBeUndefined();
     }
   });
 
@@ -214,38 +163,6 @@ describe('wellbeing reflections — deterministic band scoring + facts (51 §5.1
       ids,
     );
     expect(low.scores[0]!.band).toBe('few');
-  });
-
-  it('deleting the latest (crisis) take re-derives the Insight from the new latest — the stale crisis flag clears', async () => {
-    const fs = memFileSystem();
-    const def = getTest('phq9')!;
-    // First take: benign (item 9 = 0). Second (latest) take: a positive item 9 → crisis-flagged.
-    const first = await takeTest(
-      fs,
-      key,
-      def,
-      { personId: 'p1', answers: byRow(def, { 'phq9-1': 1 }) },
-      new Date('2026-06-01T00:00:00Z'),
-      ids,
-    );
-    const crisis = await takeTest(
-      fs,
-      key,
-      def,
-      { personId: 'p1', answers: byRow(def, { 'phq9-9': 2 }) },
-      new Date('2026-06-10T00:00:00Z'),
-      ids,
-    );
-    expect(crisis.crisisFlag).toBe(true);
-    expect((await getInsight(fs, key, 'p1', crisis.insightId!))?.crisisFlag).toBe(true);
-
-    // Delete the latest (crisis) take → the Insight re-derives from the remaining benign take, dropping the flag.
-    await deleteResult(fs, key, 'p1', 'phq9', crisis.id, def);
-    const remaining = await listResults(fs, key, 'p1', 'phq9');
-    expect(remaining.map((r) => r.id)).toEqual([first.id]);
-    const insight = await getInsight(fs, key, 'p1', first.insightId!);
-    expect(insight?.crisisFlag).toBeUndefined();
-    expect(insight?.provenance.testResultId).toBe(first.id); // points at the surviving take
   });
 
   it('retake reuses the single Insight, sets reTakeOf, and keeps every dated result (trend)', async () => {

@@ -34,16 +34,9 @@ function formatDue(iso: string, now: Date): string {
  * goals, all from Home. Shows a completion bar + the active goals that most want attention (each with a
  * one-tap "Done" / "Still on it"), an inline "+ New goal", and (AI-configured) a metered "Suggest goals" tap
  * that proposes 2-3 tailored goals to accept/dismiss (no per-load spend, persists nothing). An empty state
- * invites the first goal. "See all" opens the full Goals management in Memory. Crisis softens it: the
  * completion bar + the AI suggest are hidden (no gamification, §8), leaving the calm list + create.
  */
-export function GoalsCard({
-  configured,
-  crisis,
-}: {
-  configured: boolean;
-  crisis: boolean;
-}): JSX.Element {
+export function GoalsCard({ configured }: { configured: boolean }): JSX.Element {
   const navigate = useNavigate();
   const goals = useGoalStore((s) => s.goals);
   const create = useGoalStore((s) => s.create);
@@ -159,7 +152,7 @@ export function GoalsCard({
           </Text>
         ) : (
           <>
-            {!crisis && total > 0 ? (
+            {total > 0 ? (
               <ProportionBar label="Completed" value={summary.doneCount} total={total} />
             ) : null}
             <ul className={styles.goalList}>
@@ -228,7 +221,7 @@ export function GoalsCard({
             <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
               <Plus size={15} aria-hidden="true" /> New goal
             </Button>
-            {!crisis && configured ? (
+            {configured ? (
               <Button
                 variant="ghost"
                 size="sm"

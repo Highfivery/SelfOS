@@ -7,7 +7,6 @@ import { availableRelationshipTypesFor } from '../../availableRelationshipTypes'
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { RelationshipInsightsCard } from './RelationshipInsightsCard';
 import { SharingByCategory } from './SharingByCategory';
 import { SharingByPerson } from './SharingByPerson';
@@ -38,7 +37,6 @@ const TAB_ICON = {
  * The unified Sharing transparency dashboard (68 §3) — "the one complete view of everything about you that
  * reaches anyone." A stats header + four tabs (By person / By category / Everything / Reflections) + a
  * filter/sort/search bar, folding in profile-field + dream-image sharing alongside memories + answers. Gated
- * `memory.own`; per-person (the store resets on switch). Crisis footer + not-medical line always present (§8).
  */
 export function SharingAndRelationships(): JSX.Element {
   const navigate = useNavigate();
@@ -252,8 +250,6 @@ export function SharingAndRelationships(): JSX.Element {
           )
         ) : null}
       </section>
-
-      <CrisisFooter />
     </div>
   );
 }

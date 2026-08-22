@@ -368,6 +368,12 @@ loosens them — it applies them to more, franker exercises.
 
 ### 8.2 Crisis routing (unchanged, non-negotiable)
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Intimacy topics can surface acute distress — abuse, coercion, assault history, self-harm. Crisis handling is
 unchanged (`05` §7 / `09` §7): warmth, take it seriously, route to professional/emergency help, never manage a
 crisis alone. The SAFETY block (with the crisis instruction) leads every prompt and the new addenda **reinforce,

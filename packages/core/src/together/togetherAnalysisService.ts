@@ -33,7 +33,7 @@ import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 // One metered `together.analyze` pass (initiator-billed, extendedThinking:false) over the MUTUALLY-VISIBLE
 // transcript only — every `privateAside` message (and its attachments) is structurally excluded from the
 // analyze input HOST-SIDE, before prompt assembly (a code boundary, not a prompt instruction; §3.8). Produces:
-//   1. a SharedReport (both see; crisis detail routed AWAY — §8.5),
+//   1. a SharedReport (both partners see it),
 //   2. two twin insights (source:'together', one per partner, feeding ONLY that partner's own context; sexual
 //      facts stored `restricted` so they never cross to anyone else's context, incl. future prompts — §3.8),
 //   3. dyad metrics on both twins + mirrored on the report (the pulse source, §3.10a).
@@ -62,7 +62,7 @@ const actionItemList = tolerantArray(ActionItemSchema, { text: '' }, (a) => a.te
 /**
  * A per-partner block in the analysis reply. `name` matches one of the two participant names given in the
  * prompt (resolved back to a person id STRICTLY — an unresolvable name writes no twin, never a mis-subjected
- * one). `crisisFlag` is preserved (.catch(undefined), never coerced — §8). Sexual/intimacy content goes in
+ * one). Sexual/intimacy content goes in
  * `sensitiveFacts` → stored `restricted` (own-context-only).
  */
 const PartnerBlockSchema = z.object({
@@ -70,13 +70,12 @@ const PartnerBlockSchema = z.object({
   reflection: z.string().catch('').default(''),
   facts: strList,
   sensitiveFacts: strList,
-  crisisFlag: z.boolean().optional().catch(undefined),
 });
 
 /**
  * The wrap-up AI contract — tolerant by design (37 §3.1): require only `summary`; every list per-element
- * salvages; dyad numbers `.catch` to neutral; `crisisFlag` preserved. The report summary/themes/workedThrough
- * are SHARED (crisis-free); the per-partner reflections/facts are PRIVATE to each partner.
+ * salvages; dyad numbers `.catch` to neutral. The report summary/themes/workedThrough
+ * are SHARED; the per-partner reflections/facts are PRIVATE to each partner.
  */
 const TogetherAnalysisDraftSchema = z.object({
   summary: z.string().min(1),
@@ -108,7 +107,7 @@ const ANALYSIS_INSTRUCTION = (
 between ${nameA} and ${nameB}. Respond with ONLY a single JSON object (no markdown fences, no prose outside \
 it) with these keys:
 - "summary": a brief, warm, BALANCED 1-3 sentence recap BOTH partners will see. Never assign blame. NEVER \
-include any self-harm/suicide/abuse/crisis detail here — the shared summary stays supportive and detail-free.
+keep the shared summary supportive and detail-free.
 - "themes": the main topics or threads (array of short strings)
 - "workedThrough": what the two of them worked through or moved toward together (array of short strings)
 - "connectionValence": overall warmth/closeness in the session, -1.0 (distant/tense) to 1.0 (close/warm) (number)
@@ -118,7 +117,6 @@ include any self-harm/suicide/abuse/crisis detail here — the shared summary st
   - "reflection": a warm 1-3 sentence reflection written TO that partner about THEIR side (seen only by them)
   - "facts": short durable facts about that partner's experience/needs from this session (array of strings)
   - "sensitiveFacts": any facts touching sex or intimacy — kept PRIVATE to that partner (array of strings)
-  - "crisisFlag": true ONLY if THAT partner disclosed self-harm, suicide, or acute crisis (boolean)
 - "actionItems": concrete next steps the two of them actually named or agreed to (NOT vague suggestions) — \
 each { "text": short imperative shared by both, "timeframe": optional like "this week" }. Only include real, \
 mutually-owned commitments; use [] if none were named.${avoid}`;
@@ -299,7 +297,7 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
 
   let draft = TogetherAnalysisDraftSchema.safeParse(extractJsonObject(result.text)).data;
   // Salvage a leading `summary` ONLY for a complete-but-malformed reply — never a TRUNCATED one (the per-partner
-  // crisisFlag is late in the contract, so a cut-off reply would silently drop it; report TRUNCATED instead, §8).
+  // report TRUNCATED instead).
   if (!draft && classifyParseFailure(result.text) !== 'TRUNCATED') {
     const summary = salvageJsonObjectField(result.text, 'summary');
     if (summary?.trim()) draft = TogetherAnalysisDraftSchema.parse({ summary });
@@ -400,9 +398,6 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
       categories: ['Relationships'],
       approved: true, // twins auto-enter that partner's own context (like a session insight)
       provenance: { togetherSessionId: session.id, pairKey: session.pairKey, at },
-      // crisisFlag lands on the AFFECTED partner's twin ONLY (set when true) — the report carries no crisis
-      // detail (§8.5); a non-crisis twin has no flag, so the §40 aggregation only ever sees real signals.
-      ...(block.crisisFlag === true ? { crisisFlag: true } : {}),
       createdAt: priorMain?.createdAt ?? at,
       updatedAt: at,
     };

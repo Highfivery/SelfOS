@@ -1,5 +1,5 @@
 import type { AlignmentReport, SendAnswer } from '@shared/schemas';
-import { Banner, Markdown, Stack, Text } from '../../../design-system/components';
+import { Markdown, Stack, Text } from '../../../design-system/components';
 import styles from './Questionnaires.module.css';
 
 const AGREEMENT_LABEL = { aligned: 'Aligned', mixed: 'Mixed', divergent: 'Different' } as const;
@@ -40,17 +40,10 @@ export function AnswerList({ answers }: { answers: SendAnswer[] }): JSX.Element 
 /**
  * The shared rendering of a compatibility alignment report (08-questionnaires §3.6) — summary + a
  * per-question agreement chip. Used by both the sender's Results and the answerer's Inbox joint report,
- * so the one report reads identically on both sides. A crisis flag leads with resources (§8.2).
  */
 export function AlignmentReportView({ report }: { report: AlignmentReport }): JSX.Element {
   return (
     <Stack gap={3}>
-      {report.crisisFlag ? (
-        <Banner tone="warning">
-          Something in these answers may need care. If anyone is in crisis, contact local emergency
-          services or a crisis line (in the US, call or text 988).
-        </Banner>
-      ) : null}
       <Markdown>{report.summary}</Markdown>
       <Stack gap={2}>
         {report.items.map((item) => (

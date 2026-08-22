@@ -9,7 +9,6 @@ import styles from './Home.module.css';
  * The daily reflection card (60 §3.1.4) — the cross-feature AI observation (40 synthesis) in a warm
  * companion voice. The cache is auto-populated **once per day** by the app-wide synthesis cadence hook
  * (AppShell `useCoachingSynthesis` → the bridge gates on AI + proactivity + the `dailyReflection` toggle +
- * budget + a ≥N-new-insight threshold + no-crisis, ≤1/day — 60 §6.2/§6.3/§8); this card just reads that cache
  * and offers an explicit Refresh / "Reflect on my week" (metered, the existing rules). AI-off → the role-aware
  * notice, never a dead button.
  */

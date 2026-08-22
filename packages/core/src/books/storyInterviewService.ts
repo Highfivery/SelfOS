@@ -746,7 +746,6 @@ const PENDING_STATUSES = new Set(['sent', 'opened', 'inProgress']);
 /**
  * The autonomous interview loop (§3.7, owner decision 2026-07-16 = the spec-63 cadence): when warranted, run a
  * gap pass and mint ONE story check-in from the top gap into the person's Inbox. Self-pacing + gentle:
- *  - never spends during a crisis (`auto` + `crisis`);
  *  - keeps AT MOST ONE open check-in at a time — while one is unanswered it mints nothing (the back-off), and an
  *    ignored one lapses after `STORY_CHECKIN_EXPIRY_DAYS` so the loop isn't blocked forever;
  *  - the AUTO cadence re-checks at most every `STORY_INTERVIEW_INTERVAL_DAYS`; a manual check bypasses that but
@@ -756,11 +755,8 @@ const PENDING_STATUSES = new Set(['sent', 'opened', 'inProgress']);
  */
 export async function runStoryInterviewCadence(
   deps: AiDeps,
-  args: { bookId: string; auto: boolean; crisis?: boolean },
+  args: { bookId: string; auto: boolean },
 ): Promise<StoryInterviewCadenceResult> {
-  // The cadence never spends during an active crisis (§8).
-  if (args.auto && args.crisis) return { outcome: 'crisis' };
-
   const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
   const outline = book ? await getOutline(deps.fs, deps.key, deps.personId, args.bookId) : null;
   const chapterCount = outline?.parts.reduce((n, p) => n + p.chapters.length, 0) ?? 0;

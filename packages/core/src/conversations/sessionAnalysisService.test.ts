@@ -28,7 +28,6 @@ const ANALYSIS_JSON = JSON.stringify({
   people: ['Sam'],
   moodValence: -0.4,
   moodEnergy: 0.2,
-  crisisFlag: false,
 });
 
 function analysisClient(text = ANALYSIS_JSON): ClaudeClient {
@@ -417,31 +416,6 @@ describe('endAndSummarize', () => {
     if (result.ok) expect(result.insight.summary).toBe('A calmer end to a hard day.');
   });
 
-  it('reports TRUNCATED (not a silent partial) when the crisis tail is cut off (§8 safety)', async () => {
-    await savePerson(fs, key, person('p1', 'Alex'));
-    await saveConversation(fs, key, conversation('c1', 'p1'));
-    // The summary is complete, but the object is cut off BEFORE `crisisFlag` (the last key). Salvaging just
-    // the summary would silently default crisisFlag→false and lose a possible crisis signal — so this must be
-    // reported TRUNCATED (a retry) so the flag can surface, matching the dream-synthesis path.
-    const truncated = '{"summary":"A calmer end to a hard day.","themes":["work str';
-    const result = await endAndSummarize(deps({ client: analysisClient(truncated) }));
-    expect(result).toMatchObject({ ok: false, reason: 'TRUNCATED' });
-    // The session is NOT marked complete on a truncated reply, so re-running can still surface the flag.
-    const conv = await getConversation(fs, key, 'p1', 'c1');
-    expect(conv?.status).not.toBe('complete');
-  });
-
-  it('preserves the crisis flag even when a list element is malformed (§8)', async () => {
-    await savePerson(fs, key, person('p1', 'Alex'));
-    await saveConversation(fs, key, conversation('c1', 'p1'));
-    // One theme is a non-string (drops), but crisisFlag must survive the per-element salvage.
-    const text =
-      '{"summary":"Concerning session.","themes":["ok",123],"crisisFlag":true,"goals":[],"followUps":[],"people":[]}';
-    const result = await endAndSummarize(deps({ client: analysisClient(text) }));
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.insight.crisisFlag).toBe(true);
-  });
-
   it('reports TRUNCATED distinctly from MALFORMED (37 §3.2)', async () => {
     await savePerson(fs, key, person('p1', 'Alex'));
     await saveConversation(fs, key, conversation('c1', 'p1'));
@@ -495,28 +469,6 @@ describe('endAndSummarize', () => {
     // Still exactly one insight for the person (overwrote, didn't duplicate).
     expect(await listInsightsForPerson(fs, key, 'p1')).toHaveLength(1);
   });
-
-  it('carries a crisis flag through to the Insight', async () => {
-    const result = await endAndSummarize(
-      deps({
-        client: analysisClient(
-          JSON.stringify({
-            summary: 's',
-            themes: [],
-            goals: [],
-            followUps: [],
-            people: [],
-            moodValence: -0.9,
-            moodEnergy: -0.5,
-            crisisFlag: true,
-          }),
-        ),
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.insight.crisisFlag).toBe(true);
-  });
 });
 
 describe('endAndSummarize — depth invitations (29, the free by-product)', () => {
@@ -529,7 +481,6 @@ describe('endAndSummarize — depth invitations (29, the free by-product)', () =
       people: [],
       moodValence: 0,
       moodEnergy: 0,
-      crisisFlag: false,
       depthInvitations: [{ sectionId, theme: 'your father', rationale: 'family came up a lot' }],
     });
 

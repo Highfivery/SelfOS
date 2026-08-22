@@ -73,7 +73,6 @@ const phq9: TestSummary = {
     minimal: 'Your answers suggest your mood has felt mostly okay lately.',
     moderate: 'Your answers suggest a fair amount of low mood has been weighing on you lately.',
   },
-  crisisItems: [{ questionId: 'phq9-9', atOrAbove: 1 }],
 };
 const dirtyTalk: TestSummary = {
   id: 'dirty-talk',
@@ -349,15 +348,6 @@ describe('Tests hub', () => {
     );
     // The per-instrument framing lives on the intro + result screens (51 §8.1), not repeated in the catalog.
     expect(screen.queryByText('A reflection, not a verdict.')).not.toBeInTheDocument();
-  });
-
-  it('keeps the crisis footer present (51 §8)', async () => {
-    installMockBridge({
-      testsList: () => Promise.resolve({ tests: [bigFive], adultAcknowledged: true }),
-      testsResults: () => Promise.resolve([]),
-    });
-    renderYou();
-    expect(await screen.findByRole('button', { name: /Get help now/i })).toBeInTheDocument();
   });
 });
 

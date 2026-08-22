@@ -63,9 +63,7 @@ import { getAutoCheckinBlocks, getAutoCheckinConfig, isSenderBlocked } from './p
 
 /**
  * The Auto check-ins orchestrator (63-auto-checkins §5.1) — the AI-bearing top level. Once a day, for each
- * enabled + due stream under its queue cap and out of crisis, it PLANS (pure planner + gap-finder), GENERATES
  * (the existing `generateQuestions` + recipient de-dup), and DELIVERS (`createAssignment`) — reusing the whole
- * questionnaire stack. Cadence + crisis + throttle are gated here; the bridge stamps the device throttle on
  * `ok:true`. Each generated questionnaire carries `autoCheckin` provenance (§4.2) into its immutable snapshot.
  */
 
@@ -80,8 +78,6 @@ const INTENT_RATIONALE: Record<AutoCheckinIntent, string> = {
 };
 
 export interface RunAutoCheckinsInput extends AiDeps {
-  /** Whether the person is in a recurring-crisis state (computed by the caller via `aggregateCrisisSignal`). */
-  crisis: boolean;
   /** The device throttle marker for this author (§3.4) — only consulted for an `auto` run. */
   lastCheckedAt?: string;
   /** `true` = the scheduled auto run (throttled); `false` = a manual "Run now" (skips the throttle). */
@@ -124,8 +120,6 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
   ) {
     return { ok: false, reason: 'SKIPPED', message: 'Auto check-ins already ran recently.' };
   }
-  if (input.crisis)
-    return { ok: false, reason: 'CRISIS', message: 'Support comes first right now.' };
   if (!input.apiKey) {
     return {
       ok: false,

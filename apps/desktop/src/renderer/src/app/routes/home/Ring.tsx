@@ -4,7 +4,6 @@ import styles from './Home.module.css';
 /**
  * A small SVG progress ring (60-home-dashboard §3.1.6) — a visible track plus a rounded progress arc, with
  * arbitrary center content (a %, a level word, an icon). Crisper + higher-contrast than a conic-gradient on
- * the cream ground (which read as blank), and `muted` draws only the soft track (no arc) for the crisis-
  * softened state so a ring never looks empty/broken. Presentational only — the caller supplies the accessible
  * text (the visible center + label), so meaning is never colour-only (§9).
  */

@@ -99,19 +99,19 @@ describe('digestableInsights (topic-free cross-feature digests — 52 §8.4 leak
 describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', () => {
   it('legacy: NO life-area tags → bounds to the budget (45), no narrowing, order preserved', () => {
     const facts = Array.from({ length: 60 }, (_, i) => pf(`f${i}`)); // all untagged
-    const out = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, false);
+    const out = selectPortraitFacts(facts, { lifeAreas: ['Money'] });
     expect(out.length).toBe(45);
     expect(out[0]?.id).toBe('f0');
     expect(out.at(-1)?.id).toBe('f44');
   });
 
-  it('a crisis-flagged portrait is NEVER topically narrowed — only bounded', () => {
+  it('a portrait with no life-areas is NEVER topically narrowed — only bounded', () => {
     const facts = [
       pf('money', 'Money'),
       pf('intimacy', 'Intimacy'),
       ...Array.from({ length: 5 }, (_, i) => pf(`fam${i}`, 'Family')),
     ];
-    const out = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, true);
+    const out = selectPortraitFacts(facts, { lifeAreas: ['Money'] });
     // Off-topic Intimacy/Family facts are all kept (under budget) — distress safety: keep the full picture.
     expect(out.map((f) => f.id)).toEqual(facts.map((f) => f.id));
   });
@@ -124,7 +124,7 @@ describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', 
       pf('untagged'),
       pf('money', 'Money'), // topical, NOT in this topic
     ];
-    const ids = selectPortraitFacts(facts, { lifeAreas: ['Intimacy'] }, false).map((f) => f.id);
+    const ids = selectPortraitFacts(facts, { lifeAreas: ['Intimacy'] }).map((f) => f.id);
     expect(ids).toEqual(expect.arrayContaining(['emotions', 'goals', 'rel', 'untagged']));
   });
 
@@ -132,11 +132,9 @@ describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', 
     const core = Array.from({ length: 25 }, (_, i) => pf(`core${i}`, 'Goals & growth'));
     const money = Array.from({ length: 30 }, (_, i) => pf(`money${i}`, 'Money'));
     const intimacy = Array.from({ length: 30 }, (_, i) => pf(`int${i}`, 'Intimacy'));
-    const ids = selectPortraitFacts(
-      [...core, ...money, ...intimacy],
-      { lifeAreas: ['Money'] },
-      false,
-    ).map((f) => f.id);
+    const ids = selectPortraitFacts([...core, ...money, ...intimacy], { lifeAreas: ['Money'] }).map(
+      (f) => f.id,
+    );
     expect(ids.length).toBe(45);
     expect(ids.filter((id) => id.startsWith('core')).length).toBe(25); // all core guaranteed
     expect(ids.filter((id) => id.startsWith('money')).length).toBe(20); // topic fills the rest
@@ -148,7 +146,7 @@ describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', 
       pf('distress', 'Emotions & patterns'),
       ...Array.from({ length: 50 }, (_, i) => pf(`m${i}`, 'Money')),
     ];
-    const ids = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, false).map((f) => f.id);
+    const ids = selectPortraitFacts(facts, { lifeAreas: ['Money'] }).map((f) => f.id);
     expect(ids).toContain('distress');
   });
 
@@ -160,7 +158,7 @@ describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', 
       ...Array.from({ length: 30 }, (_, i) => pf(`m${i}`, 'Money')),
       pf('latedistress', 'Emotions & patterns'),
     ];
-    const ids = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, false).map((f) => f.id);
+    const ids = selectPortraitFacts(facts, { lifeAreas: ['Money'] }).map((f) => f.id);
     expect(ids).toContain('latedistress');
     expect(ids.length).toBe(45);
   });
@@ -169,7 +167,7 @@ describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', 
     const facts = Array.from({ length: 60 }, (_, i) =>
       pf(`f${i}`, i < 10 ? 'Goals & growth' : 'Money'),
     );
-    expect(selectPortraitFacts(facts, undefined, false).length).toBe(45);
+    expect(selectPortraitFacts(facts, undefined).length).toBe(45);
   });
 });
 
@@ -445,7 +443,7 @@ describe('insightStore', () => {
       expect(out[0]!.facts.some((f) => f.text === 'p2 confidential')).toBe(false);
     });
 
-    it("scrubs a related person's private envelope (metrics, crisisFlag, precise provenance, shareableWith)", async () => {
+    it("scrubs a related person's private envelope (metrics, precise provenance, shareableWith)", async () => {
       const fs = memFileSystem();
       await saveInsight(
         fs,
@@ -455,7 +453,6 @@ describe('insightStore', () => {
           subjectPersonId: 'p2',
           summary: 'SAMS PRIVATE SUMMARY',
           metrics: { moodValence: -0.8, moodEnergy: -0.5 },
-          crisisFlag: true,
           provenance: { intakeSection: 'what-weighs-on-you', conversationId: 'conv-99', at: 'now' },
           facts: [
             { id: 'f1', text: 'p2 likes hiking', shareable: true, shareableWith: ['pX', 'p1'] },
@@ -467,7 +464,6 @@ describe('insightStore', () => {
       ]);
       expect(related).toBeDefined();
       expect(related!.metrics).toBeUndefined(); // private wellbeing signals never cross over
-      expect(related!.crisisFlag).toBeUndefined(); // their crisis state is their own
       expect(related!.provenance).toEqual({ at: 'now' }); // precise origin (section/conversation) stripped
       expect(related!.summary).toBe('');
       // The shared fact crosses with text only — `shareableWith` (who ELSE has it) does not.

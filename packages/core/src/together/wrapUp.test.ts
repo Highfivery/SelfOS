@@ -88,14 +88,12 @@ const WRAPUP_JSON = JSON.stringify({
       reflection: 'You spoke your needs clearly, Ben.',
       facts: ['wants more time'],
       sensitiveFacts: [],
-      crisisFlag: false,
     },
     {
       name: 'Angel',
       reflection: 'You listened well, Angel.',
       facts: ['values reassurance'],
       sensitiveFacts: ['a desire preference'],
-      crisisFlag: false,
     },
   ],
 });
@@ -322,8 +320,6 @@ describe('runTogetherWrapUp (§3.8) — the safety-critical wrap-up', () => {
     // The aside NEVER reaches the model.
     const sentText = JSON.stringify(captured.messages);
     expect(sentText).not.toContain('SECRETASIDE');
-
-    // A shared report exists (no crisis detail) + two twins, each subject = that partner.
     const report = await getReport(fs, key, session.id);
     expect(report?.summary).toContain('showed up honestly');
     expect(report?.metrics?.connectionValence).toBeCloseTo(0.4);
@@ -382,45 +378,6 @@ describe('runTogetherWrapUp (§3.8) — the safety-critical wrap-up', () => {
     expect(context).not.toContain('a desire preference');
   });
 
-  it('routes a crisis flag to the AFFECTED partner’s twin ONLY — never into the shared report (§8.5)', async () => {
-    const fs = memFileSystem();
-    const session = await seedWithTranscript(fs);
-    const crisisJson = JSON.stringify({
-      summary: 'A supportive, detail-free recap.',
-      themes: [],
-      workedThrough: [],
-      connectionValence: 0,
-      frictionLevel: 0.3,
-      partners: [
-        {
-          name: 'Ben',
-          reflection: 'You are carrying a lot.',
-          facts: [],
-          sensitiveFacts: [],
-          crisisFlag: true,
-        },
-        {
-          name: 'Angel',
-          reflection: 'You were steady.',
-          facts: [],
-          sensitiveFacts: [],
-          crisisFlag: false,
-        },
-      ],
-    });
-    await runTogetherWrapUp(deps(fs, analyzeClient(crisisJson).client, { session }));
-    const benTwin = (await listInsightsForPerson(fs, key, BEN)).find(
-      (i) => i.source === 'together',
-    );
-    const angelTwin = (await listInsightsForPerson(fs, key, ANGEL)).find(
-      (i) => i.source === 'together',
-    );
-    expect(benTwin?.crisisFlag).toBe(true);
-    expect(angelTwin?.crisisFlag).toBeUndefined();
-    const report = await getReport(fs, key, session.id);
-    expect(report?.summary).toBe('A supportive, detail-free recap.'); // no crisis detail
-  });
-
   it('is idempotent: re-running overwrites the SAME twins + report in place', async () => {
     const fs = memFileSystem();
     const session = await seedWithTranscript(fs);
@@ -447,8 +404,8 @@ describe('runTogetherWrapUp (§3.8) — the safety-critical wrap-up', () => {
       connectionValence: 0.3,
       frictionLevel: 0.1,
       partners: [
-        { name: 'Ben', reflection: 'r', facts: [], sensitiveFacts: [], crisisFlag: false },
-        { name: 'Angel', reflection: 'r', facts: [], sensitiveFacts: [], crisisFlag: false },
+        { name: 'Ben', reflection: 'r', facts: [], sensitiveFacts: [] },
+        { name: 'Angel', reflection: 'r', facts: [], sensitiveFacts: [] },
       ],
       actionItems: items,
     });
@@ -564,13 +521,12 @@ describe('runTogetherWrapUp (§3.8) — the safety-critical wrap-up', () => {
       connectionValence: 0,
       frictionLevel: 0,
       partners: [
-        { name: 'Ben', reflection: 'r', facts: [], sensitiveFacts: [], crisisFlag: false },
+        { name: 'Ben', reflection: 'r', facts: [], sensitiveFacts: [] },
         {
           name: 'Stranger',
           reflection: 'leaked?',
           facts: ['leaked'],
           sensitiveFacts: [],
-          crisisFlag: false,
         },
       ],
     });

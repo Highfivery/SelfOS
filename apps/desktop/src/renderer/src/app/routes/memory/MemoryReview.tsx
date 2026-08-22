@@ -7,7 +7,6 @@ import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { Heading, Stack, Text } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { ReviewQueue } from './ReviewQueue';
 import styles from './Memory.module.css';
 
@@ -90,8 +89,6 @@ export function MemoryReview(): JSX.Element {
           {...(partnerName ? { partnerName } : {})}
         />
       ) : null}
-
-      <CrisisFooter />
     </div>
   );
 }

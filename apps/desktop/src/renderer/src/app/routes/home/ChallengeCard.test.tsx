@@ -60,8 +60,6 @@ describe('ChallengeCard', () => {
     expect(screen.queryByRole('button', { name: 'I did it' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Not yet' })).toBeNull();
   });
-
-  // The gap the conditional closes: the "For you" band is suppressed under proactivity-off / crisis / a new
   // person / dismissal, so deferring on `checkInDue` alone left the highest-intent moment with no action.
   it('KEEPS its actions when a check-in is due but the recommendation is suppressed', () => {
     useChallengeStore.setState({

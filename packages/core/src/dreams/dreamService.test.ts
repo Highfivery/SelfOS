@@ -168,8 +168,6 @@ describe('dreamService', () => {
       },
       metrics: { emotionalIntensity: 0.7 },
       lensesApplied: ['reflective', 'continuity', 'symbolic'],
-      crisisFlag: false,
-      distressSignal: false,
       edited: true,
       insightId: 'i1',
     });

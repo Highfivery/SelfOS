@@ -14,7 +14,6 @@ import {
   TrendLine,
 } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { subscaleViews, wellbeingDisplay } from './profile';
 import { NO_SIGNAL_BAND } from '@shared/schemas';
 import styles from './You.module.css';
@@ -29,7 +28,6 @@ function formatDate(iso: string): string {
  * 50-self-assessments §3.3 — the result profile screen (`/tests/:testId`). A non-diagnostic preamble, the
  * subscale bars, optional retake trends (per-subscale `TrendLine`), an OPTIONAL user-triggered AI narrative
  * (metered; the deterministic profile always renders without it), a history of prior dated results, and
- * Manage (Retake / Delete). The crisis footer + not-medical line are present throughout (§8).
  */
 export function TestResultScreen(): JSX.Element {
   const { testId = '' } = useParams();
@@ -95,7 +93,6 @@ export function TestResultScreen(): JSX.Element {
                 Take it
               </Button>
             </div>
-            <CrisisFooter />
           </Stack>
         </div>
       </div>
@@ -141,15 +138,6 @@ export function TestResultScreen(): JSX.Element {
               label or a diagnosis.
             </Text>
           </header>
-
-          {/* Crisis lead (§3.3/§5.2): a flagged result leads with warmth + resources, above the range. */}
-          {selected.crisisFlag ? (
-            <Banner tone="warning" role="alert">
-              It sounds like you’ve been going through a really hard time. You don’t have to face it
-              alone — please reach out to someone who can help. The resources below are there for
-              you, any time.
-            </Banner>
-          ) : null}
 
           {test.wellbeing ? (
             // 51 §3.3 — a wellbeing reflection shows a GENTLE range (never the clinical band), a low→high
@@ -309,8 +297,6 @@ export function TestResultScreen(): JSX.Element {
               </Button>
             )}
           </section>
-
-          <CrisisFooter />
         </Stack>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { scrubTestInsight } from '../tests/adaptive/trafficLight';
 import {
   DreamSchema,
   InsightSchema,
@@ -55,7 +56,10 @@ export async function getInsight(
   insightId: string,
 ): Promise<Insight | null> {
   const raw = await readEncryptedJson(fs, insightPath(personId, insightId), key);
-  return raw ? InsightSchema.parse(raw) : null;
+  // 74 §3.6.40 — an adaptive test's facts are assembled out of the lexicon and only rebuilt when a take
+  // completes, so a stale one outlives the cleaning. Scoped to `source: 'test'` inside the scrub: every
+  // other kind is ordinary life data where "colour" is an ordinary word.
+  return raw ? scrubTestInsight(InsightSchema.parse(raw)).insight : null;
 }
 
 /** List a subject person's insights, newest first (by `updatedAt`). */
@@ -69,7 +73,7 @@ export async function listInsightsForPerson(
     if (!name.endsWith('.enc')) continue;
     const raw = await readEncryptedJson(fs, `${insightsDir(personId)}/${name}`, key);
     if (!raw) continue;
-    const insight = InsightSchema.parse(raw);
+    const insight = scrubTestInsight(InsightSchema.parse(raw)).insight;
     // Defense in depth: only serve insights whose subject matches the folder, so a misplaced or tampered
     // file can't leak into another person's context (hardening the shareable-vs-private boundary, §8.4).
     if (insight.subjectPersonId === personId) out.push(insight);

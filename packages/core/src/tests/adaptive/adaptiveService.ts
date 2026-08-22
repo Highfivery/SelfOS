@@ -25,6 +25,7 @@ import { takeCarriesDistress } from './distress';
 import { recordTakeSaturation } from './saturation';
 import { scoreSpine } from './spine';
 import { nameFamilies } from './bank';
+import { scrubResult } from './trafficLight';
 import type { AdaptiveTestDefinition } from './types';
 import { getGuidancePrefs } from '../../conversations/guidanceService';
 import { buildProfileReadBlock } from './steer';
@@ -88,9 +89,12 @@ export async function getAdaptiveResult(
    * read forever, and hides the fact that nothing ever persisted it (§3.6.34). Costs one write per result,
    * once, and nothing at all for a result that never had one.
    */
-  const { result, changed } = healSkippedAnswers(parsed.data);
-  if (changed) await saveResult(fs, key, result);
-  return result;
+  const healed = healSkippedAnswers(parsed.data);
+  // 74 §3.6.40 — and the traffic-light scrub, at the same door and for the same reason: healing only in
+  // memory leaves the row on disk to be re-healed on every read forever.
+  const scrubbed = scrubResult(healed.result);
+  if (healed.changed || scrubbed.changed) await saveResult(fs, key, scrubbed.result);
+  return scrubbed.result;
 }
 
 /** Every result for one adaptive test, newest first (history + trends). Drafts included — the take resumes. */
@@ -111,9 +115,10 @@ export async function listAdaptiveResults(
       // The other door onto a result (74 §3.6.38). A COMPLETED take is read through here and may never be
       // fetched by id again, so healing only in `getAdaptiveResult` would leave the report and the trends
       // reading a skip as an answer for good.
-      const { result, changed } = healSkippedAnswers(parsed.data);
-      if (changed) await saveResult(fs, key, result);
-      out.push(result);
+      const healed = healSkippedAnswers(parsed.data);
+      const scrubbed = scrubResult(healed.result);
+      if (healed.changed || scrubbed.changed) await saveResult(fs, key, scrubbed.result);
+      out.push(scrubbed.result);
     }
   }
   out.sort((a, b) => (a.takenAt < b.takenAt ? 1 : a.takenAt > b.takenAt ? -1 : 0));

@@ -1980,6 +1980,88 @@ The defect was real either way — a captured reply proves it — but a small sa
 number future readers reason from, so state the sample size, and re-measure before letting a count stand as a
 frequency.
 
+### 3.6.40 The traffic-light check-in, removed — APPROVED + **BUILT** (2026-08-22, owner-directed)
+
+The owner cut two rows from the `consent` family ("Consent & check-ins", the deck's F29): **`colour?`** and
+**`green / amber / red`** — the BDSM traffic-light safeword protocol. His reason, stated plainly: _"i just
+dont want users seeing options in the worflow for it."_ The family itself stays, and so does every other row
+in it; the ordinary stop-language (`say the word and I stop`, `we can stop any time`, `you can stop me`,
+`tell me if it's too much`) is untouched.
+
+**No prompt change.** An earlier draft of this section would have told the AI phases never to use the
+framing. That was put to the owner with the measurement behind it and he declined it — the ask is about what
+the workflow OFFERS, not about what the model may write. It is worth recording WHY the offer was withdrawn
+rather than just that it was, because the constraint would have contradicted the app's own safety wording:
+`REGISTER` (`engine.ts`, injected into all five phases) says taboo material appears _"ONLY as pre-agreed,
+safeworded roleplay"_, and the `taboo` family note says the same thing and is asserted by `bank.test.ts`.
+Banning safeword language in the same prompt that requires it is the §3.6.39 defect — one rule written twice,
+the copies disagreeing. The boundary wording stays exactly as it is.
+
+#### The rows need no migration; the free text does
+
+Cutting the rows is handled entirely by machinery that already exists. `retireCutMarks` derives retirement
+from _"family still in the bank, key gone"_ (§3.6.25), and `readLexicon` runs it on **every** read (§3.6.34) —
+so a mark on either key is retired outright, the suppression it carried is released with it, and the
+compaction persists the next time `orientationForMarking` writes back. Nothing is added to
+`DIRTY_TALK_RETIREMENTS`: that map is for a cut with somewhere to GO, and nothing else in the bank says what
+the traffic-light protocol says. A `love` on `colour?` therefore goes with the word, which is the same answer
+every prior purge gave.
+
+Two consequences, both accepted with the numbers in hand:
+
+- **A `never` on either row stops suppressing.** Measured against `violatesBoundary`: the needles are the
+  literal strings, word-boundaried, in a non-`names-` family, so a generated line would have to contain
+  `colour?` or `green / amber / red` verbatim. Effectively inert, and it is the documented consequence of
+  every retire-outright cut — recorded here so it is not rediscovered as a bug.
+- **A person sitting exactly on the generation gate can drop below it.** `MIN_MARKS_FOR_GENERATION` is 15;
+  two fewer marked rows is two fewer marks. Self-correcting the moment they mark anything else.
+
+What the bank cut does **not** reach is **free text**, because none of it is keyed by a bank entry. Three
+kinds survive, and the owner's instruction was to clean all of them ("also scrub past results", then
+"everything, including my own answers"):
+
+1. **The living lexicon's prose** — `themes`, `wantsToSay`, `voice`, `contexts[].note`. Model-written, merged
+   across takes by `mergeLexicons`, and with **no control anywhere that can remove an item**: the only edits
+   the app offers are `removeBoundary`, `clearNameSide` and the nuclear delete-all. This is the §3.2
+   un-gettable-rid-of preference reached through the synthesis instead of through the bank, and it is a
+   PRE-EXISTING gap this change closes rather than one it created. `wantsToSay` is the one that matters:
+   it feeds `goalSuggestService` and becomes a `wants-to-say` fact on the derived Insight.
+2. **A past take** — `narrative`, `lede`, `readings`, `profile`, and the `turns` of the three AI phases. The
+   marking phases are safe by construction: `recordMarkingPass` stamps ONE summary turn ("N entries across M
+   families"), never the words, so no amount of marking history mentions a term. The probe is the realistic
+   case — its whole job is quoting terms the person marked (§3.6.39).
+3. **The derived Insight's facts** — assembled out of the lexicon, and only rebuilt when a take completes, so
+   a stale one outlives the cleaning.
+
+#### The matcher, and what it costs
+
+`trafficLight.ts` is a leaf (types only), so `insights/` can call it without closing a cycle back through
+`tests/adaptive`. It matches **anything containing `colour`/`color`**, either spelling — the owner's chosen
+breadth, taken with the trade-off stated: it can drop a true sentence that happens to use the word. Measured
+before he chose: the word appears exactly ONCE in the whole bank — the row being removed — so nothing
+structural was at risk and the exposure is prose alone. It also matches the three lights as a **run** in
+either direction, because `green / amber / red` contains neither spelling and the second row's own text would
+otherwise survive in prose; and `traffic light`. It deliberately does **not** fire on `green` or `red` alone,
+which are ordinary words in this register.
+
+Prose is scrubbed a **sentence** at a time, not a paragraph, and paragraph breaks are preserved. The sentence
+splitter folds a lowercase continuation back into the sentence before it — load-bearing, because the removed
+term ENDS IN A QUESTION MARK, so a naive split on `[.!?]` leaves _", which fits the pattern"_ behind as its
+own surviving fragment. A field scrubbed to nothing goes **absent** rather than blank, which is a state the
+schema already allows and the report already renders.
+
+The Insight scrub is scoped to `source: 'test'`. Every other kind — an onboarding portrait, a session, a
+dream — is ordinary life data where "colour" is an ordinary word ("her favourite colour"), and running this
+matcher over it would delete true content for nothing.
+
+Applied at the reads that already heal: `resolveLexicon` for the lexicon, both result doors alongside
+`healSkippedAnswers` for a take (§3.6.38), and `getInsight`/`listInsightsForPerson` for the Insight. All pure,
+all idempotent, all `{ changed }` so a caller that can write back does.
+
+**Deliberately NOT touched:** starred `sayLines` (75 §8.3 — the person's own keepsake, and unstarrable in the
+UI); themed boundaries (suppressive, so leaving one fails safe, and `removeBoundary` can lift it); and the
+guided kink/power-exchange session addendum, which the owner explicitly left alone.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.
@@ -3021,7 +3103,7 @@ _t5_ I could stop right now · you'll take what I decide to give you
 **F29 · Consent & check-ins** _(the language that makes the rest safe to want — rated the same way, because for
 a lot of people being asked IS part of it, and for others it breaks the spell)_
 _t1_ is this okay · you okay · too much? · more? · do you like that — _t2_ tell me if it's too much · you can stop
-me · colour? · green / amber / red · say the word and I stop · we can stop any time — _t3_ do you want more ·
+me · say the word and I stop · we can stop any time — _t3_ do you want more ·
 harder? · can I · do you want me to stop · is this still good · tell me what you need — _t4_ you did so well, are
 you alright · was that too far · come back to me
 

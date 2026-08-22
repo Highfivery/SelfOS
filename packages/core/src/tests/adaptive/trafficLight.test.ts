@@ -93,6 +93,11 @@ describe('74 §3.6.40 — scrubbing prose', () => {
     expect(scrubProse(text)).toBe('First para stands.\n\nThird para stands.');
   });
 
+  it('keeps single line breaks, so a list inside a scrubbed paragraph is not flattened', () => {
+    const text = '- one thing\n- a colour check\n- another thing';
+    expect(scrubProse(text)).toBe('- one thing\n- another thing');
+  });
+
   it('returns empty when every sentence names it, and is idempotent', () => {
     expect(scrubProse('Use a colour check. Green, amber, red.')).toBe('');
     const once = scrubProse('You want asking. A colour check lands.');

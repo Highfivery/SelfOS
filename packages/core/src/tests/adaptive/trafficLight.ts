@@ -63,7 +63,11 @@ export function mentionsTrafficLight(text: string): boolean {
  * sentence (a capital, a digit, or an opening quote) is folded back into the previous one.
  */
 function sentences(text: string): string[] {
-  const parts = text.split(/(?<=[.!?])\s+/);
+  // Spaces and tabs only. The CALLER splits lines before calling this, so what actually preserves a markdown
+  // list inside a scrubbed paragraph is that split, not this character class — checked by reverting it and
+  // watching the list test still pass. This keeps `sentences()` correct on its own terms if it is ever
+  // called on text containing a newline; it is not what the guard below is guarding.
+  const parts = text.split(/(?<=[.!?])[ \t]+/);
   const out: string[] = [];
   for (const part of parts) {
     if (out.length > 0 && !/^["'“‘([]?[A-Z0-9]/.test(part)) {
@@ -88,10 +92,16 @@ export function scrubProse(text: string): string {
   return text
     .split(/\n{2,}/)
     .map((para) =>
-      sentences(para)
-        .filter((sentence) => !mentionsTrafficLight(sentence))
-        .join(' ')
-        .trim(),
+      para
+        .split('\n')
+        .map((line) =>
+          sentences(line)
+            .filter((sentence) => !mentionsTrafficLight(sentence))
+            .join(' ')
+            .trim(),
+        )
+        .filter((line) => line !== '')
+        .join('\n'),
     )
     .filter((para) => para !== '')
     .join('\n\n')

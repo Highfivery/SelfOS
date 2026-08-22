@@ -1,5 +1,11 @@
 # 26 — Intake catalog redesign (non-intimacy)
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Approved · **Built + on `main`** (`feat/intake-catalog-redesign`, landed as direct commits
 > `053dcf3`/`47b6582` in the pre-PR-workflow era) · _last updated 2026-06-23_
 >

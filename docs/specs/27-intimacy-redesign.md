@@ -1,5 +1,11 @@
 # 27 — Intimacy & sexuality block redesign
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Approved · **Built + on `main`.** Both 2026-06-21 passes (`feat/intimacy-redesign` →
 > `284083f`, `feat/intimacy-trim` → `6bd9d8f`/`32f7b0b`) landed as direct commits in the pre-PR-workflow era;
 > the activity matrix was **redesigned to 5-point + gender-aware** 2026-06-23 (`feat/intimacy-matrix-redesign`,

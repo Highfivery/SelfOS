@@ -1,5 +1,11 @@
 # 28 — Portrait synthesis & context-budget optimization
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** **Built (28a + 28b)** 2026-06-21 (`feat/portrait-optimization`, `feat/portrait-relevance`) · _last updated 2026-06-21_
 >
 > **Built in two slices.** **28a — the safe wins:** the slider-seed fix (an untouched optional slider records

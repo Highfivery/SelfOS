@@ -1,5 +1,11 @@
 # 58 — Together: couples sessions
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** **BUILT (Phases A–H)**; **Phase I in progress** — _last updated 2026-07-13_
 >
 > **All phases A–H are built + merged to `main`** (A+B PR #148 · C #155 · D #156 · E #157 · F #158 ·

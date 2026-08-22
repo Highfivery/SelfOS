@@ -1,5 +1,11 @@
 # 20 — Memory: the living insights dashboard
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Approved — BUILT (all 3 slices) · **Overhauled by [`44`](44-memory-dashboard-overhaul.md)**
 > (2026-06-24): stats summary header, Trends promoted to the top, split-by-source corrections (Edit-answer for
 > onboarding facts; "This isn't right about me" for AI-inferred facts), and the broadcast `ShareToggle` replaced

@@ -1,7 +1,13 @@
-# Handoff — remove the crisis / distress system, app-wide
+# Record — the crisis / distress system, removed app-wide
 
-**Written 2026-08-22.** Notes (spec 76) is finished, reviewed, merged and released as **v0.61.0**. This is
-the next piece of work, and it is the last thing outstanding from that arc.
+**Written 2026-08-22 as a handoff; the work was then completed in the same session and ships in the same
+commit, so this is now a RECORD, not a to-do.** Notes (spec 76) had just been released as **v0.61.0**; this
+was the last thing outstanding from that arc, and it is done.
+
+Sections 1–5 are the analysis the change was built from and are still true — the decision and its exact
+boundary, the working rules, the measured map, the four traps, and what dangled. §6 is what was actually
+done. Keep this file: the traps in §4 are the reason the removal did not take the not-medical boundary with
+it, and §1 is the standing answer to "should we add crisis handling back?" (no — see `CLAUDE.md` §1).
 
 ---
 
@@ -159,46 +165,61 @@ reader. **Remove these too — a field with no writer is scaffolding (§12).**
 
 ---
 
-## 6. Suggested order
+## 6. What was done
 
-Each step should typecheck and leave the suite green before the next. Do **not** try this in one commit.
+Built in the order below, each step typechecking and leaving the suite green before the next — which is
+what kept the not-medical boundary intact through a 252-file change.
 
-1. **Move `resolveWellbeingBand` out of `wellbeingCrisis.ts`** (§4.1). Nothing else changes.
-2. **Delete both `CrisisFooter` components** and all 43 render sites, imports and CSS (§4.2). No
-   replacement — decided.
-3. **Prompts** — `SAFETY` (`promptBuilder.ts:20-23`), `CRISIS_LEAD`, the crisisFlag contract lines in the
-   8 analysis instructions, the 2 guided-catalog entries. Keep every "not therapy" frame.
-4. **Email** — `emailSend.ts:216`, `emailSchedule.ts:753`, `emailMilestones.ts:47`, the 5 hardcoded
-   `crisisSuppressed: false`, the bridge aggregation at `coreBridge.ts:6493` + `:6611`.
-   **Consequence to state plainly in the PR:** email loses its crisis gate entirely — digests,
-   suggestions and notes will send regardless of state. That is inherent to the decision.
-5. **Producers** — the 11 services that set `crisisFlag`/`distressSignal`.
-6. **Renderer** — the 3 components, the 10 inline conditional banners, `TestTake` mid-take escalation.
-7. **Schemas + dangling** — the 5 fields, the 3 union members, everything in §5.
-8. **PHQ-9 item 9** — `phq9.ts:70` + `:98`, `types.ts:78,85-90,109,156,194`, the rest of
-   `wellbeingCrisis.ts`, `testService.ts:203-208,230,269,279-292`, `TestTake.tsx:4,50-58,152-158`.
-9. **Tests** — 3 whole files deleted, 52 incidental references, 4 E2E tests deleted + 11 edited.
-10. **Docs** — `CLAUDE.md` §1, the 18 spec sections, the agents/skills/README/CONTRIBUTING, `site/index.html`.
-
----
-
-## 7. Definition of done
-
-Beyond the standing gate (typecheck ×4, lint, format, full unit, full E2E):
-
-- [ ] `grep -ri "crisis\|distressSignal\|readsAsDistress" packages apps --include=*.ts --include=*.tsx`
-      returns **nothing** outside `CHANGELOG.md` and the dated `CLAUDE.md` build log.
-- [ ] The not-medical line still renders wherever it exists as **separate** copy (~21 files). The 43
-      footer slots deliberately lose it (§4.2) — do not re-add.
-- [ ] `CLAUDE.md` §1 no longer claims crisis routing is required.
-- [ ] No spec §-section describes a system that no longer exists.
-- [ ] The E2E tests that asserted crisis behaviour are **deleted**, not skipped.
+1. **`resolveWellbeingBand` moved out** of `wellbeingCrisis.ts` into a new `tests/wellbeingBands.ts`
+   **before** anything was deleted (§4.1). It builds the gentle non-diagnostic band; it is not crisis
+   machinery, and deleting its host file first would have taken it with it.
+2. **Both `CrisisFooter` components deleted** outright, with all render sites, imports and CSS (§4.2).
+   No replacement — the owner's call was "remove it entirely too". The 43 footer slots lose the
+   not-medical line; the ~29 files that carry it as separate copy keep it.
+3. **Prompts** — `SAFETY`, `CRISIS_LEAD`, the crisisFlag contract lines in the 8 analysis instructions,
+   the 2 guided-catalog entries. Every "not therapy" frame kept.
+4. **Email** — the gate, the aggregation, and the 5 hardcoded `crisisSuppressed: false`.
+   **Stated plainly: email has no crisis gate at all now** — digests, suggestions and notes send
+   regardless of state. That is inherent to the decision, not an oversight.
+5. **Producers** — the 11 services that set `crisisFlag` / `distressSignal`.
+6. **Renderer** — the 3 components, the 10 inline conditional banners, the `TestTake` mid-take escalation.
+7. **Schemas + everything in §5** — the 5 fields, the 3 union members, the dangling params and outputs.
+8. **PHQ-9 item 9**, and the remainder of `wellbeingCrisis.ts`.
+9. **Tests** — 3 whole files deleted, the incidental references updated, the crisis E2E tests **deleted,
+   not skipped**.
+10. **Docs** — `CLAUDE.md` §1 (rewritten, and it now says explicitly that the previous text asserted the
+    opposite, so a stale spec line reads as stale rather than as an instruction), the 18 spec sections,
+    the agents/skills/README/CONTRIBUTING, `site/index.html`.
 
 ---
 
-## 8. State of the tree as of this handoff
+## 7. Verified, not assumed
 
-- `main` is at **v0.61.0**, released, `.dmg` attached (105 MB), manifest == latest tag, no loop PR.
-- Notes (76) is complete: core, seam, surface, the recipient's answering route, and the fixes from a
-  code review + a visual-QA pass.
-- Nothing else is outstanding.
+- `grep -rn "crisisSignal|wellbeingCrisis|CrisisFooter|CrisisSupportBanner|adaptive/distress"` over
+  `packages` + `apps` → **no matches**. No reference to a deleted module survives.
+- `grep -rln "crisisFlag|distressSignal"` → **no files**.
+- No hotline, emergency number or crisis-line copy anywhere in source.
+- The not-medical boundary still present in **29** files.
+- Full gate green: typecheck ×4, lint, format, **2551 core + 13 relay + 1795 desktop** unit, full E2E.
+
+**One deliberate exception to the original grep-must-be-empty check.** `intakeCatalog.ts` keeps the
+onboarding question **"Who do you turn to in a crisis?"** (`crisisPerson`). It sits between "How many close
+friends do you have?", "How lonely do you feel?" and the social-battery slider, its placeholder is
+_"e.g. my sister, my best friend, my partner"_, and **nothing reads it** — it is support-network context
+feeding the portrait like any other intake answer, not distress machinery. It is the same category as the
+professional-referral scope limits that were kept (§4.3). The original checklist said the grep must return
+nothing; that was written before this was measured, and a grep is a proxy for the rule, not the rule.
+Deleting a real onboarding question to make a proxy clean would be the tail wagging the dog.
+
+---
+
+## 8. What this does NOT do
+
+- It does not touch the **not-medical positioning boundary**. That is a different thing and it stays
+  (`CLAUDE.md` §1).
+- It does not remove the **consent boundary** in the intimacy registers (never minors, never real
+  non-consent, never illegal). That is a content rule, not a distress pathway.
+- It does not remove **professional-referral scope limits** — lines that say a topic is for a
+  professional rather than a self-guided exercise. Those bound what the app claims to be; they are not
+  triggered by distress. (One of these was over-removed mid-build and restored:
+  `challengeCoach.ts`'s "pointed toward a professional".)

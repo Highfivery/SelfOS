@@ -566,8 +566,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-22 — **The specs put back in lockstep after the crisis removal — the previous entry's "docs in
+  lockstep" was PARTIAL, and saying so is the point.** That pass annotated **17 crisis SECTIONS**, which was
+  real work and not enough: a grep afterwards found **257 machinery references across 37 spec files**, none of
+  them in dated changelog entries. They were body text — spec 51's own header still read _"crisis routing is
+  **mandatory and never optional**"_ and its comparison table still listed _"mandatory, item-level crisis
+  routing (PHQ-9 item 9)"_ as a live design pillar. A section banner three hundred lines below does not
+  neutralise a header, and a future session reading 51 top-down would have rebuilt the thing that was just
+  removed. **The fix is a file-level banner on all 37** (under the H1, above the Status block, so it is the
+  first thing read), plus a struck table row and a corrected header on 51. **Re-annotating the 14 dedicated
+  sections was attempted and then REVERTED** — every one of them already carried a note from the earlier pass,
+  so the second note was pure duplication; measuring before assuming a gap is what caught it. The handoff doc
+  became **`docs/record-crisis-removal.md`**: it was written to hand the work off, the work was then finished
+  in the same session, and shipping a to-do whose items were all done would have been stale on arrival — its
+  §6–§8 now record what was done and what was verified, and the file-rename link in this file was fixed with
+  it. Also fixed, because the full run surfaced it: **10 E2E overflow guards read geometry in the same tick as
+  `setViewportSize`**, measuring the wide layout inside a narrow box — under load that reported
+  `.contentInner` as a horizontal offender on Home while the same test passed in isolation. They now poll,
+  which is what the shared `expectNoInnerOverflow` already did. **Lessons: (1) "docs updated" is not a
+  binary — annotating every SECTION named "Crisis" leaves every header, table and inline mention that is not
+  in one, and those read as current design; grep the machinery names, not the section titles. (2) A doc
+  written as a handoff becomes a lie the moment the work lands in the same session — reframe it as a record or
+  delete it, do not ship "here is what remains" over a finished change. (3) A geometry assertion taken in the
+  same tick as a resize measures a layout that is mid-reflow; poll it, or it fails only under load and only
+  ever looks like a real regression.**
+
 - 2026-08-22 — **The crisis / distress system is REMOVED, app-wide (owner decision, confirmed four times;
-  `CLAUDE.md` §1 rewritten in the same change; `docs/handoff-crisis-removal.md`).** _"clean-up and completely
+  `CLAUDE.md` §1 rewritten in the same change; `docs/record-crisis-removal.md`).** _"clean-up and completely
   remove the crisis stuff"_ — which also settled the two questions a prior session had left open: **PHQ-9
   item 9 goes too**, and the **not-medical boundary stays** (a separate §1 bullet). **The scope was measured,
   not estimated** — an earlier session had guessed "~120 files" and was wrong by half; an exhaustive map put it

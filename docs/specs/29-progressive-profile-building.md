@@ -1,5 +1,11 @@
 # 29 — Progressive profile building (depth invitations)
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** **Built** 2026-06-21 (`feat/progressive-profile`, off `main`) · _last updated 2026-06-21_
 >
 > **As-built amendment (2026-06-25, [`53`](53-home-encouragement.md) Slice A):** the Home `DepthInvitationCard`

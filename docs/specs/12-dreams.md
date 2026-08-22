@@ -1,5 +1,11 @@
 # 12 — Dreams (guided dream journaling, analysis & patterns)
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** **Approved** (v1 built) · **§15 "reflection as a guided session": BUILT** · **§16 "Dreams
 > dashboard redesign": slice 1 (card grid + immersive detail) MERGED + slice 2 (insight strip, quick filters,
 > time grouping) BUILT 2026-07-01** · _last updated 2026-07-01_

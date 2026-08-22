@@ -143,7 +143,7 @@ describe('Inbox', () => {
     expect(await screen.findByText(/Your biographer · From Ben/)).toBeInTheDocument();
   });
 
-  it('opens an assignment, shows the privacy promise + crisis footer, and submits answers', async () => {
+  it('opens an assignment, shows the privacy promise, and submits answers', async () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
@@ -157,9 +157,7 @@ describe('Inbox', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     // Private mode tells the recipient their raw answers stay hidden — the shared derived
     // `externalSendDisclosure` wording (one source with the relay page + the landing privacy chips, §8.4) —
-    // and crisis help is always present.
     expect(await screen.findByText(/won’t see your written answers/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('How are we doing?'), 'Pretty well');
     // Last step → Review & send → Send answers (the unlocked wizard, §25.1).

@@ -876,7 +876,6 @@ const PortraitDraftSchema = z.object({
     })
     .catch({})
     .optional(),
-  crisisFlag: z.boolean().optional().catch(undefined),
   categories: z.array(z.string()).catch([]).default([]),
 });
 
@@ -927,7 +926,6 @@ many vague or redundant ones. Each: {"text": a short specific fact, "section": t
 "lifeArea": the fact's single life-area from EXACTLY this list: ${LIFE_AREAS.join(', ')}} (array)
 - "metrics": optional normalized signals for trends, e.g. {"valence": -1.0..1.0} (object)
 - "inferred": optional fields to fill from the whole picture: {"communicationStyle": string, "values": [..], "goals": string, "faith": string}
-- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)
 - "categories": 1-2 dominant life-area tags for this person, from EXACTLY this list: ${LIFE_AREAS.join(', ')} (array of strings)`;
 
 /** Per-fact life-area for relevance selection (28 §pillar-2/§4.4). A section that's foundational IDENTITY
@@ -1508,7 +1506,6 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
     categories: normalizeCategories(draft.categories), // life-area tags, folded into this same call (no extra spend)
     approved: true, // the portrait auto-enters the person's OWN context (§3.5)
     provenance: { at },
-    ...(draft.crisisFlag !== undefined ? { crisisFlag: draft.crisisFlag } : {}),
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
   };

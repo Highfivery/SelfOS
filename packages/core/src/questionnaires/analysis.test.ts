@@ -48,7 +48,6 @@ const ANALYSIS = JSON.stringify({
     { text: 'Has been feeling distant lately', shareable: false },
   ],
   confidence: 'high',
-  crisisFlag: false,
 });
 
 /** Seed a submitted intimacy questionnaire at a given tier (for the explicit-register + empty-insight tests). */
@@ -355,19 +354,6 @@ describe('analyzeAssignment', () => {
     expect(result.insight?.provenance.aboutName).toBe('Sam Rivers');
   });
 
-  it('carries a model crisis flag through to the Insight', async () => {
-    const fs = memFileSystem();
-    const assignmentId = await seedAnswered(fs);
-    const crisis = JSON.stringify({
-      summary: 'They mention feeling hopeless.',
-      facts: [{ text: 'Expressed hopelessness', shareable: false }],
-      confidence: 'medium',
-      crisisFlag: true,
-    });
-    const result = await analyzeAssignment(deps(fs, fakeClient(crisis)), { assignmentId });
-    expect(result.insight?.crisisFlag).toBe(true);
-  });
-
   it('returns NO_RESPONSE when the assignment has no answers', async () => {
     const fs = memFileSystem();
     const q = await saveQuestionnaire(fs, key, {
@@ -558,7 +544,6 @@ describe('analyzeAssignment', () => {
       facts: [],
       confidence: 'low',
       categories: ['Other'],
-      crisisFlag: false,
     });
     const result = await analyzeAssignment(deps(fs, fakeClient(empty)), { assignmentId });
     // Before the fix this fell through to MALFORMED ("unexpected shape, try again") — now it's an honest EMPTY.
@@ -576,7 +561,6 @@ describe('analyzeAssignment', () => {
       summary: '   ',
       facts: [],
       confidence: 'low',
-      crisisFlag: false,
     });
     const result = await analyzeAssignment(deps(fs, fakeClient(blank)), { assignmentId });
     expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });

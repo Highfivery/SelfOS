@@ -3,8 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import { saveGoal } from '../goals/goalService';
 import { saveConversation } from '../conversations/conversationService';
-import { saveInsight } from '../insights/insightStore';
-import type { Conversation, Goal, Insight } from '../schemas';
+import type { Conversation, Goal } from '../schemas';
 import { detectMilestones } from './emailMilestones';
 
 const key = generateMasterKey();
@@ -36,24 +35,6 @@ function conversationOn(id: string, iso: string): Conversation {
   };
 }
 
-function crisisInsight(id: string, iso: string): Insight {
-  return {
-    id,
-    schemaVersion: 1,
-    source: 'session',
-    subjectPersonId: PERSON,
-    summary: 's',
-    facts: [],
-    confidence: 'medium',
-    categories: ['Emotions & patterns'],
-    approved: true,
-    crisisFlag: true,
-    provenance: { at: iso },
-    createdAt: iso,
-    updatedAt: iso,
-  };
-}
-
 /** Seed N consecutive days of activity ending today, so `computeStreak` reads a streak of >= N. */
 async function seedStreak(fs: ReturnType<typeof memFileSystem>, days: number) {
   for (let i = 0; i < days; i++) {
@@ -78,17 +59,5 @@ describe('detectMilestones (67 §3.2 family F)', () => {
     const streaks = ms.filter((m) => m.kind === 'streak');
     expect(streaks).toHaveLength(1);
     expect(streaks[0]?.sourceKey).toBe('milestone:streak:30');
-  });
-
-  it('suppresses the streak under crisis but still celebrates a goal', async () => {
-    const fs = memFileSystem();
-    await seedStreak(fs, 35);
-    await saveGoal(fs, key, doneGoal('g2', 'Journal daily'));
-    // Two crisis-flagged insights in the window → aggregateCrisisSignal.recurring → streak suppressed.
-    await saveInsight(fs, key, crisisInsight('i1', '2026-09-13T00:00:00.000Z'));
-    await saveInsight(fs, key, crisisInsight('i2', '2026-09-14T00:00:00.000Z'));
-    const ms = await detectMilestones(fs, key, PERSON, now);
-    expect(ms.some((m) => m.kind === 'streak')).toBe(false);
-    expect(ms.some((m) => m.kind === 'goal')).toBe(true);
   });
 });

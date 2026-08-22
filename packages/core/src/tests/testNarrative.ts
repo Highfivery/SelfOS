@@ -10,7 +10,6 @@ import { buildOwnSuppressionBlock } from './adaptive/steer';
  * 50-self-assessments §3.3/§6 — the OPTIONAL "what this means for you" narrative. Explicitly user-triggered
  * (never auto-run), metered `test.narrate`, budget-gated by the caller. The input is the DETERMINISTIC subscale
  * scores + bands + the instrument's framing — never the raw item answers. Warm, non-diagnostic, leads with the
- * not-medical framing (and, when crisis-flagged, resources). The narrative MAY name specifics, incl. for a
  * sensitive instrument (50 §11 Q5), while keeping the consensual-adult boundary. Returns plain prose (no JSON →
  * no parse), so a paid call's text is returned as-is; only AI-unavailable/budget/error are typed envelopes.
  */
@@ -26,9 +25,6 @@ Rules:
 - Do NOT invent scores or claim certainty the data doesn't support. Use the bands given.
 - End with one gentle, optional next step they could explore — never a prescription.`;
 
-const CRISIS_LEAD = `IMPORTANT: this result is flagged for possible distress. Lead with warmth and concern, \
-and point them to professional support and a crisis line before anything else.`;
-
 const ADULT_BOUNDARY = `This is a consensual-adult intimacy self-assessment. Keep everything within consensual \
 adults; never reference minors, real non-consent, or illegal acts. Treat their interests as private and valid.`;
 
@@ -42,7 +38,7 @@ doctor or therapist — can offer support a self-help tool can't.`;
 
 function scoreDigest(def: TestDefinition, result: TestResult): string {
   const labelOf = new Map(def.scoring.subscales.map((sub) => [sub.key, sub.label]));
-  // For a WELLBEING result the score's `band` is the INTERNAL clinicalKey (kept for trends/crisis only); it
+  // For a WELLBEING result the score's `band` is the INTERNAL clinicalKey (kept for trends only); it
   // must NEVER reach the model (§8.1 rule 1). Map it to the gentle, non-diagnostic `display` copy; if a band
   // can't be resolved, omit it entirely rather than leak the clinical key. Non-wellbeing descriptor bands
   // ("leans higher") are non-clinical and pass through.
@@ -136,7 +132,6 @@ export async function narrateResult(deps: NarrateDeps): Promise<NarrateResult> {
     // register appropriate and stays gated; suppression can only ever PREVENT.
     ...(suppression ? [suppression] : []),
     ...(def.wellbeing ? [WELLBEING_BOUNDARY] : []),
-    ...(result.crisisFlag ? [CRISIS_LEAD] : []),
   ].join('\n\n');
 
   const at = now.toISOString();

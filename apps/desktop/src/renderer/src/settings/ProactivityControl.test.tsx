@@ -40,7 +40,6 @@ describe('ProactivityControl (40 §3.6)', () => {
     await waitFor(() => expect(select.disabled).toBe(false));
     await userEvent.selectOptions(select, 'off');
     expect(setPrefs).toHaveBeenCalledWith({ proactivity: 'off' });
-    // The "off" hint (always-available crisis support) is shown.
     expect(screen.getByText(/only responds when you start something/i)).toBeInTheDocument();
   });
 

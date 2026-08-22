@@ -7,7 +7,6 @@ import { StoryMemories } from './StoryMemories';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './Books.module.css';
 import { BookReader } from './BookReader';
 import { ChapterReader } from './ChapterReader';
@@ -202,7 +201,6 @@ export function Story(): JSX.Element {
           onPick={(typeId) => setMode({ kind: 'setup', typeId })}
           onCancel={() => setMode({ kind: 'idle' })}
         />
-        <CrisisFooter />
       </div>
     );
   }
@@ -227,7 +225,6 @@ export function Story(): JSX.Element {
           }}
         />
         {error ? <Banner tone="danger">{error}</Banner> : null}
-        <CrisisFooter />
       </div>
     );
   }
@@ -241,7 +238,6 @@ export function Story(): JSX.Element {
         return (
           <div className={styles.page}>
             <ChapterReader bundle={bundle} chapter={openChapter} onBack={() => setReading(null)} />
-            <CrisisFooter />
           </div>
         );
       }
@@ -281,7 +277,6 @@ export function Story(): JSX.Element {
             onReadBook={() => navigate(`/books/${bundle.manifest.id}/read`)}
             aiUnavailable={aiUnavailable}
           />
-          <CrisisFooter />
         </div>
       );
     }
@@ -312,7 +307,6 @@ export function Story(): JSX.Element {
             if (!res.ok && res.message) setError(res.message);
           }}
         />
-        <CrisisFooter />
       </div>
     );
   }
@@ -345,7 +339,6 @@ export function Story(): JSX.Element {
         </>
       )}
       {error ? <Banner tone="danger">{error}</Banner> : null}
-      <CrisisFooter />
     </div>
   );
 }

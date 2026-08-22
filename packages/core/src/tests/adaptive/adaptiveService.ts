@@ -21,7 +21,6 @@ import {
   readLexicon,
   writeLexicon,
 } from './lexicon';
-import { takeCarriesDistress } from './distress';
 import { recordTakeSaturation } from './saturation';
 import { scoreSpine } from './spine';
 import { nameFamilies } from './bank';
@@ -377,7 +376,7 @@ export async function stampTurn(
  * So the row stays, carrying its text, and the ANSWER goes with the deletion. Everything downstream then
  * follows with no new filters, because every consumer of an answer already tests for one:
  * `answersDigest` skips it, the report's "what you told it" reads through `isAnsweredTurn`, and
- * `takeCarriesDistress` is a `typeof` check. Deleting an answered item stops it feeding the profile
+ * Deleting an answered item stops it feeding the profile
  * immediately, which is what the screen promises when it says so.
  */
 export async function deleteTurn(
@@ -504,13 +503,9 @@ export async function completeAdaptiveTake(
   await writeLexicon(fs, key, lexicon);
 
   const at = now.toISOString();
-  // §8.3 — a disclosure anywhere in the take flags the result, so the report leads with resources and the
-  // flag feeds `aggregateCrisisSignal` like any other (40 §3.5).
-  const crisisFlag = takeCarriesDistress(draft.turns);
   const result: TestResult = {
     ...draft,
     status: 'complete',
-    ...(crisisFlag ? { crisisFlag: true } : {}),
     scores: scoreSpine(lexicon, def.spine),
     ...(input.profile ? { profile: input.profile } : {}),
     ...(input.narrative ? { narrative: input.narrative } : {}),
@@ -614,7 +609,6 @@ async function buildAdaptiveInsight(
     confidence: 'high', // they told us directly, word by word
     categories: [def.lifeArea],
     approved: true,
-    ...(result.crisisFlag ? { crisisFlag: true } : {}),
     provenance: { testId: def.id, testResultId: result.id, at: result.takenAt },
     createdAt: existing?.createdAt ?? fallbackCreatedAt,
     updatedAt: result.takenAt,

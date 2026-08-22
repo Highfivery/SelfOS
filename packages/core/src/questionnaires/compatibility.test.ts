@@ -300,7 +300,6 @@ describe('generateAlignment', () => {
         note: 'One wants more time; the other does not.',
       },
     ],
-    crisisFlag: false,
     facts: [{ text: 'They differ on desired time together.', shareable: true }],
   });
 
@@ -415,7 +414,6 @@ describe('distillContextOnly (§16.2)', () => {
     summary: 'They value steady connection and clear communication.',
     facts: [{ text: 'Feels most connected through shared time.' }],
     confidence: 'medium',
-    crisisFlag: false,
   });
 
   it('auto-approves an own-context Insight for EACH participant; no report; facts never cross-shared', async () => {

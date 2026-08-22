@@ -26,7 +26,7 @@ surrounding context to judge correctness. Evaluate against:
    assert behavior, not implementation trivia.
 6. **DRY & simplicity** — duplication that should be shared; over-engineering; dead code.
 7. **Docs in lockstep** — does this change make a spec/CLAUDE.md/skill stale? (Flag for `sync-docs`.)
-8. **Wellness safety** — if it touches wellbeing/conversation: not-medical boundary intact; crisis
+8. **Wellness safety** — if it touches wellbeing/conversation: not-medical boundary intact; no
    routing present.
 
 ## Output

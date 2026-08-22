@@ -15,7 +15,6 @@ import {
   MessageTime,
   Text,
 } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import {
   downscaleImage,
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -296,7 +295,6 @@ function TogetherComposer({
 }
 
 /**
- * The session thread (58 §3.6): author-attributed bubbles, a private-aside composer, turn state, crisis footer.
  * When `completed` (the session is wrapped up, §3.8), the composer collapses behind a "Reopen to keep talking"
  * button so the session reads as ended — one tap reveals the composer, and the next shared message reopens the
  * session (deriving it back to `active`, §4.3).
@@ -450,7 +448,6 @@ export function TogetherThread({
           }}
         />
       )}
-      <CrisisFooter />
     </div>
   );
 }

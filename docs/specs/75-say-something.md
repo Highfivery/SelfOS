@@ -274,6 +274,11 @@ and written here so nobody later reads it as a missed reap.
 
 ### 8.4 The trauma carve-out is not negotiable
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `readsAsDistress` and the trauma/crisis path it gated are gone, as is the crisis footer. The section
+> below is kept for history; **do not implement it**. The not-medical boundary is a separate rule and
+> still applies.
+
 Text that tripped the trauma/crisis path **never** enters an erotic-suggestion prompt (74 §8.4). This spec
 carves no exception. `SAFETY` leads the system prompt as everywhere else, and the crisis footer is present on
 the surface (§8.2 of 58 — a crisis affordance belongs outside the pane that changes).

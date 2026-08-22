@@ -11,7 +11,6 @@ function state(over: Partial<PersonRecommendationState> = {}): PersonRecommendat
     adultAcknowledged: false,
     proactivity: 'active',
     now: NOW,
-    crisis: false,
     isNew: false,
     configured: true,
     openGoals: [],

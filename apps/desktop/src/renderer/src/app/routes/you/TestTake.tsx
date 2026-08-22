@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { unansweredRequired, type AnswerMap } from '@selfos/core/questionnaires';
-import { crisisItemPositive, type TestForm } from '@selfos/core/tests';
+import { type TestForm } from '@selfos/core/tests';
 import { QuestionnaireForm } from '@selfos/answering';
 import { Banner, Button, Heading, Stack, Text } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
 
@@ -43,18 +42,6 @@ export function TestTake(): JSX.Element {
 
   const remaining = useMemo(
     () => (form ? unansweredRequired(form.items, answers).length : 0),
-    [form, answers],
-  );
-
-  // 51 §3.2 step 3 — the mid-check-in crisis interception. The moment a crisis item (PHQ-9 item 9) is answered
-  // positive, this turns true and a prominent, resources-first banner appears immediately — before the check-in
-  // is even finished. Pure + client-evaluable from the definition's crisisItems (no IPC round-trip); the bridge
-  // still authoritatively sets the result's crisisFlag at score time.
-  const crisisActive = useMemo(
-    () =>
-      form?.wellbeing
-        ? crisisItemPositive(form.crisisItems, answers as Record<string, never>)
-        : false,
     [form, answers],
   );
 
@@ -142,20 +129,10 @@ export function TestTake(): JSX.Element {
                   Begin
                 </Button>
               </div>
-              <CrisisFooter />
             </Stack>
           ) : (
             <Stack gap={4}>
               <Heading level={2}>{form.title}</Heading>
-              {/* 51 §3.2 step 3 / §8.2 — escalate to a prominent, warm, resources-first banner the instant a
-                  crisis item is answered positive, before the check-in is even finished. */}
-              {crisisActive ? (
-                <Banner tone="warning" role="alert">
-                  It sounds like you’ve been having a really hard time — please reach out to someone
-                  who can help right now. You don’t have to go through this alone; the resources
-                  below are there for you.
-                </Banner>
-              ) : null}
               <QuestionnaireForm
                 questions={form.items}
                 answers={answers}
@@ -163,7 +140,6 @@ export function TestTake(): JSX.Element {
                   setMissing(false);
                   setAnswers((prev) => ({ ...prev, [id]: value }));
                 }}
-                footer={<CrisisFooter />}
               />
               {missing ? (
                 <Banner tone="warning">

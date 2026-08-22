@@ -53,7 +53,7 @@ import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 // Tolerant by design (37 §3.1): require only `summary`; per-question verdicts (`items`) and `facts` are
 // per-element salvaging — a bad verdict/fact drops, the rest survive, and an un-verdicted prompt simply
-// defaults to `mixed` downstream (the report is partial-safe). `crisisFlag` is preserved, never coerced (§8).
+// defaults to `mixed` downstream (the report is partial-safe).
 const ALIGN_ITEM_SENTINEL = { canonicalId: '', agreement: 'mixed' as const, note: '' };
 const ALIGN_FACT_SENTINEL = { text: '', shareable: false };
 const AlignmentAiSchema = z.object({
@@ -67,7 +67,6 @@ const AlignmentAiSchema = z.object({
     ALIGN_ITEM_SENTINEL,
     (i) => i.canonicalId.trim() !== '',
   ),
-  crisisFlag: z.boolean().optional().catch(undefined),
   facts: tolerantArray(
     z.object({ text: z.string().min(1), shareable: z.boolean() }),
     ALIGN_FACT_SENTINEL,
@@ -254,7 +253,6 @@ export async function generateAlignment(
     provenance: { compatibilityGroupId: input.compatibilityGroupId, ...(about ?? {}), at },
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
-    ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),
   };
   await saveInsight(deps.fs, deps.key, insight);
 
@@ -268,7 +266,6 @@ export async function generateAlignment(
     items,
     insightId: insight.id,
     generatedAt: at,
-    ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),
   };
   await writeEncryptedJson(
     deps.fs,
@@ -279,7 +276,7 @@ export async function generateAlignment(
   return { ok: true, report, usage: call.usage };
 }
 
-// Tolerant by design (37 §3.1): require only `summary`; per-fact salvage; `crisisFlag` preserved (§8).
+// Tolerant by design (37 §3.1): require only `summary`; per-fact salvage.
 const DISTILL_FACT_SENTINEL = { text: '' };
 const ContextOnlyDistillSchema = z.object({
   summary: z.string().min(1),
@@ -289,7 +286,6 @@ const ContextOnlyDistillSchema = z.object({
     (f) => f.text.trim() !== '',
   ),
   confidence: z.enum(['low', 'medium', 'high']).optional().catch(undefined),
-  crisisFlag: z.boolean().optional().catch(undefined),
 });
 
 /**
@@ -398,7 +394,6 @@ export async function distillContextOnly(
       provenance: { compatibilityGroupId: input.compatibilityGroupId, at },
       createdAt: prior?.createdAt ?? at,
       updatedAt: at,
-      ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),
     };
     await saveInsight(deps.fs, deps.key, insight);
   }

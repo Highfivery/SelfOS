@@ -25,7 +25,6 @@ import {
 } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { awaitingReply } from '../../../stores/conversationStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './Books.module.css';
 
 /** The user message's stored image attachments — resolved via the memory store's cache (45 §3.3). */
@@ -82,12 +81,6 @@ function MemoryConfirmCard({
         Your biographer wrote this from what you shared. Read it, change anything that isn’t quite
         right, then add it to your story.
       </Text>
-      {memory.crisisFlag ? (
-        <Banner tone="warning">
-          This memory touches something heavy. If you need support right now, the resources below
-          are here for you — you don’t have to hold it alone.
-        </Banner>
-      ) : null}
       <Field label="Title">
         {(p) => <TextInput {...p} value={title} onChange={(e) => setTitle(e.target.value)} />}
       </Field>
@@ -174,7 +167,6 @@ interface ShareMemoryPanelProps {
 /**
  * "Share a memory" (64 §14) — an interactive biographer interview: the biographer opens the conversation
  * (streaming), asks/deepens like the dream-analysis pane, then synthesizes a structured memory the person
- * commits with one tap. Reuses the Sessions composer (with photo attachments) + crisis footer. The reading
  * (chat) surface streams — that IS the progress; the synthesis is a button-busy state.
  */
 export function ShareMemoryPanel({
@@ -428,8 +420,6 @@ export function ShareMemoryPanel({
           <AiUnavailableNotice />
         </Stack>
       )}
-
-      <CrisisFooter />
     </div>
   );
 }

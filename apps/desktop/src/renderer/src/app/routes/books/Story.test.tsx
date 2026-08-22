@@ -8,7 +8,6 @@ import type {
   ChapterMarkup,
   ChatMessage,
   Conversation,
-  Insight,
   QuoteCandidate,
   ConsentPerson,
   StoryBookBundle,
@@ -299,7 +298,7 @@ afterEach(() => {
   clearMockBridge();
   useStoryStore.getState().reset();
   useStoryMemoryStore.getState().reset(); // "Share a memory" (§14) — per-person chat + collection state
-  useInsightStore.getState().reset(); // the Studio's crisis-quiet read loads it (§13.4)
+  useInsightStore.getState().reset();
   useSessionStore.setState({ activePerson: null, access: null });
   useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
   useImagePrefsStore.setState({ prefs: null, loaded: false });
@@ -4036,47 +4035,6 @@ describe('Story (64)', () => {
         'AI isn’t set up yet — ask the person who set up this household to turn it on.',
       ),
     ).toBeInTheDocument();
-  });
-
-  it('the Studio hero quiets honestly while the person’s own crisis signal is recurring (§13.4)', async () => {
-    const at = new Date().toISOString();
-    const crisisInsight = (id: string): Insight => ({
-      id,
-      schemaVersion: 1,
-      source: 'session',
-      subjectPersonId: 'me',
-      summary: 'A heavy stretch.',
-      facts: [],
-      confidence: 'medium',
-      categories: [],
-      approved: true,
-      crisisFlag: true,
-      provenance: { at },
-      createdAt: at,
-      updatedAt: at,
-    });
-    installStoryBridge({
-      booksBookTypes: () => Promise.resolve(BOOK_TYPES),
-      booksList: () => Promise.resolve([manifest({ status: 'ready' })]),
-      booksGet: () => Promise.resolve(writtenBundle('new')),
-      // ≥2 recent approved crisis-flagged own insights → aggregateCrisisSignal.recurring (40 §3.5).
-      insightsList: () => Promise.resolve([crisisInsight('i-a'), crisisInsight('i-b')]),
-    });
-    useSessionStore.setState({ activePerson: ACTIVE_PERSON }); // the signal is per active person
-    await renderStory();
-    expect(
-      await screen.findByText(/Your biographer is resting while things are heavy/),
-    ).toBeInTheDocument();
-  });
-
-  it('the crisis footer is always present on the story surface, invitation included (§8.2)', async () => {
-    installStoryBridge({
-      booksBookTypes: () => Promise.resolve(BOOK_TYPES),
-      booksList: () => Promise.resolve([]),
-    });
-    await renderStory();
-    await screen.findByRole('button', { name: 'Begin your book' });
-    expect(screen.getByRole('button', { name: 'Get help now' })).toBeInTheDocument();
   });
 
   it('opens a book with an outline straight into the overview (no approval gate)', async () => {

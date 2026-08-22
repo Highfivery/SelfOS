@@ -199,7 +199,6 @@ describe('sendFamilyEmail — the gated orchestrator (67 §5.2/§7/§8)', () => 
     personId: 'me',
     family: 'welcome' as const,
     composed: buildWelcomeEmail({ recipientName: 'Me' }),
-    crisisSuppressed: false,
     now,
     ...over,
   });
@@ -218,13 +217,9 @@ describe('sendFamilyEmail — the gated orchestrator (67 §5.2/§7/§8)', () => 
     });
   });
 
-  it('gates: crisis → CRISIS (no send/log); no key → NOT_CONFIGURED; no address → NO_ADDRESS; off → FAMILY_OFF; paused → PAUSED', async () => {
+  it('gates: no key → NOT_CONFIGURED; no address → NO_ADDRESS; off → FAMILY_OFF; paused → PAUSED', async () => {
     const fs = await ready();
     const email = fakeEmail();
-    expect(await sendFamilyEmail(base(fs, { email, crisisSuppressed: true }))).toEqual({
-      ok: false,
-      reason: 'CRISIS',
-    });
     expect(
       ((await sendFamilyEmail(base(fs, { email, resendKey: undefined }))) as { reason: string })
         .reason,
@@ -456,7 +451,7 @@ describe('sendTransactionalEmail — family B (67 §3.2/§7)', () => {
     expect(await listEmailActivity(fs, key, 'me')).toHaveLength(2);
   });
 
-  it('respects the transactional opt-in (FAMILY_OFF) and pause via sendFamilyEmail; never crisis-gated', async () => {
+  it('respects the transactional opt-in (FAMILY_OFF) and pause via sendFamilyEmail', async () => {
     const fs = await ready();
     await setEmailPrefs(fs, key, 'me', { families: { transactional: false } }, false, now);
     expect(((await sendTransactionalEmail(deps(fs))) as { reason: string }).reason).toBe(

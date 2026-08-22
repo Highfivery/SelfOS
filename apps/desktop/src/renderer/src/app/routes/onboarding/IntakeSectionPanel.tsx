@@ -24,7 +24,6 @@ import styles from './Onboarding.module.css';
 /**
  * The active intake section's adaptive interview (18-personal-onboarding §3.2): the streamed Q&A (reusing
  * the Sessions `Composer`), the skip / "that's enough" controls, the per-section reflection, and — for the
- * intimacy block — the one-time 18+ gate. The crisis footer lives in the container, always present.
  */
 export function IntakeSectionPanel({
   meta,

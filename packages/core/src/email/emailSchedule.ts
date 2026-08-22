@@ -18,7 +18,6 @@ import { readProfile } from '../questionnaires/personalizationProfile';
 import { buildTopicSteering, ensureTopics, topicStatuses } from '../questionnaires/topicMap';
 import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
 import { getSynthesis } from '../coaching/coachingSynthesisService';
-import { aggregateCrisisSignal } from '../coaching/crisisSignal';
 import { computeMomentum } from '../recommendations/momentum';
 import { stalestOpenGoal } from '../recommendations/providers';
 import { buildActivityFeed } from '../home/feed';
@@ -177,10 +176,7 @@ export async function gatherDigestContent(
     listGoals(fs, key, personId),
   ]);
 
-  // Crisis stays inclusive (safety-first — never filter a distress signal, even one surfaced via a partner's
-  // response). But the "areas explored" momentum stat is about THIS person, so it counts own-subject only (#129).
-  const crisis = aggregateCrisisSignal({ insights, now, nightmareNudge: false }).recurring;
-
+  // The "areas explored" momentum stat is about THIS person, so it counts own-subject only (#129).
   const sessionsRecent = conversations.filter((c) => withinDays(c.updatedAt, nowMs, 7)).length;
   const dreamsRecent = dreams.filter((d) => withinDays(d.createdAt, nowMs, 7)).length;
   const areasExplored = new Set(ownSubjectInsights(insights).flatMap((i) => i.categories)).size;
@@ -203,14 +199,11 @@ export async function gatherDigestContent(
       ...dreams.map((d) => d.createdAt),
       ...goals.map((g) => g.lastTouchedAt ?? g.updatedAt),
     ],
-    crisis,
   });
 
-  const rings = crisis
-    ? []
-    : computeLifeRings({
-        signals: { sessionsRecent, dreamsRecent, areasExplored, goalsMoving },
-      }).map((r) => ({ label: r.label, levelLabel: r.levelLabel, pct: r.pct }));
+  const rings = computeLifeRings({
+    signals: { sessionsRecent, dreamsRecent, areasExplored, goalsMoving },
+  }).map((r) => ({ label: r.label, levelLabel: r.levelLabel, pct: r.pct }));
 
   const feed = buildActivityFeed({
     now,
@@ -611,7 +604,6 @@ async function trySuggestion(ctx: {
     personId,
     family,
     composed,
-    crisisSuppressed: false, // gated by engagementReady (crisis already excluded)
     scheduledAt: iso(nowMs + SUGGESTION_SCHEDULE_HOURS * 60 * 60 * 1000),
     sourceKey: `suggestion:${sent.id}`,
     now,
@@ -635,7 +627,6 @@ export async function reconcileEmailSchedule(deps: {
   personId: string;
   prefs: EmailPrefs | null;
   recipientName?: string;
-  crisisSuppressed: boolean;
   /** The relay tap-drain transport (Phase 4) — present only when a relay is provisioned. Enables the
    *  one-click interactive re-engagement email + draining its taps back into responses. */
   relay?: TapDrainer;
@@ -750,7 +741,7 @@ export async function reconcileEmailSchedule(deps: {
     }
   }
 
-  const engagementReady = Boolean(prefs?.address) && !prefs?.paused && !deps.crisisSuppressed;
+  const engagementReady = Boolean(prefs?.address) && !prefs?.paused;
 
   // 2) Digest (C).
   const existingDigest = activity.find((e) => e.family === 'digest' && isLivePending(e, nowMs));
@@ -774,7 +765,6 @@ export async function reconcileEmailSchedule(deps: {
           personId,
           family: 'digest',
           composed,
-          crisisSuppressed: false, // gated above by engagementReady (crisis already excluded)
           scheduledAt: targetAt,
           sourceKey: digestKey(targetAt),
           now,
@@ -783,7 +773,7 @@ export async function reconcileEmailSchedule(deps: {
       }
     }
   } else if (existingDigest) {
-    canceled += await cancelScheduled(scoped, existingDigest); // opted out / crisis / paused → cancel
+    canceled += await cancelScheduled(scoped, existingDigest); // opted out / paused → cancel
   }
 
   // 3) Re-engagement (D) — (re)schedule for `awayDays` out; opening again pushes it back.
@@ -850,7 +840,6 @@ export async function reconcileEmailSchedule(deps: {
       personId,
       family: 're-engagement',
       composed,
-      crisisSuppressed: false,
       scheduledAt: iso(nowMs + RE_ENGAGEMENT_AWAY_DAYS * DAY_MS),
       sourceKey: REENGAGEMENT_KEY,
       now,
@@ -947,7 +936,6 @@ export async function reconcileEmailSchedule(deps: {
         personId,
         family: 'milestone',
         composed,
-        crisisSuppressed: false, // gated by engagementReady (crisis already excluded)
         sourceKey: next.sourceKey,
         now,
       });

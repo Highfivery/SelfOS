@@ -6,7 +6,6 @@ import type { ProactivityLevel } from '@shared/schemas';
  * The per-person proactivity level (40-proactive-coaching §3.6/§5.4). Unlike the household-wide settings,
  * this is per-active-person (`CoachingPrefs`, read/written via `coaching:getPrefs`/`setPrefs` — the bridge is
  * the trust boundary), so it manages its own state rather than the schema-driven `useSetting` store. The
- * select's three levels are warm + non-surveilling; "Off" still leaves the always-present crisis support on.
  */
 
 const LEVELS: { value: ProactivityLevel; label: string; hint: string }[] = [

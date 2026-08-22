@@ -998,7 +998,6 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         nightmareCount: 0,
         moodTrend: [],
         vividnessTrend: [],
-        nightmareNudge: false,
       }),
     dreamGetPatternSummary: () => Promise.resolve(null),
     dreamPatternNarrative: () =>

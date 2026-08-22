@@ -266,11 +266,4 @@ describe('Onboarding', () => {
     fireEvent.click(screen.getByRole('button', { name: /The basics/ }));
     expect(await screen.findByText('What should I call you?')).toBeInTheDocument();
   });
-
-  it('always shows the crisis footer and the not-medical line', async () => {
-    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
-    renderOnboarding();
-    await screen.findByText('What should I call you?');
-    expect(screen.getByText('SelfOS is wellness support, not medical care.')).toBeInTheDocument();
-  });
 });

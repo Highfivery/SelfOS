@@ -264,7 +264,6 @@ describe('Dreams', () => {
           nightmareCount: 1,
           moodTrend: [],
           vividnessTrend: [],
-          nightmareNudge: false,
         }),
     });
     renderDreams();

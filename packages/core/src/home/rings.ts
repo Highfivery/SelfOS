@@ -27,12 +27,11 @@ function levelFor(value: number): string {
  * (so a person with no relationships sees no Connection ring, etc. — never a false zero). Pure.
  *
  * Framed as "a reflection, not a score to chase": the caller shows both the `levelLabel` word and the `pct`
- * (the owner's choice), but during a **crisis** signal every ring is `softened` — the caller then shows only
+ * (the owner's choice)
  * the supportive `levelLabel`, no number/bar (§8, the safety guardrail, enforced here so it's testable).
  */
 export function computeLifeRings(input: LifeRingsInput): LifeRing[] {
   const s = input.signals;
-  const softened = input.crisis === true;
   const rings: LifeRing[] = [];
 
   const push = (key: LifeRingKey, value: number): void => {
@@ -43,7 +42,6 @@ export function computeLifeRings(input: LifeRingsInput): LifeRing[] {
       value: v,
       pct: Math.round(v * 100),
       levelLabel: levelFor(v),
-      softened,
     });
   };
 

@@ -101,7 +101,7 @@ findings, diagnoses, or assessments.
 Hard rules: write in plain second-person ("you tend to…", "you and {name}…"). NEVER quote, attribute, or list \
 the partner's raw shared answers back — SYNTHESISE them into insight about the relationship. Be balanced and \
 kind, never take sides, never alarm. If there genuinely isn't enough to say something honest, return fewer (or \
-an empty list) rather than inventing a pattern. If anything suggests crisis or harm, encourage reaching out to \
+an empty list) rather than inventing a pattern. \
 real support instead.
 
 Respond with ONLY a JSON object: {"observations": string[] (2–4 short observations, each 1–2 sentences)}.`;

@@ -15,10 +15,15 @@ stores everything as plain files the user owns.
 - SelfOS is a **wellness / self-help** tool. It is **NOT medical**, **NOT a medical device**, and
   **NOT a substitute for professional care**. Never describe it as therapy in the clinical sense,
   diagnosis, or treatment.
-- Any feature that touches the user's wellbeing must keep this boundary visible and must route
-  crisis/self-harm situations to professional resources (e.g., emergency services, crisis lines)
-  rather than attempting to handle them alone. When we build conversational features, this becomes
-  a hard requirement with its own spec section.
+- Any feature that touches the user's wellbeing must keep the not-medical boundary **visible**.
+- **There is no crisis / distress system, and one must not be reintroduced (owner decision,
+  2026-08-22, confirmed four times).** It was removed app-wide: `aggregateCrisisSignal`, both
+  `CrisisFooter`s, the Home `CrisisSupportBanner`, every `crisisFlag`/`distressSignal` field and the
+  model contracts that set them, the PHQ-9 item-9 trigger, the recurring-nightmare nudge, and email
+  crisis suppression. **This bullet previously said the opposite** — that routing crisis/self-harm to
+  professional resources was a hard requirement with its own spec section — so if you find a spec or
+  a comment still asserting that, it is stale and should be corrected, not implemented. The
+  not-medical line above is a separate rule and it **stays**.
 - Treat all user content as **highly sensitive personal data**. It never leaves the device except
   in explicit Claude API calls the user has consented to. The API key lives **only** in the
   Electron main process and is never logged, committed, or exposed to the renderer.
@@ -561,6 +566,46 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-22 — **The crisis / distress system is REMOVED, app-wide (owner decision, confirmed four times;
+  `CLAUDE.md` §1 rewritten in the same change; `docs/handoff-crisis-removal.md`).** _"clean-up and completely
+  remove the crisis stuff"_ — which also settled the two questions a prior session had left open: **PHQ-9
+  item 9 goes too**, and the **not-medical boundary stays** (a separate §1 bullet). **The scope was measured,
+  not estimated** — an earlier session had guessed "~120 files" and was wrong by half; an exhaustive map put it
+  at **252**, and that correction is the reason the work was done as its own pass rather than folded into the
+  Notes release. **Deleted:** `coaching/crisisSignal.ts`, `tests/wellbeingCrisis.ts`,
+  `tests/adaptive/distress.ts`, both `CrisisFooter`s, `home/CrisisSupportBanner.tsx` and their tests; every
+  `crisisFlag`/`distressSignal` field and the eleven model contracts that set them; the `'CRISIS'` /`'crisis'`
+  union members; the recurring-nightmare nudge; the email gate in **both** `emailSend` (the first check in
+  `sendFamilyEmail`) and `emailSchedule` (`engagementReady`), plus the milestone streak suppression; and every
+  param that existed only to carry the signal (`StreakInput.crisis`, `RingsInput.crisis`, the `suppressed` /
+  `softened` outputs that could now only ever be false, the auto-checkin gate, both story cadences,
+  `GoalsCard.crisis`, `StudioLayout`'s `crisisQuiet` read). **The consequence, stated plainly rather than
+  discovered later: email no longer has a crisis gate** — digests, suggestions and notes send regardless of
+  state. That is inherent to the decision. **Three things were surgery, not deletion.** (1)
+  **`resolveWellbeingBand` lived inside the crisis module and is not crisis machinery** — it builds the gentle
+  non-diagnostic band the wellbeing result screen renders; it moved to a new `wellbeingBands.ts` FIRST, because
+  deleting the file whole would have taken that screen with it. (2) **Four strings mixed kept and removed copy
+  in one sentence** (`NOT_MEDICAL`, `OrientationBody`, `AboutDisclaimer`, and `site/index.html` twice) — the
+  not-medical half survives in all four. (3) **Deleting `CrisisFooter` also deletes the not-medical line from
+  43 surfaces**, since both footers carried it alongside the crisis copy; the owner was shown that count and
+  chose **remove it entirely, no replacement** (`Together.test.tsx` asserting that line on every tab is what
+  surfaced it as a test failure — the decision showing up in the suite rather than in production). **The line
+  drawn on prompts, applied uniformly:** routing CONDITIONED on distress is gone ("if they express distress →
+  route to professional support"); the standing not-medical boundary and the **abuse / real-non-consent**
+  boundary in the intimacy guides stay — the latter is a consent rule ("never frame abuse as kink", "do not
+  coach it as ordinary conflict"), not a distress rule, and specs 48/74 keep it independently. The onboarding
+  question _"Who do you turn to in a crisis?"_ also stays: it asks about a support network, which is profile
+  content. **Docs in lockstep:** §1 now says there is no crisis system **and records that it previously said
+  the opposite**, so a future session corrects a stale spec rather than restoring the code from it; 17 spec
+  sections carry a superseded banner rather than being deleted; the two agents, the spec template, the
+  write-spec skill, README, CONTRIBUTING and the marketing site are all updated. Four E2E and ~25 unit tests
+  whose entire premise was crisis are **deleted, not skipped**. **Lessons: (1) a scope estimate quoted from
+  memory is not a measurement — the real number was double, and the difference was the difference between
+  "fold it into the release" and "its own reviewed pass". (2) A module named for one concern can host a
+  function that belongs to another; grep what a file EXPORTS before deleting it. (3) A regex that strips a
+  field can eat a closing backtick when that field is the template literal's last line — `storyMemoryService`
+  broke exactly that way, and only the typecheck caught it. (4) When a component carries two rules, deleting
+  it deletes both; count the surfaces and put the number in front of the owner before choosing.**
 - 2026-08-22 — **Fix (the traffic-light check-in is gone, including from what the app already wrote; owner-directed;
   SPEC 74 §3.6.40; on `fix/drop-traffic-light-consent-rows`).** _"i just dont want users seeing options in the
   worflow for it."_ Two rows cut from the `consent` family (F29): **`colour?`** and **`green / amber / red`**. The

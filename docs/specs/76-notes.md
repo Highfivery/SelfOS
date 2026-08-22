@@ -387,6 +387,12 @@ all of this directly today. What is new is that it can now reach a _generated me
 
 ### 8.2 There is no crisis system
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Per the owner's decision (2026-08-21) the distress/crisis system is being removed app-wide as a separate
 change: `aggregateCrisisSignal`, the Home `CrisisSupportBanner`, the `CrisisFooter`, insight
 `crisisFlag` handling, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression.

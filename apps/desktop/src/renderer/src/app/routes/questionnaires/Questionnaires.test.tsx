@@ -570,12 +570,10 @@ describe('Questionnaires', () => {
 
     await userEvent.type(screen.getByLabelText('Question 1'), 'How was your week?');
     // Switch to Preview — the bespoke presentation view (08 §21.2): a "as they see it" marker naming the
-    // bound recipient, the prompt shown in the reading flow (NOT an answerable field), and the crisis footer.
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/as Mara sees it/i)).toBeInTheDocument();
     expect(screen.getByText('How was your week?')).toBeInTheDocument();
     expect(screen.queryByLabelText('How was your week?')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
   it('attaches an image to a question and requires alt text', async () => {

@@ -49,8 +49,6 @@ const VALID_DRAFT = {
     people: ['brother'],
   },
   metrics: { emotionalIntensity: 0.7 },
-  crisisFlag: false,
-  distressSignal: false,
 };
 
 /** A fake client: returns JSON for the synthesis turn (its last message asks for a JSON object), else a reply. */
@@ -479,14 +477,12 @@ describe('dreamAnalysisService', () => {
       reflectiveQuestions: ['What felt unfinished?', 42],
       tags: { emotions: [], symbols: [], settings: [], themes: [], people: [] },
       metrics: 'not-an-object',
-      crisisFlag: true,
     });
     const res = await synthesizeAnalysis(deps(fs, fakeClient({ synthesisText: text })));
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.analysis.summary).toBe('A vivid dream.');
       expect(res.analysis.reflectiveQuestions).toEqual(['What felt unfinished?']); // bad element dropped
-      expect(res.analysis.crisisFlag).toBe(true); // crisis signal preserved (§8)
     }
   });
 

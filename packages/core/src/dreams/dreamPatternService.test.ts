@@ -11,7 +11,6 @@ import {
   computePatternStats,
   generatePatternNarrative,
   getPatternStats,
-  NIGHTMARE_NUDGE_COUNT,
   removePatternNarrativeFromContext,
   type PatternEntry,
 } from './dreamPatternService';
@@ -130,7 +129,7 @@ describe('computePatternStats', () => {
     expect(stats.people[0]).toEqual({ label: 'Sam', count: 1, personId: 'person-9' });
   });
 
-  it('windows frequency lists + trends but never the nightmare nudge', () => {
+  it('windows frequency lists + trends', () => {
     const entries = [
       entry(dreamOf({ id: 'old', dreamDate: '2026-01-01', mood: 0.5, vividness: 4 })),
       entry(dreamOf({ id: 'new', dreamDate: '2026-06-12', mood: -0.5, vividness: 2 })),
@@ -145,34 +144,6 @@ describe('computePatternStats', () => {
     const recent = computePatternStats(entries, '30d', now);
     expect(recent.dreamCount).toBe(1); // only the 2026-06-12 dream is within 30 days
     expect(recent.moodTrend).toEqual([{ date: '2026-06-12', value: -0.5 }]);
-  });
-
-  it('fires the nightmare nudge on a recent frequency of nightmares', () => {
-    const nightmares = Array.from({ length: NIGHTMARE_NUDGE_COUNT }, (_, i) =>
-      entry(dreamOf({ id: `n${i}`, dreamDate: '2026-06-10', nightmare: true })),
-    );
-    expect(computePatternStats(nightmares, 'all', now).nightmareNudge).toBe(true);
-    // One fewer recent nightmare → no nudge from frequency.
-    expect(computePatternStats(nightmares.slice(1), 'all', now).nightmareNudge).toBe(false);
-    // Old nightmares (outside the 14-day window) don't count.
-    const old = Array.from({ length: NIGHTMARE_NUDGE_COUNT }, (_, i) =>
-      entry(dreamOf({ id: `o${i}`, dreamDate: '2026-05-01', nightmare: true })),
-    );
-    expect(computePatternStats(old, 'all', now).nightmareNudge).toBe(false);
-  });
-
-  it('fires the nightmare nudge on a recent AI distress signal alone', () => {
-    const stats = computePatternStats(
-      [
-        entry(
-          dreamOf({ id: 'd1', dreamDate: '2026-06-12' }),
-          analysisOf('d1', { distressSignal: true }),
-        ),
-      ],
-      'all',
-      now,
-    );
-    expect(stats.nightmareNudge).toBe(true);
   });
 });
 

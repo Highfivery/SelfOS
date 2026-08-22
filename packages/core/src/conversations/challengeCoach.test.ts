@@ -57,8 +57,6 @@ describe('challenge guides (52 §5.2)', () => {
     expect(lower).toContain('invitation');
     expect(lower).toMatch(/never pressure|never coerce|do not coerce/);
     expect(lower).toMatch(/respect a "no"|respect a no|"not now"/);
-    // crisis/distress drops the challenge + routes to resources
-    expect(lower).toMatch(/drop the challenge/);
     expect(lower).toMatch(/professional|emergency/);
     // the marker convention is taught in-prompt
     expect(addendum).toContain('[[SELFOS:CHALLENGE:');

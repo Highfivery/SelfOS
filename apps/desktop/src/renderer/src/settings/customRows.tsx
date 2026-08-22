@@ -128,7 +128,7 @@ export function AboutDisclaimer(): JSX.Element {
   return (
     <Text size="sm" tone="secondary">
       SelfOS is a wellness and self-help tool — not a medical device and not a substitute for
-      professional care. If you’re in crisis, contact local emergency services or a crisis line.
+      professional care.
     </Text>
   );
 }

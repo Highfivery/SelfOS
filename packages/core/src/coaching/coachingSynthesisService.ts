@@ -169,7 +169,7 @@ is a warm invitation to reflect, NOT a finding, diagnosis, or assessment. Offer 
 plain second-person language, naming where it shows up (e.g. "connection has come up across a couple of your \
 recent dreams and last week's session — is that something you'd like to explore?"). If nothing genuinely \
 recurs across more than one source, say so honestly rather than inventing a pattern. Never alarm; if anything \
-suggests crisis, encourage reaching out to real support rather than offering an observation.
+
 
 Respond with ONLY a JSON object: {"observation": string (the one gentle observation, 1–3 sentences), \
 "sources": string[] (which surfaces it draws on, e.g. ["dreams","sessions"]), "lifeArea": string (optional, \

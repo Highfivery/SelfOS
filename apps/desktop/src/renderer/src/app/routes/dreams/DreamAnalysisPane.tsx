@@ -22,7 +22,6 @@ import {
 } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { awaitingReply } from '../../../stores/conversationStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
 import { DreamAnalyzeSuggestion } from './DreamAnalyzeSuggestion';
 import { DreamShareControls } from './DreamShareControls';
@@ -36,7 +35,6 @@ interface DreamAnalysisPaneProps {
 
 /**
  * The guided dream-analysis surface (12-dreams §3.2/§3.3), shown in-pane in place of the dream editor.
- * A dream-scoped reflective chat (reusing the Sessions composer + crisis footer) → a "Create analysis"
  * synthesis → a read-first, editable, approvable card. Once analyzed it **leads with the card**, tucking
  * the chat behind a "Continue the conversation" toggle. Capture/journaling never needs AI; only the
  * chat + synthesis do, so an existing analysis stays viewable/editable/approvable even with AI off.
@@ -282,8 +280,6 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
           </Stack>
         </div>
       )}
-
-      <CrisisFooter />
     </div>
   );
 }

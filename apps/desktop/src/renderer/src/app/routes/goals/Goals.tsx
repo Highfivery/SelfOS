@@ -2,7 +2,6 @@ import { useEffect, useMemo } from 'react';
 import { Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useGoalStore } from '../../../stores/goalStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { GoalCard } from './GoalCard';
 import { TogetherCommitments } from './TogetherCommitments';
 import { CompletedCommitments } from './CompletedCommitments';
@@ -13,7 +12,6 @@ import styles from './Goals.module.css';
  * their own top-level page (extracted from Memory so "what SelfOS knows about you" stays focused). Reuses the
  * 39-living-memory `Goal` data + store + `GoalCard` verbatim; only the page + nav entry are new. Active goals
  * (open / in-progress / stale) lead; completed & closed fold into a collapsed history. The store is loaded +
- * per-person reset in AppShell; a mount load keeps it fresh on direct navigation. Crisis footer always present.
  */
 export function Goals(): JSX.Element {
   const goals = useGoalStore((s) => s.goals);
@@ -86,8 +84,6 @@ export function Goals(): JSX.Element {
           ) : null}
         </Stack>
       )}
-
-      <CrisisFooter />
     </div>
   );
 }

@@ -78,7 +78,7 @@ function frame(framework: string): string {
   return `This session is a self-guided wellness exercise inspired by ${framework} — it is NOT therapy, \
 diagnosis, or treatment, and you are an AI companion, not a clinician. The persona and safety guidance \
 above always take precedence: keep it reflective and warm, never diagnose or prescribe, and route any \
-crisis to professional help. Move at the person's pace, one gentle question at a time; they can go \
+Move at the person's pace, one gentle question at a time; they can go \
 off-script anytime and you follow them.`;
 }
 
@@ -183,7 +183,7 @@ not a personal failing, (3) self-kindness — offering themselves the warmth the
       "counselling. There's no right way to grieve — would you like to tell me about who or what you're missing?",
     systemPromptAddendum: `${frame('grief and loss support')} Hold space without trying to fix or hurry the \
 grief. Normalize that grief is non-linear and has no timeline. Be especially attentive to distress — if it \
-points toward crisis, follow the safety guidance and encourage professional support.`,
+`,
   },
   {
     id: 'worry-time',
@@ -258,7 +258,7 @@ gently.`,
     systemPromptAddendum: `${frame('the mindfulness practice of urge surfing')} Guide them to observe the \
 urge with curiosity — where they feel it, how intense it is (0–10), how it shifts breath by breath — rather \
 than fighting or feeding it, noticing that it peaks and passes. If the urge involves self-harm or a \
-substance crisis, follow the safety guidance and point to professional support.`,
+`,
   },
 
   // ── Coaching ─────────────────────────────────────────────────────────────────────────────────────
@@ -467,7 +467,7 @@ lightly. Stay curious and non-blaming about the family as a whole.`,
     systemPromptAddendum: `${frame('attachment-informed reflection on family relationships')} Help them explore \
 the relationship with honesty and compassion — what they received, what they missed, what they carry — \
 without pushing toward either idealizing or condemning. Hold complexity; if grief or trauma surfaces, slow \
-down, validate, and point to professional support.`,
+down and validate.`,
   },
   {
     id: 'sibling-dynamics',
@@ -600,7 +600,7 @@ low-conflict ways to communicate. Stay neutral about the co-parent; never give l
     systemPromptAddendum: `${frame('support around family estrangement and distance')} Hold space without \
 pushing toward reconciliation OR cut-off — both can be valid. Validate grief, relief, guilt, and \
 ambivalence equally, and respect the boundaries they've drawn for their own safety. If distress points \
-toward crisis, follow the safety guidance and encourage professional support.`,
+`,
   },
   {
     id: 'family-gathering-prep',
@@ -806,7 +806,7 @@ substitute tasteful deflections. Distinguish a fantasy from a wish to enact it, 
 they might share some with a partner. Taboo fantasies are welcome strictly as fantasy/roleplay (e.g. \
 consensual non-consent (CNC) as pre-agreed roleplay). Boundary: consensual adults only; never minors, real \
 (non-roleplay) non-consent, or illegal acts; stay within Anthropic's usage policy. If a fantasy traces to a \
-real non-consensual experience or causes distress, slow down, validate, and route to professional support.`,
+real non-consensual experience, slow down and validate.`,
   },
   {
     id: 'kink-power-exchange',
@@ -826,8 +826,8 @@ and emphasise risk-awareness in the SSC ("safe, sane, consensual") / RACK ("risk
 spirit. Boundary: consensual adults only; never minors, real (non-roleplay) non-consent, or illegal acts; \
 stay within Anthropic's usage policy. If anything described is a non-consensual or unsafe real-world situation \
 (not negotiated play), treat it as a safety concern and route to professional/emergency help — never frame \
-abuse as kink. If distress or shame surfaces, or a desire traces to a painful experience, slow down, validate, \
-and encourage professional support rather than pushing on. If there is no current partner, adapt to \
+abuse as kink. If shame surfaces, or a desire traces to a painful experience, slow down and validate rather \
+than pushing on. If there is no current partner, adapt to \
 self-understanding and how they'd negotiate a scene in future.`,
   },
   {

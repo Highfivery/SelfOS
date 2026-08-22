@@ -120,7 +120,6 @@ const baseReconcile = (fs: ReturnType<typeof memFileSystem>, over = {}) => ({
   resendKey: 're-key' as string | undefined,
   personId: PERSON,
   prefs: null as Awaited<ReturnType<typeof setEmailPrefs>> | null,
-  crisisSuppressed: false,
   now: new Date('2026-08-05T12:00:00.000Z'),
   ...over,
 });
@@ -248,26 +247,6 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
     expect(fake.sent.some((s) => s.scheduledAt && /week/i.test(s.subject))).toBe(true);
   });
 
-  it('does NOT schedule the digest under crisis, and cancels an already-scheduled one', async () => {
-    const fs = await configured();
-    await seedSynthesis(fs, 'Content is present.');
-    const prefs = await setEmailPrefs(fs, key, PERSON, {}, false, new Date());
-    const fake = schedulingFake();
-    // First run schedules the digest.
-    await reconcileEmailSchedule(baseReconcile(fs, { email: fake.client, prefs }));
-    const scheduledId = fake.sent[0]?.id;
-    // A later run under crisis cancels it + schedules nothing new.
-    const res = await reconcileEmailSchedule(
-      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true }),
-    );
-    expect(res.ok).toBe(true);
-    expect(fake.canceled).toContain(scheduledId);
-    const digest = (await listEmailActivity(fs, key, PERSON)).find(
-      (e) => e.family === 'digest' && e.status === 'scheduled',
-    );
-    expect(digest).toBeUndefined(); // none left scheduled
-  });
-
   it('polls Resend status + records delivered/opened onto sent entries', async () => {
     const fs = await configured();
     const fake = schedulingFake();
@@ -281,13 +260,10 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
       personId: PERSON,
       family: 'welcome',
       composed: buildWelcomeEmail({ recipientName: 'Me' }),
-      crisisSuppressed: false,
       now: new Date(),
     });
     fake.setStatus('re-1', 'delivered');
-    const res = await reconcileEmailSchedule(
-      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true }),
-    );
+    const res = await reconcileEmailSchedule(baseReconcile(fs, { email: fake.client, prefs }));
     expect(res.ok && res.polled).toBeGreaterThanOrEqual(1);
     const welcome = (await listEmailActivity(fs, key, PERSON)).find((e) => e.family === 'welcome');
     expect(welcome?.status).toBe('delivered');
@@ -310,24 +286,19 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
       personId: PERSON,
       family: 'welcome',
       composed: buildWelcomeEmail({ recipientName: 'Me' }),
-      crisisSuppressed: false,
       now: new Date(),
     });
 
     // First poll: it gets opened.
     fake.setStatus('re-1', 'opened');
-    await reconcileEmailSchedule(
-      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true }),
-    );
+    await reconcileEmailSchedule(baseReconcile(fs, { email: fake.client, prefs }));
     const opened = (await listEmailActivity(fs, key, PERSON)).find((e) => e.family === 'welcome');
     expect(opened?.status).toBe('opened');
     expect(opened?.openedAt).toBeDefined();
 
     // Second poll: they click. An `opened` entry must still be polled, and the click must be stamped.
     fake.setStatus('re-1', 'clicked');
-    await reconcileEmailSchedule(
-      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true, auto: false }),
-    );
+    await reconcileEmailSchedule(baseReconcile(fs, { email: fake.client, prefs, auto: false }));
     const clicked = (await listEmailActivity(fs, key, PERSON)).find((e) => e.family === 'welcome');
     expect(clicked?.status).toBe('clicked');
     expect(clicked?.clickedAt).toBeDefined();
@@ -372,9 +343,7 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
       key,
     );
     const prefs = await setEmailPrefs(fs, key, PERSON, {}, false, now);
-    const res = await reconcileEmailSchedule(
-      baseReconcile(fs, { email: fake.client, prefs, crisisSuppressed: true, now }),
-    );
+    const res = await reconcileEmailSchedule(baseReconcile(fs, { email: fake.client, prefs, now }));
     expect(res.ok).toBe(true);
     expect(fake.canceled).toContain(reminderId);
   });
@@ -412,7 +381,6 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
       personId: PERSON,
       family: 're-engagement',
       composed: buildReEngagementEmail({ headline: 'Come back' }),
-      crisisSuppressed: false,
       scheduledAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
       sourceKey: 'reengagement:pending',
       now,
@@ -451,7 +419,6 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
       personId: PERSON,
       family: 'digest',
       composed: buildDigestEmail({ insightOfWeek: 'Last week.' }),
-      crisisSuppressed: false,
       scheduledAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
       sourceKey: 'digest:old',
       now,

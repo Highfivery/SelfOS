@@ -3,7 +3,7 @@
  * one-time badge celebrated warmly on Home. Pure + state-based (a milestone is "earned" from current counts,
  * not a stored event). The renderer maps each earned badge into the existing celebration flow (a `Completion`
  * keyed `badge:<id>`), so it celebrates exactly ONCE (the device-local `celebrate:` signature) and is never
- * revocable or shaming (§8). Crisis suppression is the caller's (celebration is gated by `showEncouragement`).
+ * revocable or shaming (§8). Celebration is gated by `showEncouragement`.
  */
 
 export interface MilestoneBadge {

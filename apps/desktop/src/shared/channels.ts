@@ -1531,7 +1531,6 @@ export interface SelfosBridge {
   autoCheckinsEnsureSeed(): Promise<{ seeded: boolean; config: AutoCheckinConfig } | null>;
   /**
    * Run the Auto check-ins engine (63 §6.3). `auto` (default) applies the 24h throttle + stamps the marker on
-   * a spending pass; a manual "Run now" passes `auto:false` to skip the throttle. Budget/crisis/AI-gated.
    */
   autoCheckinsRun(input?: { auto?: boolean }): Promise<AutoCheckinRunResult>;
   /**
@@ -1741,7 +1740,6 @@ export interface SelfosBridge {
    *  no-AI read. Gated `story.own`, active-person-scoped. */
   booksCompleteness(input: { bookId: string }): Promise<StoryCompleteness>;
   /** Run the autonomous interview cadence (§3.7): when warranted, gap-pass the book + mint ≤1 story check-in
-   *  into the Inbox. `auto` throttles + host-side-crisis-gates; manual bypasses the interval (still weekly-capped).
    *  Gated `story.own`, active-person-scoped; the key stays host-side. */
   booksInterviewCheck(input: StoryInterviewCheckInput): Promise<StoryInterviewCadenceResult>;
   /** The persisted gap-pass output (§13.6.3) — gaps + per-part coverage for the life map, rendered with NO AI.

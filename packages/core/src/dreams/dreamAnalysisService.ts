@@ -135,8 +135,6 @@ JSON object (no markdown fences, no prose outside it) with these keys:
 - "coachingPrompt": one gentle suggestion or intention (string)
 - "tags": { "emotions": [], "symbols": [], "settings": [], "themes": [], "people": [] } — short lowercase keywords for tracking patterns over time
 - "metrics": optional object of normalized signals for trend tracking, e.g. {"emotionalIntensity": 0.0-1.0, "valence": -1.0..1.0} (object)
-- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
-- "distressSignal": true if there are signs of significant trauma or recurring distress worth gently noting (boolean)
 - "goals": commitments the person ACTUALLY VOICED in the conversation — their words, not your inference. \
 Never invent one from dream imagery alone. Omit the key entirely if they named none. (array of strings)
 - "questionnaires": AT MOST ONE, and only when the dream points at something genuinely worth asking a \
@@ -149,8 +147,7 @@ const EMPTY_TAGS = { emotions: [], symbols: [], settings: [], themes: [], people
  * The AI-output contract for synthesis — validated before it's trusted (the host owns ids/timestamps).
  * Tolerant by design (37 §3.1): require only `summary` (the analysis anchor); the other prose fields
  * `.catch('')`, reflectiveQuestions is per-element salvaging, tags fall back to empty, metrics/optionals
- * `.catch`. `crisisFlag`/`distressSignal` are preserved (.catch(undefined), never coerced — §8) so a
- * per-element salvage can't drop a crisis/distress signal.
+ * `.catch`, so a
  */
 const DreamAnalysisDraftSchema = z.object({
   summary: z.string().min(1),
@@ -161,8 +158,6 @@ const DreamAnalysisDraftSchema = z.object({
   coachingPrompt: z.string().optional().catch(undefined),
   tags: DreamTagsSchema.catch(EMPTY_TAGS), // reuse the canonical tags shape so the validator can't drift
   metrics: z.record(z.string(), z.number()).optional().catch(undefined),
-  crisisFlag: z.boolean().optional().catch(undefined),
-  distressSignal: z.boolean().optional().catch(undefined),
   // 66 §3.4 — both tolerant: a malformed goal or proposal drops itself, never the whole analysis.
   goals: tolerantArray(z.string(), '', (g) => g.trim() !== ''),
   questionnaires: tolerantArray(
@@ -698,8 +693,6 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
     tags: draft.tags,
     ...(draft.metrics !== undefined ? { metrics: draft.metrics } : {}),
     lensesApplied: ['reflective', 'continuity', 'symbolic'],
-    ...(draft.crisisFlag !== undefined ? { crisisFlag: draft.crisisFlag } : {}),
-    ...(draft.distressSignal !== undefined ? { distressSignal: draft.distressSignal } : {}),
     edited: false,
     generatedAt: at,
     updatedAt: at,
@@ -864,7 +857,6 @@ export async function approveAnalysis(deps: {
     categories: ['Emotions & patterns'],
     approved: true, // dreams use an explicit approve-step (12 §3.3); this IS that step
     provenance: { dreamId, at },
-    ...(analysis.crisisFlag !== undefined ? { crisisFlag: analysis.crisisFlag } : {}),
     createdAt: at,
     updatedAt: at,
   };

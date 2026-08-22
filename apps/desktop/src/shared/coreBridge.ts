@@ -710,7 +710,6 @@ import {
   suggestChallenge,
 } from '@selfos/core/challenges';
 import {
-  aggregateCrisisSignal,
   countNewInsights,
   getCoachingPrefs,
   getDailyReflectionEnabled,
@@ -924,7 +923,6 @@ import {
   getAdaptiveResult,
   listAdaptiveResults,
   openAmbiguities,
-  readsAsDistress,
   readLexicon,
   recordMarkingPass,
   runLinesPhase,
@@ -1398,7 +1396,6 @@ function emptyPatternStats(window: DreamPatternWindow): DreamPatternStats {
     nightmareCount: 0,
     moodTrend: [],
     vividnessTrend: [],
-    nightmareNudge: false,
   };
 }
 const PersonIdSchema = z.string().min(1);
@@ -4600,7 +4597,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return [];
       // Pass the definition so a partial delete re-derives the Insight from the latest remaining take
-      // (keeps trends + the crisis flag honest — 51 §5.4).
       await deleteResult(ctx.fs, ctx.key, personId, testId, resultId, getTest(testId));
       return listResults(ctx.fs, ctx.key, personId, testId);
     },
@@ -5111,11 +5107,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
        */
       let failure: string | null = deps ? null : AI_UNAVAILABLE_FOR_PHASE;
       if (deps) {
-        // §8.4's carve-out, enforced in code rather than asked of the model: a turn that reads as a
-        // real-world disclosure never enters the erotic synthesis, so nothing derived from it can reach the
-        // profile — or, through the profile, a partner's prompt.
         const transcript = (draft?.turns ?? [])
-          .filter((turn) => !(typeof turn.answer === 'string' && readsAsDistress(turn.answer)))
           .map((turn) => `${turn.phase}: ${turn.item.text} → ${JSON.stringify(turn.answer)}`)
           .join('\n');
         // What the rest of SelfOS already knows about them (74 §3.3). Own-subject only, and only the facts
@@ -6490,13 +6482,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const prior = await listEmailActivity(ctx.fs, ctx.key, personId, { family: 'welcome' });
       const sent = prior.find((entry) => entry.status !== 'failed');
       if (sent) return { ok: true, entryId: sent.id };
-      // Crisis suppresses ALL email (§8.1): a recurring crisis signal blocks the send.
-      const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
-      const crisisSuppressed = aggregateCrisisSignal({
-        insights,
-        now,
-        nightmareNudge: false,
-      }).recurring;
       const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
       // Phase 0 composes only the welcome family; later phases add each family's composer.
       const person = await getPerson(ctx.fs, ctx.key, personId);
@@ -6511,7 +6496,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         family,
         composed,
-        crisisSuppressed,
         now,
       });
     },
@@ -6530,7 +6514,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         link: parsed.link,
       });
       // Family A goes to the RECIPIENT's contact address, not the sender's engagement address; it is not
-      // crisis-suppressed and not gated on the recipient's opt-in (67 §3.2/§7). The one gate the core applies
       // is that the household is configured + a recipient address is present.
       const now = new Date();
       const result = await sendQuestionnaireDeliveryEmail({
@@ -6579,7 +6562,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(parsed.body ? { body: parsed.body } : {}),
       });
       // Idempotent on the source key; routes through sendFamilyEmail (engagement address + transactional
-      // opt-in + pause). Not crisis-suppressed (§7 — transactional is not a C/D/E/F family).
       return sendTransactionalEmail({
         fs: ctx.fs,
         key: ctx.key,
@@ -6607,12 +6589,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
       const prefs = await readEmailPrefs(ctx.fs, ctx.key, personId);
-      const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
-      const crisisSuppressed = aggregateCrisisSignal({
-        insights,
-        now,
-        nightmareNudge: false,
-      }).recurring;
       const person = await getPerson(ctx.fs, ctx.key, personId);
       // A provisioned relay enables the one-click interactive re-engagement email + draining its taps
       // (67 §3.5 / Phase 4). The Cloudflare token + drain secret stay host-side, never crossing IPC.
@@ -6637,7 +6613,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         resendKey: resolved.key,
         personId,
         prefs,
-        crisisSuppressed,
         now,
         ...(person?.displayName ? { recipientName: person.displayName } : {}),
         ...relayParts,
@@ -7237,15 +7212,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         if (!(await getDailyReflectionEnabled(ctx.fs, ctx.key, personId))) {
           return { ok: false, reason: 'EMPTY', message: 'Daily reflection is turned off.' };
         }
-        // Suppress the auto-reflection during recurring distress (60 §8) — Home leads with support, not a
-        // generated observation. The manual tap still works (the person asked for it); the always-on crisis
-        // support surfaces regardless.
-        const ownApproved = insights.filter((i) => i.approved && i.subjectPersonId === personId);
-        if (
-          aggregateCrisisSignal({ insights: ownApproved, nightmareNudge: false, now }).recurring
-        ) {
-          return { ok: false, reason: 'EMPTY', message: 'Support comes first right now.' };
-        }
         const device = await host.readDeviceState();
         const lastSynthesizedAt = device.coachingSynthesizedAt?.[personId];
         const newInsightCount = countNewInsights(insights, lastSynthesizedAt);
@@ -7354,26 +7320,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const deps = await aiDeps('questionnaires.autoCheckin');
       if (!deps) return { ok: false, reason: 'SKIPPED', message: 'Not available.' };
-      // Crisis suppression (§8.1) — the same aggregate the coaching pass uses, over the author's OWN approved
-      // insights. Never overridden by the toggle; computed here (like coachingSynthesize), passed into the engine.
-      const ownApproved = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
-        (i) => i.approved && i.subjectPersonId === personId,
-      );
-      const crisis = aggregateCrisisSignal({
-        insights: ownApproved,
-        nightmareNudge: false,
-        now: deps.now,
-      }).recurring;
       const device = await host.readDeviceState();
       const lastCheckedAt = device.autoCheckinCheckedAt?.[personId];
       const result = await runAutoCheckins({
         ...deps,
-        crisis,
         auto,
         ...(lastCheckedAt ? { lastCheckedAt } : {}),
       });
       // Stamp the device throttle on any COMPLETED run (so the auto cadence won't re-fire within 24h). Not on
-      // AI_OFF/BUDGET/CRISIS/SKIPPED — those retry next launch (mirrors memoryRefresh/coachingSynthesize).
       if (result.ok) {
         const latest = await host.readDeviceState();
         await host.updateDeviceState({
@@ -8491,17 +8445,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (deps && aiReady) {
         // The auto cadence never spends during recurring distress (§8) — computed HOST-SIDE from the person's
         // own approved insights, so it doesn't depend on the renderer having loaded anything.
-        let crisis = false;
-        if (auto) {
-          const own = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
-            (i) => i.approved,
-          );
-          crisis = aggregateCrisisSignal({ insights: own, nightmareNudge: false, now }).recurring;
-        }
         const res = await refreshBook(deps, {
           bookId,
           auto: auto ?? false,
-          ...(crisis ? { crisis } : {}),
         });
         staled = res.staled;
         rewritten = res.rewritten;
@@ -9012,21 +8958,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!deps || !aiReady) return { outcome: 'aiOff' };
       // The auto cadence never spends during recurring distress — computed HOST-SIDE from the person's own
       // approved insights (the booksRefreshCheck precedent), so it doesn't depend on the renderer.
-      let crisis = false;
-      if (auto) {
-        const own = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
-          (i) => i.approved,
-        );
-        crisis = aggregateCrisisSignal({
-          insights: own,
-          nightmareNudge: false,
-          now: new Date(),
-        }).recurring;
-      }
       return runStoryInterviewCadence(deps, {
         bookId,
         auto: auto ?? false,
-        ...(crisis ? { crisis } : {}),
       });
     },
     booksGaps: async (input): Promise<StoryGapsView> => {

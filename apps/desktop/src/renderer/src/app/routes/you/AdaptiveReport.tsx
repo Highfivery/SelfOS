@@ -17,7 +17,6 @@ import {
 } from '../../../design-system/components';
 import { useAdaptiveTestStore } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
 import { hasSayGap, DIRTY_TALK_SPINE } from '@selfos/core/adaptive-spine';
@@ -372,13 +371,6 @@ export function AdaptiveReport(): JSX.Element {
           />
 
           {/* §8.3 — a take that carried a disclosure leads with support, before anything erotic. */}
-          {latest?.crisisFlag ? (
-            <Banner tone="warning" role="alert">
-              Something you wrote here sounds like it was hard, and bigger than a preference. Please
-              reach out to someone who can help — the resources below are there for you, and this
-              profile can wait.
-            </Banner>
-          ) : null}
 
           {/*
            * Nothing taken yet. This used to render a "you haven't taken this" banner + a Take it button, and
@@ -402,7 +394,6 @@ export function AdaptiveReport(): JSX.Element {
                   </Button>
                 </div>
               </Card>
-              <CrisisFooter />
             </div>
           ) : (
             <>
@@ -1019,8 +1010,6 @@ export function AdaptiveReport(): JSX.Element {
                   kept back, so SelfOS stops steering clear of those words too.
                 </Text>
               ) : null}
-
-              <CrisisFooter />
             </>
           )}
         </Stack>

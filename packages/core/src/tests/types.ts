@@ -72,13 +72,9 @@ export interface TestDefinition {
    *  group, the stronger non-diagnostic result copy (§3.3/§8.1 — a gentle range from {@link bands}, never the
    *  clinical label), and the always-present professional-help line. Personality tests leave it unset. */
   wellbeing?: boolean;
-  /** Item / matrix-row ids that, when answered at/above `atOrAbove`, raise the result's `crisisFlag`
-   *  IMMEDIATELY (mid-check-in, §5.2/§8.2) — PHQ-9's item 9 is the canonical case. Deterministic + AI-free.
-   *  Multiple allowed. Omitted ⇒ no item-level trigger (only an overall-band trigger, if any, applies). */
-  crisisItems?: CrisisItem[];
   /** The internal clinical band thresholds (kept on the result as `clinicalKey`, NEVER shown clinically).
    *  Each maps a raw total ≤ `upToRaw` → an INTERNAL `clinicalKey` + a non-diagnostic `display` copy; the
-   *  highest band(s) may set `crisis: true` to raise `crisisFlag` on a high overall score (§5.2). The first
+   *  The first
    *  band (ascending `upToRaw`) whose bound covers the raw total wins. */
   bands?: WellbeingBand[];
   /** The required instrument licence attribution shown on intro + result for transparency (§8.1). For
@@ -90,14 +86,6 @@ export interface TestDefinition {
   lifeArea?: LifeArea;
 }
 
-/** A crisis trigger: a question id OR a matrix row key that, answered at/above `atOrAbove`, flags the result. */
-export interface CrisisItem {
-  /** A standalone question id OR a matrix ROW KEY (PHQ-9 item 9 is a matrix row). */
-  questionId: string;
-  /** The (inclusive) threshold on the item's numeric scale — e.g. 1 on PHQ-9's 0..3 (any non-"Not at all"). */
-  atOrAbove: number;
-}
-
 /** An internal clinical band → a non-diagnostic display copy (§4.2/§8.1). `clinicalKey` is NEVER shown. */
 export interface WellbeingBand {
   /** Inclusive upper bound of the raw total for this band. */
@@ -106,8 +94,6 @@ export interface WellbeingBand {
   clinicalKey: string;
   /** The NON-diagnostic, plain-language copy shown to the person (§3.3/§8.1). */
   display: string;
-  /** A high overall band that should also raise `crisisFlag` (§5.2) — e.g. PHQ-9 'severe'. */
-  crisis?: boolean;
 }
 
 /** Subscale display metadata (label + chart orientation) the result screen needs — never the scoring formula
@@ -151,9 +137,6 @@ export interface TestSummary {
   /** clinicalKey → the non-diagnostic display copy (§3.3/§8.1). The result screen maps a wellbeing result's
    *  internal `band` (clinicalKey) → this gentle sentence; the clinical key itself is never shown. */
   bandDisplays?: Record<string, string>;
-  /** Crisis trigger items (§5.2) — the renderer evaluates these mid-check-in to escalate the crisis surface
-   *  immediately when PHQ-9 item 9 is answered positive. References question ids / matrix row keys. */
-  crisisItems?: CrisisItem[];
 }
 
 export function testSummary(def: TestDefinition): TestSummary {
@@ -191,7 +174,6 @@ export function testSummary(def: TestDefinition): TestSummary {
           ),
         }
       : {}),
-    ...(def.crisisItems ? { crisisItems: def.crisisItems } : {}),
   };
 }
 

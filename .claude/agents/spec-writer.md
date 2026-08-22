@@ -25,7 +25,7 @@ schema-driven settings, IPC/security, design tokens).
 - Include accessibility requirements and a testing strategy (what unit/component/E2E tests prove it
   works).
 - If the feature touches wellbeing/conversation, include a **Safety** section: the not-medical
-  boundary and crisis-routing behavior.
+  boundary. (There is no crisis system — `CLAUDE.md` §1.)
 - End with an **Open questions** list — never silently assume answers to ambiguous points.
 
 ## Output

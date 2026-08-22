@@ -10,7 +10,7 @@ import type { RelationshipType } from '../schemas';
  *
  * Two things are deliberately NOT flipped by this default, because they are **explicit** choices rather
  * than an unset default:
- *   1. Break-glass `restricted` facts (onboarding trauma/intimacy opt-outs + crisis-adjacent content) —
+ *   1. Break-glass `restricted` facts (onboarding trauma/intimacy opt-outs) —
  *      `factSharedWithViewer` structurally blocks `restricted` from any type-scoped share, and they
  *      represent a private choice the person already made.
  *   2. Explicit per-send visibility (compatibility `contextOnly`, §16.2) and onboarding answer scopes —

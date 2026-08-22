@@ -49,14 +49,13 @@ export { extractJsonObject } from '../ai/jsonSalvage';
  * durable, source-discriminated **Insight** for the coach. Budget-gated + metered (`questionnaire.analyze`)
  * like generation. The Insight is saved **unapproved** — it only enters `buildContext` after the sender
  * reviews + approves it (the approve-step). Raw answers are never exposed to the user; what's produced is
- * the **derived** Insight. A model-based **crisis flag** (§8.2) is carried through, never a keyword scan.
+ * the **derived** Insight.
  *
  * The live trigger (Analyze on a received response) wires up with the Inbox/Results in §13.5; the engine +
  * the Memory surface are built here.
  */
 
 // Tolerant by design (37 §3.1): require only `summary`; a bad fact catches to a droppable sentinel; the
-// `crisisFlag` is preserved (.catch(undefined), never coerced — §8) so a per-fact salvage can't drop it.
 const FACT_SENTINEL = { text: '', shareable: false };
 const AnalysisSchema = z.object({
   // A whitespace-only summary is as empty as ""; require real content so it routes to the honest EMPTY branch
@@ -68,7 +67,6 @@ const AnalysisSchema = z.object({
     (f) => f.text.trim() !== '',
   ),
   confidence: z.enum(['low', 'medium', 'high']).optional().catch(undefined),
-  crisisFlag: z.boolean().optional().catch(undefined),
   categories: z.array(z.string()).catch([]).optional(),
 });
 
@@ -306,7 +304,6 @@ export async function analyzeAssignment(
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
     ...(Object.keys(metrics).length > 0 ? { metrics } : {}),
-    ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),
   };
   await saveInsight(deps.fs, deps.key, insight);
   return { ok: true, insight, usage: call.usage };
@@ -322,8 +319,7 @@ export async function analyzeAssignment(
  *      owner decision); notes about a person's refusals must not travel on that default.
  *   2. Its prompt forbids inferring anything about the person, which is what §25.5 excludes declines from the
  *      normal Q&A to prevent.
- *   3. It never carries `metrics` or a `crisisFlag` — there are no answers to derive either from, and a
- *      crisis signal read out of a silence would be a guess.
+ *   3. It never carries `metrics` — there are no answers to derive them from, and a
  * Standard-only is enforced by the caller: on a Private send the summary would cross back to the sender, and
  * a paraphrase of why she refused breaches the same promise the counts protect (§34.2).
  */
@@ -338,7 +334,6 @@ async function analyzeRefusal(
 ): Promise<QuestionnaireAnalyzeResult> {
   const { assignment, snapshot, response, skips } = input;
   // BEFORE spending. `saveInsight` replaces the whole record, so reusing the id of a real analysis would
-  // destroy it — its metrics, its crisis flag, its partner-shared facts, its approved state — when someone
   // withdraws their answers and resubmits empty. Only ever overwrite a previous REFUSAL read. This check has
   // to come first because the caller may be `autoAnalyze`: leave it below the model call and that path bills
   // a read on every re-open of the sender's Results and then throws the answer away, with no user action at

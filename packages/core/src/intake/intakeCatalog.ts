@@ -1246,13 +1246,12 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     opener:
       'Only if you want to — a few gentle prompts about the heavier things. Every one is skippable, and this stays private to your own coaching.',
     contentNote:
-      'We can go as light or as deep as you want, and skip anything. This stays private to your own coaching. If you’re ever in crisis, please reach out to the resources below — I’m not a substitute for real help.',
+      'We can go as light or as deep as you want, and skip anything. This stays private to your own coaching. SelfOS is a self-help tool, not a substitute for professional care.',
     focus:
       'The heavier parts of their inner life — current stressors, grief and loss, recurring worries, what keeps ' +
       'them up at night, their inner critic / self-talk, coping mechanisms (healthy and not), shame, things ' +
       'they don’t tell anyone, what they’re avoiding dealing with, and (gently, only if they offer) past ' +
-      'trauma. Trauma-informed: let them set the depth, validate whatever they share, never dig for specifics. ' +
-      'Watch for crisis and route to professional help per your safety guidance — never manage it alone.',
+      'trauma. Trauma-informed: let them set the depth, validate whatever they share, never dig for specifics.',
     questions: [
       f(
         multi('weighsWhat', 'What’s weighing on you most right now?', [
@@ -1907,8 +1906,7 @@ export function buildInterviewerAddendum(displayName: string, section: IntakeSec
   if (section.restricted) {
     parts.push(
       `This is a sensitive section. Open gently, let the person set the depth, validate whatever they ` +
-        `share, and never dig for specifics they don't offer. If there is any sign of crisis, respond ` +
-        `with warmth and route to professional help per your safety guidance — never manage it alone.`,
+        `share, and never dig for specifics they don't offer.`,
     );
   }
   return parts.join('\n\n');

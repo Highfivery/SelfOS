@@ -64,11 +64,6 @@ export interface PersonRecommendationState {
   /** The per-person encouragement dial (40 §3.6). `off` ⇒ no "For you" section at all (§3.7). */
   proactivity: ProactivityLevel;
   now: Date;
-  /**
-   * Recurring distress (40 `aggregateCrisisSignal`) — when true the engine suppresses ALL pushes so Home
-   * leads with support, not nudges (§8). NOT governed by the proactivity dial (it's safety).
-   */
-  crisis: boolean;
   /** A brand-new person sees the getting-started path, not "For you" (§7) — suppress pushes. */
   isNew: boolean;
   /** AI is ready (key resolved + enabled) — gates the AI-bearing candidates (synthesis/guided/questionnaire). */

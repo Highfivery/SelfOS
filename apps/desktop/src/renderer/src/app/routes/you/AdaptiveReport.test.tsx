@@ -138,8 +138,6 @@ describe('AdaptiveReport (74 §3.3)', () => {
     expect(screen.queryByText('Your words')).not.toBeInTheDocument();
     expect(screen.queryByText('Love to hear')).not.toBeInTheDocument();
     expect(screen.queryByText('The shape of it')).not.toBeInTheDocument();
-    // The crisis affordance is still present on an empty state.
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
   it('shows a middle mark under its own heading, instead of losing it entirely', async () => {

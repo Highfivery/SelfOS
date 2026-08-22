@@ -520,6 +520,12 @@ the safety envelope is central, not incidental.
 
 ### 8.1 Not-medical + crisis (unchanged boundary, enforced here)
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Every generated questionnaire carries the standard not-medical/wellness framing + the crisis footer on the
 answering surface ([`05 §7`](05-conversations.md)/[`08 §8.2`](08-questionnaires.md)). **Crisis suppresses the
 whole engine** (§7): `aggregateCrisisSignal.recurring` over the author's insights → no generation, intimacy

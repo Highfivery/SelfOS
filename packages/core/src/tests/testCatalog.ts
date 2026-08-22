@@ -22,7 +22,6 @@ export const TEST_CATALOG: readonly TestDefinition[] = [
   ATTACHMENT,
   SEXUALITY,
   KINK_INTERESTS,
-  // 51 — wellbeing & neurodivergence reflections. NOT adult-gated (§3.1); crisis-routed (§8.2).
   PHQ9,
   GAD7,
   ASRS,

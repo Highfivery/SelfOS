@@ -123,13 +123,6 @@ export function DraftReviewCard({
 
   return (
     <Stack gap={3}>
-      {insight.crisisFlag ? (
-        <Banner tone="danger">
-          This may reflect distress. Be gentle — if anyone is in immediate danger, call your local
-          emergency number; in the US &amp; Canada call or text <strong>988</strong>.
-        </Banner>
-      ) : null}
-
       {/* Header: source + who it's about + confidence, then the linked source (65 §3.3). */}
       <div className={styles.reviewHead}>
         <div className={styles.eyebrowRow}>

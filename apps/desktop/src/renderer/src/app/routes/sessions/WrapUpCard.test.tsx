@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -88,15 +88,5 @@ describe('WrapUpCard (grouped, condensed)', () => {
     expect(screen.queryByText('Themes')).not.toBeInTheDocument();
     expect(screen.queryByText('People mentioned')).not.toBeInTheDocument();
     expect(screen.queryByText(/Follow-ups/)).not.toBeInTheDocument();
-  });
-
-  it('leads with crisis resources when the analysis flagged a concern', () => {
-    const insight = { ...insightWith([fact('t1', 'Theme: heaviness')]), crisisFlag: true };
-    render(
-      <MemoryRouter>
-        <WrapUpCard insight={insight} onDismiss={vi.fn()} />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText(/988/)).toBeInTheDocument();
   });
 });

@@ -29,7 +29,7 @@ const now = new Date('2026-09-01T12:00:00.000Z');
 
 function analysisClient(): ClaudeClient {
   const result: ClaudeStreamResult = {
-    text: '{"summary":"A brief reflection.","facts":[],"confidence":"low","categories":["Other"],"crisisFlag":false}',
+    text: '{"summary":"A brief reflection.","facts":[],"confidence":"low","categories":["Other"]}',
     usage: { inputTokens: 50, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
     stopReason: 'end_turn',
   };

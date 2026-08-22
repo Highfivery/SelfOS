@@ -475,7 +475,6 @@ export function fakeClaudeClient(): ClaudeClient {
             summary:
               'You two are largely aligned, with **a few differences** worth talking through.',
             items: [],
-            crisisFlag: false,
             facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
           }),
           usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -632,10 +631,7 @@ export function fakeClaudeClient(): ClaudeClient {
             ],
             confidence: 'low',
             categories: ['Other'],
-            // Also deliberate: a refusal read must never carry a crisis flag — there are no answers to
-            // derive one from, and a crisis signal read out of a silence is a guess. The service drops it;
             // returning `false` here would let a regression that passed it through go unnoticed.
-            crisisFlag: true,
           }),
           usage: { inputTokens: 90, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
@@ -650,7 +646,6 @@ export function fakeClaudeClient(): ClaudeClient {
               'They value steady connection and want to feel **more appreciated** day to day.',
             facts: [{ text: 'Feels most connected through shared time.', shareable: true }],
             confidence: 'medium',
-            crisisFlag: false,
           }),
           usage: { inputTokens: 140, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
@@ -699,15 +694,11 @@ export function fakeClaudeClient(): ClaudeClient {
 
       // Together wrap-up (58 §3.8): "write the wrap-up for this session between A and B" → a per-partner
       // report JSON. Must come BEFORE the generic "JSON object" dream/session branches below (its
-      // instruction also says "single JSON object"). A partner whose attributed line contains "CRISIS" is
-      // flagged so the crisis-routing test bites.
       const wrapMatch = /write the wrap-up for this session between (.+?) and (.+?)\./.exec(
         userText,
       );
       if (wrapMatch) {
         const [, nameA, nameB] = wrapMatch;
-        const crisisFor = (name: string): boolean =>
-          new RegExp(`^${name}: .*CRISIS`, 'm').test(userText);
         return Promise.resolve({
           text: JSON.stringify({
             summary: 'You both showed up honestly and named what you each need.',
@@ -721,14 +712,12 @@ export function fakeClaudeClient(): ClaudeClient {
                 reflection: `A reflection for ${nameA}.`,
                 facts: ['wants more time'],
                 sensitiveFacts: [],
-                crisisFlag: crisisFor(nameA ?? ''),
               },
               {
                 name: nameB,
                 reflection: `A reflection for ${nameB}.`,
                 facts: ['values reassurance'],
                 sensitiveFacts: [],
-                crisisFlag: crisisFor(nameB ?? ''),
               },
             ],
             // A concrete next step → a deduped standing pair agreement (§3.9). Stable across runs so a
@@ -1097,7 +1086,6 @@ export function fakeClaudeClient(): ClaudeClient {
             people: [],
             moodValence: -0.2,
             moodEnergy: 0.1,
-            crisisFlag: false,
             depthInvitations,
           }),
           usage: { inputTokens: 180, outputTokens: 70, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -1129,7 +1117,6 @@ export function fakeClaudeClient(): ClaudeClient {
               ],
               metrics: { valence: 0.1 },
               inferred: { communicationStyle: 'warm and direct' },
-              crisisFlag: false,
             }),
             usage: { inputTokens: 200, outputTokens: 90, cacheWriteTokens: 0, cacheReadTokens: 0 },
           });
@@ -1199,8 +1186,6 @@ export function fakeClaudeClient(): ClaudeClient {
             people: [],
           },
           metrics: { emotionalIntensity: 0.5, valence: 0 },
-          crisisFlag: false,
-          distressSignal: false,
           // 66 §3.4 — a voiced commitment becomes a tracked Goal (free; it rides this same pass).
           goals: ['Notice one steady thing each evening'],
           // The SEND is gated behind a flag: minting a real questionnaire on every dream synthesis would

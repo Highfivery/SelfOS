@@ -20,8 +20,7 @@ export function OrientationBody(): JSX.Element {
       </Text>
       <Text tone="secondary">
         SelfOS is a wellness and self-help tool — <strong>not medical care</strong>, not a diagnosis
-        or treatment, and not a substitute for a professional. If you’re in distress, reach out to a
-        crisis line or someone you trust.
+        or treatment, and not a substitute for a professional.
       </Text>
     </Stack>
   );

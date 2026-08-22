@@ -12,7 +12,6 @@ const AUTO_DISMISS_MS = 6000;
  * signature is recorded in the device-local per-person discovery store (`celebrate:<key>`) the moment it
  * shows, so re-visiting Home doesn't re-celebrate. Conveyed in text (the message), not motion alone (§9).
  *
- * The caller decides WHETHER to show one (suppressed during crisis / proactivity-off / brand-new, §8); this
  * component only renders + records the chosen completion. Renders nothing when there's nothing to celebrate.
  */
 export function CelebrationMoment({

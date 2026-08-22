@@ -31,7 +31,7 @@ export interface AttentionItem {
   route: string;
   state?: Record<string, unknown>;
   count?: number;
-  /** A gentle NUDGE (not a genuinely-pending action from someone else) — suppressed under crisis / proactivity-off (§8). */
+  /** A gentle NUDGE (not a genuinely-pending action from someone else) — suppressed under proactivity-off (§8). */
   nudge?: boolean;
 }
 
@@ -46,7 +46,7 @@ export interface AttentionInput {
   resultsByTest: Record<string, TestResult[]>;
   insightDraftCount: number;
   otherPeopleCount: number;
-  /** When true (recurring crisis OR proactivity off), the gentle nudges are dropped, leaving only genuinely-pending items (§8). */
+  /** When true (proactivity off), the gentle nudges are dropped, leaving only genuinely-pending items (§8). */
   suppressNudges: boolean;
   can: {
     memory: boolean;
@@ -68,9 +68,9 @@ function partnerName(session: TogetherSessionSummary, myId: string | null): stri
  * a Together turn / invite (someone's waiting) → a response to analyze → insights to review → standing
  * Together agreements → your goals → the weekly check-in nudge → a soft "ask someone" nudge. Agreements and
  * your goals are genuine (non-nudge) items that stay TOP OF MIND regardless of the proactivity dial; the
- * check-in and "ask someone" are gentle NUDGES, dropped when `suppressNudges` (recurring crisis or proactivity
+ * check-in and "ask someone" are gentle NUDGES, dropped when `suppressNudges` (proactivity
  * off, §8), leaving only genuinely-pending actions. Your agreements + goals are your OWN commitments (not AI
- * pushes), so they always show — a crisis signal never hides them (the crisis banner leads Home with support). Pure.
+ * pushes), so they always show. Pure.
  */
 export function needsAttention(input: AttentionInput): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -151,7 +151,7 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
 
   // Standing Together agreements — a concrete commitment the couple MADE, so it's a genuine (non-nudge)
   // needs-attention item that ALWAYS stays top of mind: it's the person's own commitment, not an AI push, so
-  // it is NOT suppressed by the proactivity dial OR a crisis signal (the crisis banner + resources already
+  // it is NOT suppressed by the proactivity dial (
   // lead Home with support; hiding your own gentle commitments was over-aggressive — the user's repeated ask).
   // It clears as agreements are marked done/retired. The detail shows the actual commitment text at a glance.
   if (can.together && input.agreements.length > 0) {
@@ -172,8 +172,8 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
 
   // Your goals — your own commitments, ALWAYS kept top of mind as a genuine (non-nudge) item (the user's
   // repeated ask: goals must appear in "needs attention"). Like the agreement item, they're the person's own
-  // commitment — NOT an AI push — so they are NOT suppressed by the proactivity dial OR a crisis signal (the
-  // crisis banner already leads Home with support; hiding your own gentle goals was over-aggressive). We
+  // commitment — NOT an AI push — so they are NOT suppressed by the proactivity dial (
+  // hiding your own gentle goals was over-aggressive). We
   // surface every ACTIVE goal (open / in-progress / already-stale), framed "needs a check-in" when a goal has
   // gone stale (past due / long untouched), else "in progress". The one-tap Done / Still-on-it actions live on
   // the Goals card + /goals; it clears as goals are marked done. The detail shows the actual goal text.

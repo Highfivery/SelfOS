@@ -26,12 +26,6 @@ function Harness({ questions }: { questions: Question[] }): JSX.Element {
 }
 
 describe('QuestionnaireForm', () => {
-  it('always shows the crisis affordance and not-medical line', () => {
-    render(<Harness questions={[q({ id: 'a', type: 'shortText', prompt: 'Hi?' })]} />);
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
-    expect(screen.getByText(/not medical care/i)).toBeInTheDocument();
-  });
-
   it('renders a text control and reflects typing', async () => {
     render(<Harness questions={[q({ id: 'a', type: 'shortText', prompt: 'Your name?' })]} />);
     const input = screen.getByLabelText('Your name?');
@@ -376,7 +370,7 @@ describe('QuestionnaireForm — progress (08 §20.5)', () => {
 });
 
 describe('QuestionnaireForm — disabled (read-only Preview, 08 §20.4)', () => {
-  it('makes every answer control inert but keeps the crisis footer working', () => {
+  it('makes every answer control inert', () => {
     render(
       <QuestionnaireForm
         questions={[
@@ -391,8 +385,6 @@ describe('QuestionnaireForm — disabled (read-only Preview, 08 §20.4)', () => 
     // Native + custom controls alike are disabled (a disabled <fieldset> propagates to all descendants).
     expect(screen.getByLabelText('Your name?')).toBeDisabled();
     expect(screen.getByRole('radio', { name: 'One' })).toBeDisabled();
-    // The crisis affordance is OUTSIDE the fieldset — always usable (§8.2).
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeEnabled();
   });
 
   it('does not fire onChange when a disabled control is clicked', async () => {
@@ -435,8 +427,6 @@ describe('QuestionnairePreview — presentation view (08 §21.2)', () => {
     // A soft "writes their answer" representation, and the calm read-only footer.
     expect(screen.getByText(/writes a short answer/i)).toBeInTheDocument();
     expect(screen.getByText(/read-only preview/i)).toBeInTheDocument();
-    // The crisis footer is still present + usable.
-    expect(screen.getByRole('button', { name: /get help now/i })).toBeEnabled();
   });
 
   it('shows a generic read-only footer and no "as they see it" marker when no recipient is bound', () => {

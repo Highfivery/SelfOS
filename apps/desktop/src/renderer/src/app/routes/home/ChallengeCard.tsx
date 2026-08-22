@@ -36,7 +36,6 @@ function daysSince(iso: string | undefined, now: number): number {
  *   • due     → this card HIDES its action row and the focal "For you" recommendation owns the moment.
  *
  * The deferral is conditional on `checkInHandledElsewhere`, NOT on `checkInDue` alone: the "For you" band is
- * itself suppressed under proactivity-off, an active crisis, a brand-new person, or once that recommendation
  * has been dismissed for the current signal (53 §3.4). Deferring to a surface that isn't rendering would
  * leave a due check-in — the highest-intent moment — with no inline action anywhere on Home.
  *

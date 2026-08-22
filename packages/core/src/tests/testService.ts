@@ -12,7 +12,7 @@ import {
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { scoresToMetrics, scoreTest, type ScoreAnswers } from './scoring';
 import type { TestDefinition, TestGroupId } from './types';
-import { detectWellbeingCrisis, resolveWellbeingBand } from './wellbeingCrisis';
+import { resolveWellbeingBand } from './wellbeingBands';
 
 /**
  * 50-self-assessments §5.4 — the result → Insight bridge. `takeTest` deterministically scores a take
@@ -198,14 +198,11 @@ export async function takeTest(
   const scores = scoreTest(def, input.answers);
 
   // Wellbeing (51): resolve the internal clinical band from the total raw and stamp it as the score's `band`
-  // (the clinicalKey — kept for trends, NEVER shown clinically; the display copy is resolved at render). Then
-  // run the deterministic, AI-free crisis hook (item-level PHQ-9 item-9 OR band-level high score, §5.2).
-  let crisisFlag = false;
+  // (the clinicalKey — kept for trends, NEVER shown clinically; the display copy is resolved at render).
   if (def.wellbeing) {
     const total = scores[0];
     const band = total ? resolveWellbeingBand(def, total.raw) : undefined;
     if (total && band) total.band = band.clinicalKey;
-    crisisFlag = detectWellbeingCrisis(def, input.answers, band);
   }
 
   // A retake reuses the single derived Insight (UPDATE, not duplicate) + chains via `reTakeOf` to the prior
@@ -227,7 +224,6 @@ export async function takeTest(
       })),
     scores,
     ...(prior ? { reTakeOf: prior.id } : {}),
-    ...(crisisFlag ? { crisisFlag: true } : {}),
     insightId,
     takenAt: at,
     createdAt: at,
@@ -240,7 +236,7 @@ export async function takeTest(
 
 /**
  * Build the derived `Insight` for a stored `TestResult` (deterministically, from its persisted `scores` +
- * `crisisFlag`). Reused by `takeTest` and by `deleteResult`'s re-derivation, so the single Insight always
+ * Reused by `takeTest` and by `deleteResult`'s re-derivation, so the single Insight always
  * reflects whichever result it points at. Preserves the Insight's original `createdAt` on update.
  */
 async function buildInsightForResult(
@@ -265,8 +261,6 @@ async function buildInsightForResult(
     confidence: 'high', // a deterministic self-report is high-confidence about what they answered
     categories: [lifeAreaFor(def)],
     approved: true, // auto-feed own context (50 §3.4 / §11 Q3), reviewable + editable in Memory
-    // A crisis-flagged wellbeing result (51 §5.2) feeds `aggregateCrisisSignal` (40 §3.5) like any flag.
-    ...(result.crisisFlag ? { crisisFlag: true } : {}),
     provenance: { testId: def.id, testResultId: result.id, at: result.takenAt },
     createdAt: existing?.createdAt ?? fallbackCreatedAt,
     updatedAt: result.takenAt,
@@ -276,8 +270,8 @@ async function buildInsightForResult(
 /**
  * Delete one result file. If it was the LAST result for that test, the derived Insight is removed too; if
  * results remain (and the definition is supplied), the Insight is RE-DERIVED from the new latest remaining
- * result — so deleting the most recent take never leaves a stale trend or a stale `crisisFlag` feeding
- * `aggregateCrisisSignal` (40 §3.5). `def` omitted (legacy callers) ⇒ the Insight is left untouched.
+ * result — so deleting the most recent take never leaves a stale trend feeding
+ * `def` omitted (legacy callers) ⇒ the Insight is left untouched.
  */
 export async function deleteResult(
   fs: FileSystem,

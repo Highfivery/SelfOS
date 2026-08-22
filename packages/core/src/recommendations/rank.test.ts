@@ -31,7 +31,6 @@ function state(over: Partial<PersonRecommendationState> = {}): PersonRecommendat
     adultAcknowledged: false,
     proactivity: 'active',
     now: NOW,
-    crisis: false,
     isNew: false,
     configured: true,
     openGoals: [],
@@ -83,14 +82,6 @@ describe('rankRecommendations — relevance ordering', () => {
     const recs = rankRecommendations(
       listRecommendationProviders(),
       state({ proactivity: 'off', openSessions: 1, openGoals: [goal()] }),
-    );
-    expect(recs).toEqual([]);
-  });
-
-  it('a recurring-crisis signal suppresses ALL pushes regardless of candidates', () => {
-    const recs = rankRecommendations(
-      listRecommendationProviders(),
-      state({ crisis: true, openSessions: 1, openGoals: [goal()], portraitStale: true }),
     );
     expect(recs).toEqual([]);
   });

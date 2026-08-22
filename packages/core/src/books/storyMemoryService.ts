@@ -797,8 +797,7 @@ college"); omit if truly unknown.
 - "scene": if this memory clearly IS one of these life-story scenes, its key, else omit: "highPoint", \
 "lowPoint", "turningPoint", "positiveChildhood", "negativeChildhood", "vividAdult", "spiritual", "wisdom".
 - "sensitive": true if the memory centres on trauma, abuse, or explicit intimate/sexual content (so it stays \
-private); else omit.
-- "crisisFlag": true only if they expressed being in acute danger or crisis right now; else omit.`;
+private); else omit.`;
 
 const SynthesisDraftSchema = z.object({
   title: z.string().catch(''),
@@ -811,7 +810,6 @@ const SynthesisDraftSchema = z.object({
   pullQuotes: z.array(z.string()).catch([]),
   scene: z.string().optional().catch(undefined),
   sensitive: z.boolean().optional().catch(undefined),
-  crisisFlag: z.boolean().optional().catch(undefined),
 });
 
 export interface StoryMemorySynthDeps {
@@ -892,7 +890,6 @@ export async function synthesizeMemory(
     pullQuotes: draft.pullQuotes.map((q) => q.trim()).filter(Boolean),
     ...(draft.scene && SCENE_KEYS.has(draft.scene) ? { scene: draft.scene } : {}),
     ...(draft.sensitive ? { sensitive: true } : {}),
-    ...(draft.crisisFlag ? { crisisFlag: true } : {}),
     updatedAt: at,
     ...(memory.readyAt ? {} : { readyAt: at }),
   };
@@ -976,7 +973,6 @@ export async function saveMemory(deps: {
       categories: saved.lifeAreas.length > 0 ? saved.lifeAreas : ['Emotions & patterns'],
       approved: true, // saving IS the explicit approve step (the person confirmed the card)
       provenance: { memoryId, at },
-      ...(saved.crisisFlag !== undefined ? { crisisFlag: saved.crisisFlag } : {}),
       createdAt: prior?.createdAt ?? at,
       updatedAt: at,
     };

@@ -19,7 +19,6 @@ import {
   Text,
   TextInput,
 } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { InsightCard } from './InsightCard';
 import { LifeAreaSection } from './LifeAreaSection';
 import { PortraitHero } from './PortraitHero';
@@ -389,8 +388,6 @@ export function Memory(): JSX.Element {
           )}
         </Stack>
       )}
-
-      <CrisisFooter />
     </div>
   );
 }

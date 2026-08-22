@@ -29,7 +29,6 @@ const baseStats: DreamPatternStats = {
     { date: '2026-06-05', value: 0.2 },
   ],
   vividnessTrend: [{ date: '2026-06-01', value: 3 }],
-  nightmareNudge: false,
 };
 
 function enableAi(): void {
@@ -63,16 +62,6 @@ describe('Dream patterns screen', () => {
     await screen.findByText('water');
     await userEvent.click(screen.getByRole('button', { name: 'All time' }));
     await waitFor(() => expect(statsSpy).toHaveBeenCalledWith({ window: 'all' }));
-  });
-
-  it('shows the gentle nightmare nudge when flagged', async () => {
-    installMockBridge({
-      dreamPatternStats: () => Promise.resolve({ ...baseStats, nightmareNudge: true }),
-    });
-    renderPatterns();
-    expect(
-      await screen.findByText(/recurring nightmares can be worth talking through/i),
-    ).toBeInTheDocument();
   });
 
   it('shows the empty state when there are no dreams', async () => {

@@ -349,7 +349,7 @@ describe('prompt helpers', () => {
     expect(ctx).toContain('[a heavier, sensitive area]'); // weighs / intimacy
   });
 
-  it('depthAskInstruction names the sections + guards crisis; empty when none', () => {
+  it('depthAskInstruction names the sections + guards distress; empty when none', () => {
     expect(depthAskInstruction({ sections: [] })).toBe('');
     const ask = depthAskInstruction({
       sections: unfilledInvitedSections(
@@ -357,6 +357,6 @@ describe('prompt helpers', () => {
       ).filter((s) => s.id === 'family'),
     });
     expect(ask).toContain('Family & roots');
-    expect(ask).toMatch(/crisis/i);
+    expect(ask).toMatch(/distress/i);
   });
 });

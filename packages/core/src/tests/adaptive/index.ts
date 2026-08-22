@@ -10,4 +10,3 @@ export { DIRTY_TALK } from './instruments/dirtyTalk';
 export * from './engine';
 export * from './steer';
 export * from './sayLinesStore';
-export * from './distress';

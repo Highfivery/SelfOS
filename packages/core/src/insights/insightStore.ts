@@ -351,7 +351,7 @@ const PORTRAIT_FACT_CONTEXT_BUDGET = 45; // total portrait facts emitted into an
 const PORTRAIT_CORE_FACT_BUDGET = 25; // of the budget, how many always-on CORE facts to guarantee first
 
 /** The always-relevant identity life-areas — the "broader" set (user choice, 2026-06-21). Distress
- * (`Emotions & patterns`) is included so a crisis/struggle fact is NEVER narrowed away by topic selection.
+ * (`Emotions & patterns`) is included so a struggle fact is NEVER narrowed away by topic selection.
  * Anything UNTAGGED is also treated as core (never hide an unclassified fact). */
 const CORE_LIFE_AREAS: ReadonlySet<string> = new Set([
   'Values & beliefs',
@@ -364,18 +364,16 @@ const CORE_LIFE_AREAS: ReadonlySet<string> = new Set([
 /**
  * Pick the portrait facts to feed THIS call (pure + exported + tested). `facts` must already be the live
  * (non-`flaggedInaccurate`) facts. Order is the fact array's order (the synthesis returns most-important
- * first), preserved in the output. Safety: a `crisisFlag` portrait is **never** topically narrowed (bounded
+ * first), preserved in the output. (Bounded
  * only); the always-on CORE (incl. distress) is taken first; untagged facts are core. Privacy is unaffected —
  * these are the subject's OWN facts; the caller applies all cross-person filters elsewhere.
  */
 export function selectPortraitFacts(
   facts: InsightFact[],
   topic: ContextTopic | undefined,
-  crisisFlag: boolean,
 ): InsightFact[] {
   // No life-area tags at all (a pre-28b portrait) — nothing to narrow by; just bound it.
-  // A crisis-flagged portrait is also never topically narrowed (keep the full picture, bounded).
-  if (crisisFlag || !facts.some((f) => f.lifeArea)) {
+  if (!facts.some((f) => f.lifeArea)) {
     return facts.slice(0, PORTRAIT_FACT_CONTEXT_BUDGET);
   }
   const topicAreas = new Set(topic?.lifeAreas ?? []);
@@ -474,9 +472,9 @@ export async function summarizeForContext(
       // A SENSITIVE non-portrait insight (a kink/sexuality self-assessment, 50-self-assessments §3.4): its
       // restricted facts are relevance-gated to an intimacy-topic context — gate the WHOLE insight (summary +
       // facts) so it informs an intimacy session but never leaks into a money chat. The PINNED intake portrait
-      // is exempt (selectPortraitFacts narrows its facts, but the portrait is always present); a crisis-flagged
-      // insight is never narrowed (safety). Existing non-intake insights carry no restricted facts → unaffected.
-      if (insight.source !== 'intake' && !(insight.crisisFlag ?? false)) {
+      // is exempt (selectPortraitFacts narrows its facts, but the portrait is always present). Existing
+      // non-intake insights carry no restricted facts → unaffected.
+      if (insight.source !== 'intake') {
         // Relevance-gate an insight with `restricted` (break-glass intake) facts OR sensitive-life-area facts
         // (e.g. a kink/sexuality self-assessment — now partner-shareable, but still own-context-gated, 54): it
         // only feeds an on-topic context, so it informs an intimacy session but never leaks into a money chat.
@@ -496,10 +494,7 @@ export async function summarizeForContext(
       // call's topic, bounded to a budget (28-portrait-synthesis-optimization §pillar-2). Session/dream
       // insights are small, so they emit all their live facts as before. Selection is applied to the
       // subject's OWN facts here; it never touches the cross-person privacy filtering below.
-      const emit =
-        insight.source === 'intake'
-          ? selectPortraitFacts(liveFacts, topic, insight.crisisFlag ?? false)
-          : liveFacts;
+      const emit = insight.source === 'intake' ? selectPortraitFacts(liveFacts, topic) : liveFacts;
       // Goal facts are surfaced to the coach via the structured "Open commitments" line, not here — drop them
       // from the own-insight emit so a person's goals aren't double-grounded (39 §4.4). (Cross-shared goal
       // facts to OTHER people, below, are unaffected — the dedup only concerns the subject's own goals.)
@@ -577,7 +572,7 @@ export async function listRelatedShareableInsights(
       );
       if (shareableFacts.length === 0) continue;
       // Project an EXPLICIT minimal shape — never spread the whole Insight. A related person's `metrics`
-      // (private wellbeing signals), `crisisFlag` (their crisis state), precise `provenance`
+      // (private wellbeing signals), precise `provenance`
       // (intakeSection/conversationId/dreamId — what they did), `relationshipId`, and a fact's
       // `shareableWith` (who ELSE it's shared with) must NOT cross over — only the shareable facts' text,
       // exactly like `summarizeForContext`. The summary stays stripped (private to them).

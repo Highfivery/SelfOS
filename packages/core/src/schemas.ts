@@ -814,7 +814,7 @@ export const InsightProvenanceSchema = z.object({
   // This Insight is a read of a REFUSAL (08 §34.3) — every question came back unanswered, so it is about the
   // QUESTIONS, not the person. Additive-optional; absent everywhere before §34. It exists so a refusal read
   // can replace an earlier refusal read without ever replacing a real analysis, which `saveInsight` would
-  // otherwise overwrite whole (losing its metrics, crisis flag, shared facts and approved state).
+  // otherwise overwrite whole (losing its metrics, shared facts and approved state).
   refusalRead: z.literal(true).optional().catch(undefined),
   // Who a SENT questionnaire's insight is ABOUT — the recipient, when it isn't the subject (the sender). A
   // questionnaire you send to someone else produces an Insight for YOUR coaching (`subjectPersonId` = you)
@@ -882,7 +882,6 @@ export const InsightSchema = z.object({
   contributingSources: z.array(InsightProvenanceSchema).optional(),
   approved: z.boolean(), // questionnaire insights require approval before entering buildContext (08 §3.7)
   provenance: InsightProvenanceSchema,
-  crisisFlag: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1702,7 +1701,6 @@ export const TestResultSchema = z.object({
   scores: z.array(TestSubscaleScoreSchema), // the deterministic result
   reTakeOf: z.string().optional(), // prior TestResult id → the longitudinal chain (trends)
   insightId: z.string().optional(), // the derived Insight this result produced (source: 'test')
-  crisisFlag: z.boolean().optional(), // a heuristic answer-level flag → lead with resources (§8.2)
 
   // --- 74-adaptive-tests additions. ADDITIVE-OPTIONAL, so an existing deterministic result parses
   // unchanged and needs no migration: absent `kind` means 'deterministic' (`testResultKind`). An adaptive
@@ -2329,7 +2327,7 @@ export interface AutoCheckinCreated {
 /** The result of an Auto check-ins run (`autoCheckins:run`). */
 export type AutoCheckinRunResult =
   | { ok: true; created: AutoCheckinCreated[]; skipped: { targetId: string; reason: string }[] }
-  | { ok: false; reason: 'AI_OFF' | 'BUDGET' | 'CRISIS' | 'SKIPPED'; message: string };
+  | { ok: false; reason: 'AI_OFF' | 'BUDGET' | 'SKIPPED'; message: string };
 
 /**
  * Non-secret questionnaire prefs (`config/questionnaires.json` in the vault, plain JSON — §4.1).
@@ -3254,7 +3252,7 @@ export type EmailSendResult =
   | { ok: true; entryId: string; resendMessageId?: string }
   | {
       ok: false;
-      reason: 'NOT_CONFIGURED' | 'NO_ADDRESS' | 'FAMILY_OFF' | 'PAUSED' | 'CRISIS' | 'SEND_ERROR';
+      reason: 'NOT_CONFIGURED' | 'NO_ADDRESS' | 'FAMILY_OFF' | 'PAUSED' | 'SEND_ERROR';
       message?: string;
     };
 
@@ -3355,7 +3353,6 @@ export const AlignmentReportSchema = z.object({
   personBName: z.string(),
   summary: z.string(),
   items: z.array(AlignmentItemSchema),
-  crisisFlag: z.boolean().optional(),
   insightId: z.string().optional(),
   generatedAt: z.string(),
 });
@@ -3493,8 +3490,6 @@ export const DreamAnalysisSchema = z.object({
   tags: DreamTagsSchema,
   metrics: z.record(z.string(), z.number()).optional(), // normalized signals, e.g. emotionalIntensity
   lensesApplied: z.array(z.string()).optional(), // transparency, e.g. ['reflective','continuity','symbolic']
-  crisisFlag: z.boolean().optional(), // self-harm/crisis risk → result leads with resources (12 §8.2)
-  distressSignal: z.boolean().optional(), // milder trauma/distress → feeds the nightmare nudge (12 §8.2)
   edited: z.boolean(), // the person edited the AI output before approving
   insightId: z.string().optional(), // the Insight produced on approval (08 §4.4)
   // What this analysis produced besides the reflection (66 §3.4). All additive-optional — an analysis
@@ -3621,7 +3616,7 @@ export type ChatTurnResult =
 /**
  * Result of "End & summarize" (09-session-analysis §6). On success carries the produced (auto-approved)
  * Session Insight + the metered usage; the wrap-up card renders from the Insight (summary, facts, the
- * mood metrics, crisis flag). `MEMORY_DISABLED` when the session-memory master toggle is off.
+ * mood metrics). `MEMORY_DISABLED` when the session-memory master toggle is off.
  */
 export type SessionSummaryResult =
   | { ok: true; insight: Insight; usage: UsageEvent }
@@ -3678,7 +3673,7 @@ export type GuidancePrefs = z.infer<typeof GuidancePrefsSchema>;
 
 /**
  * Proactive-coaching intensity (40-proactive-coaching §3.6/§4.1a). Per-person, read in the bridge.
- * `off` = no in-session goal-raising, no synthesis pass, no goal-followup nudges (cross-insight crisis
+ * `off` = no in-session goal-raising, no synthesis pass, no goal-followup nudges (the
  * awareness §3.5 is safety and is NEVER disabled by this). `gentle` (default when absent) = in-session
  * goal-raising + a slow synthesis cadence + ≤1 open nudge. `active` = a faster synthesis cadence + a
  * slightly more present in-session coach.
@@ -4396,7 +4391,6 @@ export interface DreamPatternStats {
   moodTrend: DreamTrendPoint[]; // waking mood (−1..1) over time
   vividnessTrend: DreamTrendPoint[]; // vividness (1..5) over time
   /** The recurring-nightmare nudge (12 §8.2): a recent frequency of nightmares OR an AI distress signal. */
-  nightmareNudge: boolean;
 }
 
 /** The result of generating the cross-dream AI narrative (12 §3.5) — budget-gated `dream.patterns`. */
@@ -4743,7 +4737,7 @@ export const SharedReportSchema = z.object({
   workedThrough: z.array(z.string()).default([]),
   agreementIds: z.array(z.string()).default([]),
   challengeGroupId: z.string().optional(),
-  // Dyad metrics mirror (the chart source of truth stays the twins); crisis detail is NEVER here (§8.5).
+  // Dyad metrics mirror (the chart source of truth stays the twins).
   metrics: z.record(z.string(), z.number()).optional(),
   // `wrappedUp` distinguishes an explicit "Wrap up & reflect" (marks the session DONE) from a mid-session
   // "Reflect & note action items" checkpoint (the session stays open). `wrappedUpAt` is the completion time
@@ -5925,8 +5919,6 @@ export const StoryMemorySchema = z.object({
   /** Trauma/intimacy content → the derived Insight's facts are `restricted` (own-context only), never
    *  partner-shared (the intake-restricted precedent). */
   sensitive: z.boolean().optional(),
-  /** Set when the synthesis detected acute distress — routes to the crisis affordance, never fed as content. */
-  crisisFlag: z.boolean().optional(),
   /** The Insight this memory was committed into (once saved) — so re-save updates rather than duplicates. */
   insightId: z.string().optional(),
   createdAt: z.string(),
@@ -6566,7 +6558,7 @@ export type StoryAnswerResult =
 
 /** `story:refreshCheck` — the living-book pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered,
  *  weekly-capped in the auto cadence). `auto` distinguishes the throttled launch/focus cadence from a manual
- *  "Refresh now". Crisis suppression of the auto rewrite is computed host-side (never renderer-supplied). */
+ *  "Refresh now". */
 export const StoryRefreshInputSchema = StoryBookRefSchema.extend({
   auto: z.boolean().optional(),
 });
@@ -6848,13 +6840,12 @@ export interface StoryGapPassResult {
 }
 
 /** The outcome of one autonomous interview-cadence run (§3.7 — the spec-63 loop). `minted` = a new story
- *  check-in went to the Inbox; `openCheckin` = one is already open (≤1); `throttled`/`crisis`/`noGaps`/`noBook`
+ *  check-in went to the Inbox; `openCheckin` = one is already open (≤1); `throttled`/`noGaps`/`noBook`
  *  = no spend / nothing to do. */
 export type StoryInterviewOutcome =
   | 'minted'
   | 'openCheckin'
   | 'throttled'
-  | 'crisis'
   | 'noGaps'
   | 'noBook'
   // The book is FINISHED (72 §3.6) — it still notices new material quietly, but the biographer does not

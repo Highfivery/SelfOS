@@ -17,8 +17,7 @@ import { generateStructuralProposals } from './storyStructureService';
  *
  * The structural pass still runs on this cadence (new material may warrant a whole new chapter, not just a
  * fold-in), bounded by its own weekly cap on BOTH the automatic and manual paths so an analysis call can't
- * run away. The caller supplies `auto` (the throttled launch/focus cadence vs a manual "Refresh now") and
- * `crisis` (the cadence never spends during an active crisis, §8 — detection is free and still runs).
+ * run away. The caller supplies `auto` (the throttled launch/focus cadence vs a manual "Refresh now").
  */
 
 export const STORY_WEEKLY_AUTO_CAP = 10;
@@ -57,17 +56,14 @@ async function countPasses(deps: AiDeps, bookId: string, type: string): Promise<
 }
 
 /**
- * Run the refresh pass. Detection is FREE and always runs, in both cadences and during a crisis — knowing
+ * Run the refresh pass. Detection is FREE and always runs, in both cadences — knowing
  * what could go in costs nothing and pushes nothing. Only the structural pass spends, and it is skipped
- * during a crisis and bounded by its weekly cap on both cadences.
  */
 export async function refreshBook(
   deps: AiDeps,
-  args: { bookId: string; auto: boolean; crisis?: boolean },
+  args: { bookId: string; auto: boolean },
 ): Promise<StoryRefreshResult> {
   const staled = await detectNewMaterial(deps.fs, deps.key, deps.personId, args.bookId, deps.now);
-  // The cadence never spends during an active crisis (§8). Detection above is free, so it still ran.
-  if (args.auto && args.crisis) return { ok: true, staled, rewritten: 0 };
 
   if ((await countPasses(deps, args.bookId, 'story.structure')) >= STORY_STRUCTURE_WEEKLY_CAP) {
     return { ok: true, staled, rewritten: 0 };

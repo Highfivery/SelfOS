@@ -170,6 +170,3 @@ describe('wellbeingCheckin (53 §5.1 / 51 §3.4 — the gentle, never-escalating
     ).toEqual({ due: false });
   });
 });
-
-// Cross-insight crisis awareness moved to @selfos/core/coaching `aggregateCrisisSignal` (40 §3.5) — the
-// deterministic threshold (≥2 crisis flags in 14 days OR the dream nightmare nudge). Tested in core.

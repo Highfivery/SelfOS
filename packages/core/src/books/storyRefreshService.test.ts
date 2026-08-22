@@ -158,20 +158,6 @@ describe('refreshBook (72 §5.4)', () => {
     expect((await getNewMaterial(fs, key, 'me', bookId)).entries).toEqual([]);
   });
 
-  it('detects during a crisis — knowing what could go in is free and pushes nothing', async () => {
-    const fs = memFileSystem();
-    const bookId = await seedWrittenBook(fs);
-    await saveInsight(fs, key, insight('the winter was brutal'));
-    const res = await refreshBook(deps(fs, fakeClient(proposalJson)), {
-      bookId,
-      auto: true,
-      crisis: true,
-    });
-    expect(res.staled).toBe(1); // detection ran
-    expect(res.proposalsAdded ?? 0).toBe(0); // but nothing was spent
-    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
-  });
-
   it('files structural proposals on a refresh (they ride the cadence)', async () => {
     const fs = memFileSystem();
     const bookId = await seedWrittenBook(fs);

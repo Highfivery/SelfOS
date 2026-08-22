@@ -803,33 +803,6 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(screen.queryByRole('list', { name: 'Every step' })).not.toBeInTheDocument();
   });
 
-  it('keeps the crisis footer on EVERY phase, including the ones you type into', async () => {
-    // It used to be rendered inside the intro/address/bank branches only, so it vanished on probe and
-    // scenario — the free-text phases the distress detector actually reads — and on `done`, where someone
-    // lands after a heavy take. A crisis affordance must not depend on which pane is showing.
-    installMockBridge({
-      testsBank: () => Promise.resolve(BANK),
-      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
-      testsAdaptiveProbe: () =>
-        Promise.resolve({
-          ok: true,
-          done: false,
-          degraded: false,
-          question: 'Say more about that?',
-          ambiguityId: 'a1',
-        }),
-    });
-    renderTake();
-    await useAdaptiveTestStore.getState().load('dirty-talk');
-    for (const phase of ['probe', 'scenario', 'done', 'lines'] as const) {
-      useAdaptiveTestStore.setState({ phase });
-      expect(
-        await screen.findByRole('button', { name: /get help now/i }),
-        `crisis footer missing on the ${phase} phase`,
-      ).toBeInTheDocument();
-    }
-  });
-
   it('offers a way back to the top — quiet, and off the button everybody taps', async () => {
     const abandon = vi.fn(() => Promise.resolve());
     const setArea = vi.fn(() => Promise.resolve());
@@ -1037,6 +1010,16 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await useAdaptiveTestStore.getState().load('dirty-talk');
     useAdaptiveTestStore.setState({ phase: 'bank' });
     await screen.findByRole('complementary', { name: /The steps/i });
+    /*
+     * Wait for the PRACTICE to settle before counting. This test deliberately does not call
+     * `pastPractice()` (its row must start unmarked), so the sheet is up — and its own tap is named
+     * `good girl — love it`, with no direction segment, so it matches the loose `/— love it$/` count
+     * below but neither of the split matchers. `practice` latches in an effect off `store.marks`, so
+     * under load the count can be taken one render BEFORE the sheet mounts and then compared against a
+     * later render that includes it (a real intermittent failure: "expected 3 to be 2"). The rail is
+     * not a sufficient signal — it renders first.
+     */
+    await screen.findByRole('button', { name: "good girl — it's okay" });
     const before = screen.getAllByRole('button', { name: /— love it$/ }).length;
     expect(before).toBeGreaterThan(1);
 

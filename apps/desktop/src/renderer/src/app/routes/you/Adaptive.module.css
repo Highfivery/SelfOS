@@ -776,7 +776,6 @@
  * area to reach "Next". `position: sticky` cannot fix that: a sticky element only pins while its OWN grid area
  * is on screen, and the stacked rail's area is a short strip after the rows, so it floated mid-list instead. So
  * at narrow widths the rail leaves the flow entirely and becomes a bar fixed to the window, carrying the tally
- * and the actions; `.rows` reserves its height so neither the last row nor the crisis footer can hide behind it.
  */
 @media (max-width: 900px) {
   .deckBody {

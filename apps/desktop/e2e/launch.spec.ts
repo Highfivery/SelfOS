@@ -1122,51 +1122,6 @@ test('proactive coaching: the Coaching setting is per-person, member-reachable, 
   await rm(vault, { recursive: true, force: true });
 });
 
-test('proactive coaching: recurring distress surfaces a supportive, resources-first banner on Home (40 §3.5)', async () => {
-  const { userData, vault } = await seedReadyVault();
-  // Seed two recent crisis-flagged session insights for the owner (the deterministic ≥2-in-14-days signal).
-  const fs = createNodeFileSystem(vault);
-  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
-  if (!key) throw new Error('master key missing');
-  const recent = (n: number): string =>
-    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
-  for (const [id, days] of [
-    ['cr1', 1],
-    ['cr2', 4],
-  ] as const) {
-    await saveInsight(fs, key, {
-      id,
-      schemaVersion: 1,
-      source: 'session',
-      subjectPersonId: 'owner-1',
-      summary: 'A heavy session',
-      facts: [],
-      confidence: 'medium',
-      categories: [],
-      approved: true,
-      crisisFlag: true,
-      provenance: { conversationId: id, at: recent(days) },
-      createdAt: recent(days),
-      updatedAt: recent(days),
-    });
-  }
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    // Home is the default route — the supportive banner leads with real resources, never a metric/alarm.
-    await expect(w.getByText(/carrying a lot/i)).toBeVisible();
-    await expect(w.getByText('988')).toBeVisible();
-    // It is NOT a dismissible notification (no bell item, no dismiss control on the banner).
-    await expect(w.getByRole('button', { name: /dismiss/i })).toHaveCount(0);
-    // The always-present crisis footer is also there.
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
 test('proactive coaching: the synthesis card shows the cached observation and seeds a session (40 §3.3)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
@@ -2137,7 +2092,7 @@ test('owner: a vault persisted before newer capabilities still grants full budge
   }
 });
 
-test('sessions: send a message, stream a reply, and show the usage header + crisis footer', async () => {
+test('sessions: send a message, stream a reply, and show the usage header', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const app = await launch(userData);
@@ -2160,7 +2115,6 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     await expect(w.locator('main strong', { hasText: 'one' }).first()).toBeVisible();
     await expect(w.getByText('**one**')).toHaveCount(0);
     await expect(w.getByText(/This session:/)).toHaveCount(0); // no cost in sessions
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
     // Message timestamps: a muted time below each bubble + a "Today" day divider so it's clear when each
     // message was sent/received. `.first()` — both the user + coach bubbles carry a <time>.
@@ -2629,12 +2583,7 @@ test('sessions: complete + summarize feeds a later session; status filter + reop
     await expect(w.getByText('Take a short walk before bed')).toBeVisible();
     await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
 
-    // The wrap-up card lives INSIDE the scrollable thread, so the pinned crisis footer never overlaps it: the
-    // thread's bottom edge sits at/above the "Get help now" footer (the reported overlay bug).
-    const threadBox = await w.getByTestId('session-thread').boundingBox();
-    const crisisBox = await w.getByRole('button', { name: /get help now/i }).boundingBox();
-    if (!threadBox || !crisisBox) throw new Error('overlay guard: missing boxes');
-    expect(threadBox.y + threadBox.height).toBeLessThanOrEqual(crisisBox.y + 2);
+    // The wrap-up card lives INSIDE the scrollable thread.
 
     // The auto-approved Session Insight feeds the subject's own assembled coaching context.
     const fs = createNodeFileSystem(vault);
@@ -3605,7 +3554,6 @@ test('questionnaires: Preview is a bespoke read-only presentation (hero + readin
     await expect(w.getByText(/as .* sees it/i)).toBeVisible();
     await expect(w.getByText('How are you feeling?')).toBeVisible();
     await expect(w.getByText(/read-only preview/i)).toBeVisible();
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
     await expect(w.getByRole('button', { name: 'Finish' })).toHaveCount(0);
     // The rating renders as a static scale (labelled endpoints), never an interactive/disabled slider.
     await expect(w.getByRole('slider')).toHaveCount(0);
@@ -3963,7 +3911,7 @@ test('questionnaires: recipient-first Suggested — tailor, persist, delete, cre
   }
 });
 
-test('memory: the Insights surface shows its empty state + crisis affordance', async () => {
+test('memory: the Insights surface shows its empty state', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -3973,9 +3921,7 @@ test('memory: the Insights surface shows its empty state + crisis affordance', a
     // No analyzed answers yet (the live producer wires up with the Inbox, §13.5); the empty state explains
     // when insights appear (57 §3.1).
     await expect(w.getByText(/what\s+SelfOS learns about you shows up here/i)).toBeVisible();
-    // The not-medical line + crisis affordance are always present on this surface.
-    await expect(w.getByText(/not medical care/i)).toBeVisible();
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+    // The not-medical line is always present on this surface.
 
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -5329,9 +5275,8 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await w.getByRole('button', { name: /Weekly check-in/ }).click();
 
     // The answer pane shows the Private promise — the shared derived `externalSendDisclosure` wording
-    // (one source with the relay page + the landing privacy chips, §8.4) — + the crisis affordance.
+    // (one source with the relay page + the landing privacy chips, §8.4).
     await expect(w.getByText(/won’t see your written answers/i)).toBeVisible();
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
     // The unlocked wizard (08 §25) shows one question per step: a progress bar + "Question 1 of 2", the
     // navigator, and no Send yet.
@@ -6378,10 +6323,6 @@ test('refusal read (08 §34.3): a Standard all-skipped send is readable; a Priva
       expect(f.shareable).toBe(false);
       expect(f.shareableTypes).toEqual([]);
     }
-    // A refusal read never carries a crisis flag — there are no answers to derive one from, and a crisis
-    // signal read out of a silence is a guess. The fake returns `crisisFlag: true` on this prompt precisely
-    // so this fails if the service ever passes the model's through.
-    expect(read.crisisFlag).toBeFalsy();
     expect(read.metrics).toBeUndefined();
   } finally {
     await app.close();
@@ -8729,7 +8670,7 @@ test('dreams: analyze → synthesize → edit → approve feeds the coach; the t
   }
 });
 
-test('dreams: the Patterns screen charts seeded dreams, nudges on recurring nightmares, approves a narrative', async () => {
+test('dreams: the Patterns screen charts seeded dreams and approves a narrative', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
 
@@ -8806,7 +8747,6 @@ test('dreams: the Patterns screen charts seeded dreams, nudges on recurring nigh
     await expect(w.getByText(/3 of 4/)).toBeVisible(); // nightmares of total
 
     // The recurring-nightmare nudge fires (3 nightmares within the window).
-    await expect(w.getByText(/recurring nightmares can be worth talking through/i)).toBeVisible();
 
     // Generate the on-demand AI narrative → approve it into the coaching context.
     await w.getByRole('button', { name: 'Generate a reflection' }).click();
@@ -9897,9 +9837,7 @@ test('home: a brand-new person sees the getting-started state', async () => {
     const w = await app.firstWindow();
     await expect(w.getByRole('heading', { name: /welcome to selfos/i })).toBeVisible();
     await expect(w.getByRole('button', { name: /start a session/i })).toBeVisible();
-    // No real cards yet, but the crisis affordance is always present (§7).
     await expect(w.getByRole('heading', { name: /pick up where you left off/i })).toHaveCount(0);
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -11302,8 +11240,6 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     await expect(w.getByRole('heading', { name: /Getting to know you/ })).toBeVisible();
     await expect(w.getByRole('link', { name: 'Home' })).toHaveCount(0);
     await expect(w.getByRole('link', { name: 'Sessions' })).toHaveCount(0);
-    // But it's not a dead-end — the crisis resources are always present.
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
     // And not a trap: the gated Member can switch accounts straight from the onboarding screen (not only
     // the titlebar menu) — the in-screen "Switch person" opens the account switcher.
@@ -11968,7 +11904,7 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
     await w.getByRole('button', { name: /Reflect on my result/ }).click();
     await expect(w.getByText(/Turn on AI in Settings/i)).toBeVisible();
 
-    // Check in again → a second dated result → the trend appears. Keep item 9 benign (so no crisis flag).
+    // Check in again → a second dated result → the trend appears.
     await w.getByRole('button', { name: 'Check in again' }).click();
     await w.getByRole('button', { name: 'Begin' }).click();
     await expect(w.locator('[role="radiogroup"]')).toHaveCount(9);
@@ -12005,7 +11941,6 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
     const insights = await listInsightsForPerson(fs, key, 'owner-1');
     const mood = insights.find((i) => i.source === 'test' && i.provenance.testId === 'phq9');
     expect(mood?.approved).toBe(true);
-    expect(mood?.crisisFlag).toBeUndefined();
     expect(mood?.facts.every((f) => f.shareable === false && f.shareableWith === undefined)).toBe(
       true,
     );
@@ -12014,75 +11949,6 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
     await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
     await expect(w.getByText('Your check-ins').first()).toBeVisible();
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
-test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the flag is own-only + feeds the Home aggregation (AI off)', async () => {
-  const { userData, vault } = await seedReadyVault();
-  // Seed one recent crisis-flagged session insight so the wellbeing crisis flag makes the §40 signal recur (≥2).
-  const fs = createNodeFileSystem(vault);
-  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
-  if (!key) throw new Error('wellbeing crisis e2e: master key missing');
-  const recentIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  await saveInsight(fs, key, {
-    id: 'seed-crisis',
-    schemaVersion: 1,
-    source: 'session',
-    subjectPersonId: 'owner-1',
-    summary: 'A heavy session',
-    facts: [],
-    confidence: 'medium',
-    categories: [],
-    approved: true,
-    crisisFlag: true,
-    provenance: { conversationId: 'seed-crisis', at: recentIso },
-    createdAt: recentIso,
-    updatedAt: recentIso,
-  });
-
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    await w.getByRole('link', { name: /^Tests/ }).click();
-    const moodAgain = w.getByRole('listitem', { name: 'Mood check-in' });
-    await moodAgain.scrollIntoViewIfNeeded();
-    await moodAgain.getByRole('button', { name: 'Check in' }).click();
-    await w.getByRole('button', { name: 'Begin' }).click();
-
-    // No crisis surface yet.
-    await expect(w.getByRole('alert')).toHaveCount(0);
-
-    // Answer item 9 ("better off dead…") with any positive value → crisis resources appear IMMEDIATELY, before finishing.
-    const item9 = w.getByRole('radiogroup', { name: /better off dead/i });
-    await item9.getByRole('radio', { name: 'Several days', exact: true }).click();
-    await expect(w.getByRole('alert')).toContainText(/please reach out to someone who can help/i);
-    // The always-present crisis footer resources are there too.
-    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
-
-    // Finish the rest and score. answerEveryRow sets all 9 rows (incl. item 9) to "Not at all"; re-set item 9
-    // positive afterwards so the required matrix is complete AND the crisis flag stands.
-    await answerEveryRow(w, 'Not at all');
-    await item9.getByRole('radio', { name: 'Several days', exact: true }).click();
-    await w.getByRole('button', { name: 'See my check-in' }).scrollIntoViewIfNeeded();
-    await w.getByRole('button', { name: 'See my check-in' }).click();
-    await expect(w.getByRole('alert')).toContainText(/you don’t have to face it alone/i);
-
-    // Decrypt: the derived Insight is crisisFlag, own (owner-1), and never shared (shareable false, no shareableWith).
-    const insights = await listInsightsForPerson(fs, key, 'owner-1');
-    const mood = insights.find((i) => i.source === 'test' && i.provenance.testId === 'phq9');
-    expect(mood?.crisisFlag).toBe(true);
-    expect(mood?.subjectPersonId).toBe('owner-1');
-    expect(mood?.facts.every((f) => f.shareable === false && f.shareableWith === undefined)).toBe(
-      true,
-    );
-
-    // Home: with the seeded crisis flag + this one (≥2 in 14 days), the supportive resources-first banner shows.
-    await w.getByRole('link', { name: 'Home' }).click();
-    await expect(w.getByText('988')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -13545,76 +13411,6 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
   }
 });
 
-test('needs attention (60/61): your goals + Together agreements stay visible even under a recurring crisis (own commitments, not AI pushes)', async () => {
-  const { userData, vault, ben, angel } = await seedTogetherReady();
-  const fs = createNodeFileSystem(vault);
-  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
-  if (!key) throw new Error('crisis needs-attention: master key missing');
-  // A recurring crisis signal (the deterministic ≥2 crisis-flagged insights in 14 days) — the EXACT condition
-  // that was hiding the user's goals + agreements behind Home's "lead with support" suppression.
-  const recent = (n: number): string =>
-    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
-  for (const [id, days] of [
-    ['cr1', 1],
-    ['cr2', 4],
-  ] as const) {
-    await saveInsight(fs, key, {
-      id,
-      schemaVersion: 1,
-      source: 'session',
-      subjectPersonId: ben,
-      summary: 'A heavy session',
-      facts: [],
-      confidence: 'medium',
-      categories: [],
-      approved: true,
-      crisisFlag: true,
-      provenance: { conversationId: id, at: recent(days) },
-      createdAt: recent(days),
-      updatedAt: recent(days),
-    });
-  }
-  // A standing Together agreement + an active personal goal — the person's own commitments.
-  await saveAgreement(
-    fs,
-    key,
-    ben,
-    angel,
-    { text: 'weekly date night', status: 'standing', sessionId: 'seed-sess' },
-    new Date(),
-  );
-  const goalNow = new Date().toISOString();
-  await saveGoal(fs, key, {
-    id: 'g-shutdown',
-    schemaVersion: 1,
-    subjectPersonId: ben,
-    text: 'catch shutdown moments',
-    status: 'open',
-    provenance: { at: goalNow },
-    createdAt: goalNow,
-    updatedAt: goalNow,
-    lastTouchedAt: goalNow,
-  });
-
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    // Home leads with the supportive crisis banner…
-    await expect(w.getByText(/carrying a lot/i)).toBeVisible();
-    // …AND the growth-oriented "For you" band is suppressed (§8)…
-    await expect(w.getByRole('region', { name: 'For you' })).toHaveCount(0);
-    // …but the person's OWN commitments still show in "Needs attention" (the fix — a crisis signal never hides
-    // your own goals/agreements; the banner already leads with support).
-    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
-    await expect(w.getByText('Following through with Angel')).toBeVisible();
-    await expect(w.getByText('catch shutdown moments').first()).toBeVisible();
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
 test('memory redesign (62): sections collapsed (sensitive too), edit a fact inline, decrypt + 360px guard', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);
@@ -14023,52 +13819,6 @@ test('questionnaire intelligence (69 §13): the Auto check-ins tab shows the own
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(mainOverflow).toBeLessThanOrEqual(1);
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
-test('auto check-ins (63): a recurring crisis signal pauses generation entirely', async () => {
-  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
-  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
-  const fs = createNodeFileSystem(vault);
-  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
-  if (!key) throw new Error('auto check-ins crisis e2e: master key missing');
-  await seedCompletedIntake(fs, key, 'owner-1');
-  // Two crisis-flagged approved insights in the recent window → aggregateCrisisSignal.recurring (§8.1).
-  const now = new Date().toISOString();
-  for (const id of ['crisis-1', 'crisis-2']) {
-    await saveInsight(fs, key, {
-      id,
-      schemaVersion: 1,
-      source: 'session',
-      subjectPersonId: 'owner-1',
-      summary: 'a hard week',
-      facts: [],
-      confidence: 'medium',
-      categories: [],
-      approved: true,
-      crisisFlag: true,
-      provenance: { at: now },
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Home' }).waitFor();
-    await w.getByRole('link', { name: /Questionnaires/ }).click();
-    // Auto check-ins is its own tab now (§3.1) — open it.
-    await w.getByRole('tab', { name: /Auto check-ins/ }).click();
-    await expect(w.getByText('Yourself')).toBeVisible();
-    await w.getByRole('button', { name: /Run now/ }).click();
-    // Crisis suppresses everything — the run generates nothing; the panel leads with support.
-    await expect(w.getByText(/Support comes first/)).toBeVisible();
-    expect((await listQuestionnaires(fs, key)).filter((d) => d.autoCheckin)).toHaveLength(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -16312,10 +16062,6 @@ test('story (64): the owner reads their own book in the immersive reader — fro
   }
 });
 
-// NOTE: crisis-suppression of the auto refresh/interview cadence (§8) is verified at the coreBridge level
-// (a recurring-crisis seed → the auto pass rewrites/mints nothing) — it's host-side + timing-sensitive, so it
-// stays a bridge test rather than an E2E walk.
-
 test('story (64): the draft shows live progress, keeps writing in the background while you navigate away, then finishes', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
@@ -16373,9 +16119,6 @@ test('story (64): trust repairs — protected words survive a rewrite + history 
     await w.getByRole('textbox', { name: 'Title' }).fill('Trust Repairs');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible({ timeout: 30_000 });
-
-    // The crisis footer is always present on the story surface (§8.2).
-    await expect(w.getByRole('button', { name: 'Get help now' })).toBeVisible();
 
     // Open the drafted chapter and rewrite its first paragraph IN THE PERSON'S OWN WORDS — an instant
     // inline edit that records a protected block a later rewrite must preserve verbatim (§5.3).
@@ -17889,9 +17632,6 @@ test('tests hub (50 §3.1): one grid with state on every card, a rotating next s
     await expect(flagshipPanel).toHaveCount(1);
     await expect(flagshipPanel.getByText('Keep going')).toBeVisible();
     await expect(flagshipPanel.getByText(/never really finishes/)).toBeVisible();
-
-    // The crisis footer is present on this page, always (51 §8).
-    await expect(w.getByRole('button', { name: /Get help now/i })).toBeVisible();
 
     // The chip row must occupy exactly ONE row wherever chips render — a wrapped control cluster is not a
     // design (§12), and with the full group names it wrapped into 2–3 rows at every desktop width below

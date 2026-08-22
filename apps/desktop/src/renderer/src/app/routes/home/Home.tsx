@@ -18,7 +18,6 @@ import { useTestStore } from '../../../stores/testStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { useSetting } from '../../../settings/useSetting';
-import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import {
   checkInDueChallenge,
   featuredActiveChallenge,
@@ -41,8 +40,6 @@ import {
   computeStreak,
 } from '@selfos/core/home';
 import type { ProfileUpdateSuggestion } from '@shared/channels';
-import { CrisisFooter } from '../sessions/CrisisFooter';
-import { CrisisSupportBanner } from './CrisisSupportBanner';
 import { OnboardingCard } from './OnboardingCard';
 import { ContinueCard } from './ContinueCard';
 import { WellbeingCard } from './WellbeingCard';
@@ -104,7 +101,7 @@ function defined(values: (string | undefined)[]): string[] {
  * from the existing per-person stores (60 §5.2). A quick-action dock, a greeting + momentum + rhythm streak,
  * a "For you today" band (the cached AI reflection + the smart next action), a graph-rich bento of feature
  * cards, and a right rail of life-rings + a cross-feature activity feed — all skeleton-loaded (§3.2), each
- * region self-hiding when empty, per-person, and full-engagement but crisis-guarded (§8). Slice 1 spends
+ * region self-hiding when empty, per-person, and full-engagement (§8). Slice 1 spends
  * nothing on load (the reflection is cache-only; Slice 2 adds the daily auto-cadence).
  */
 export function Home(): JSX.Element {
@@ -259,11 +256,6 @@ export function Home(): JSX.Element {
       group: t.group,
       takenAt: resultsByTest[t.id]?.[0]?.takenAt ?? '',
     }));
-  const crisis = aggregateCrisisSignal({
-    insights: approvedInsights,
-    nightmareNudge: patternStats?.nightmareNudge === true,
-    now,
-  }).recurring;
   const inboxCount = unansweredCount(inboxItems);
 
   const greeting = `${timeOfDayGreeting(now.getHours())}, ${activePerson?.displayName ?? 'there'}`;
@@ -299,7 +291,6 @@ export function Home(): JSX.Element {
     adultAcknowledged,
     proactivity,
     now,
-    crisis,
     isNew,
     configured,
     openGoals: goals.filter((g) => g.status === 'open' || g.status === 'inProgress'),
@@ -377,11 +368,8 @@ export function Home(): JSX.Element {
     areasExplored,
     goalsMovingForward: goalsMoving,
   });
-
-  // The rhythm streak (§3.1.1) — consecutive active days from ANY meaningful action. Crisis-suppressed (§8).
   const streak = computeStreak({
     now,
-    crisis,
     activity: defined([
       ...conversations.map((c) => c.updatedAt),
       ...dreams.map((d) => d.createdAt),
@@ -393,11 +381,8 @@ export function Home(): JSX.Element {
       ...challenges.filter((c) => c.checkInAt).map((c) => c.updatedAt),
     ]),
   });
-
-  // The life-rings whole-life glance (§3.1.6). Crisis softens every ring (§8).
   const moodValues = [...moodPoints, ...checkInPoints].map((p) => p.valence);
   const rings = computeLifeRings({
-    crisis,
     signals: {
       ...(moodValues.length > 0
         ? { moodValenceMean: moodValues.reduce((a, b) => a + b, 0) / moodValues.length }
@@ -499,9 +484,9 @@ export function Home(): JSX.Element {
   ).length;
 
   // The "Needs attention" queue (§3.1.2a) — waiting-on-you items, split from the growth-oriented "For you"
-  // band. The gentle AI nudges (check-in / ask-someone) are suppressed under crisis or when the person has
+  // band. The gentle AI nudges (check-in / ask-someone) are suppressed when the person has
   // turned proactive coaching off (§8); genuinely-pending items + your OWN commitments (goals, Together
-  // agreements) always show — the crisis banner leads Home with support instead of hiding your own stuff.
+  // agreements) always show.
   const attentionItems = needsAttention({
     now: nowMs,
     activePersonId,
@@ -512,7 +497,7 @@ export function Home(): JSX.Element {
     resultsByTest,
     insightDraftCount: needReview,
     otherPeopleCount: people.filter((p) => p.id !== activePersonId).length,
-    suppressNudges: crisis || proactivity === 'off',
+    suppressNudges: proactivity === 'off',
     can: {
       memory: canViewMemory,
       tests: canTakeTests,
@@ -553,7 +538,7 @@ export function Home(): JSX.Element {
     }
   }
   // Milestone badges (§3.1.7) — each earned milestone celebrates once via the same flow. `streak.days` is 0
-  // during crisis (suppressed), so no rhythm badge is earned then; celebration is also gated below (§8).
+  // celebration is gated below (§8).
   for (const badge of activeMilestones({
     streakDays: streak.days,
     sessionCount: conversations.length,
@@ -568,7 +553,7 @@ export function Home(): JSX.Element {
     });
   }
 
-  const showEncouragement = ready && proactivity !== 'off' && !crisis && !isNew;
+  const showEncouragement = ready && proactivity !== 'off' && !isNew;
   const celebration = showEncouragement ? pendingCelebration(completions, dismissedSet, now) : null;
 
   return (
@@ -609,8 +594,6 @@ export function Home(): JSX.Element {
           {/* A brand-new person gets the getting-started path only — the dock's starters would collide
               with it (§3.1.8). */}
           {!isNew ? <QuickActionDock capabilities={capabilities} /> : null}
-
-          {crisis ? <CrisisSupportBanner /> : null}
 
           {/* Needs attention (§3.1.2a) — the waiting-on-you queue, leading above the "For you" band. Self-hides
               when clear; only for an established person (a brand-new one gets getting-started). */}
@@ -676,7 +659,7 @@ export function Home(): JSX.Element {
                 <DreamsCard dreams={dreams} stats={patternStats} />
                 <MemoryCard insights={approvedInsights} canView={canViewMemory} />
                 {/* The card defers its check-in row ONLY when the `challenge-checkin` recommendation is
-                    genuinely on screen — the band is suppressed under proactivity-off / crisis / a new
+                    genuinely on screen — the band is suppressed under proactivity-off / a new
                     person / dismissal, and deferring to something that isn't rendering would leave a due
                     check-in with no inline action at all (52 §3.3). */}
                 <ChallengeCard
@@ -684,7 +667,7 @@ export function Home(): JSX.Element {
                     showEncouragement && recs.some((r) => r.id === 'challenge-checkin')
                   }
                 />
-                {canViewMemory ? <GoalsCard configured={configured} crisis={crisis} /> : null}
+                {canViewMemory ? <GoalsCard configured={configured} /> : null}
                 <QuestionnairesCard
                   sentOverview={sentOverview}
                   inboxCount={inboxCount}
@@ -702,12 +685,10 @@ export function Home(): JSX.Element {
             </div>
           )}
 
-          {!crisis ? <WelcomeOrientationCard /> : null}
+          <WelcomeOrientationCard />
           {showEncouragement ? <CelebrationMoment completion={celebration} /> : null}
         </>
       )}
-
-      <CrisisFooter />
     </div>
   );
 }

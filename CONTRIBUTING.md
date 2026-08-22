@@ -7,9 +7,7 @@ and in the [README](README.md).
 
 > [!IMPORTANT]
 > SelfOS is a wellness and self-help tool. It is **not** a medical device and **not** a substitute for
-> professional care. Any feature touching a user's wellbeing must keep that boundary visible and route
-> crisis situations to professional resources. If you are in crisis, contact local emergency services
-> or a crisis line.
+> professional care. Any feature touching a user's wellbeing must keep that boundary visible.
 
 ## How we build
 

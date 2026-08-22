@@ -554,6 +554,12 @@ bands or diagnoses even where test data informs characterization.
 
 ### 8.2 Crisis
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 The `CrisisFooter` renders on every book surface outside the immersive reader (whose colophon carries
 the line). While `aggregateCrisisSignal(...).recurring` holds, the biographer rests: no cadence spend,
 no interview invitation, no auto-generation — with a warm quiet state that says so. A memory

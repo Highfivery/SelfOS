@@ -3,7 +3,6 @@ import { ArrowLeft, Lock } from 'lucide-react';
 import { Button, Inline, Markdown, RetryBanner, Text } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { MessageAttachments } from '../sessions/MessageAttachments';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { awaitingReply, useConversationStore } from '../../../stores/conversationStore';
 import styles from './Together.module.css';
 
@@ -120,7 +119,6 @@ export function PrepPanel({
         placeholder="Write privately…"
         onSend={(text, pending) => send(text, pending)}
       />
-      <CrisisFooter />
     </div>
   );
 }

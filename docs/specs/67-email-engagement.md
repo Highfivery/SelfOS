@@ -787,6 +787,12 @@ human unprompted**, so the safety envelope is central.
 
 ### 8.1 Not-medical + crisis
 
+> **Superseded 2026-08-22 — the crisis system was removed app-wide** (owner decision; `CLAUDE.md` §1).
+> `aggregateCrisisSignal`, both `CrisisFooter`s, the `CrisisSupportBanner`, every `crisisFlag` /
+> `distressSignal` field, the PHQ-9 item-9 trigger, the nightmare nudge and email crisis suppression are
+> gone. The section below is kept for history; **do not implement it**. The not-medical boundary is a
+> separate rule and still applies.
+
 Emails carry the standard wellness/not-medical framing ([`05 §7`](05-conversations.md)). **Crisis
 suppresses the scheduled/AI families C/D/E/F** (§7): `aggregateCrisisSignal.recurring` → no digest, no
 re-engagement, no suggestion, no milestone. The **transactional (B)** and **questionnaire-delivery (A)**

@@ -14,7 +14,6 @@ describe('computeStreak', () => {
   it('counts consecutive active days ending today', () => {
     const info = computeStreak({ now, activity: [dayAt(0), dayAt(1), dayAt(2)] });
     expect(info.days).toBe(3);
-    expect(info.suppressed).toBe(false);
     expect(info.since).toBeDefined();
   });
 
@@ -40,11 +39,6 @@ describe('computeStreak', () => {
     expect(info.days).toBe(2);
   });
 
-  it('is suppressed during a crisis signal (never streak a struggling person)', () => {
-    const info = computeStreak({ now, activity: [dayAt(0), dayAt(1), dayAt(2)], crisis: true });
-    expect(info).toEqual({ days: 0, suppressed: true });
-  });
-
   it('ignores unparseable and future timestamps', () => {
     const future = dayAt(-2); // 2 days ahead
     const info = computeStreak({ now, activity: [dayAt(0), 'not-a-date', future] });
@@ -52,6 +46,6 @@ describe('computeStreak', () => {
   });
 
   it('empty activity → no streak', () => {
-    expect(computeStreak({ now, activity: [] })).toEqual({ days: 0, suppressed: false });
+    expect(computeStreak({ now, activity: [] })).toEqual({ days: 0 });
   });
 });

@@ -20,7 +20,7 @@ spec so it's consistent, complete, and ready for review.
    the vault storage model, and the IPC/security boundaries in
    [`docs/specs/00-architecture.md`](docs/specs/00-architecture.md). Reference, don't restate.
 5. **Wellness safety.** If the feature touches user wellbeing or conversation, include a **Safety**
-   subsection: the not-medical boundary and crisis-routing behavior.
+   subsection: the not-medical boundary. (There is no crisis system — `CLAUDE.md` §1.)
 6. **List open questions** explicitly at the bottom rather than assuming answers.
 7. **Hand off for review.** Specs are perfected with the user before any code. Use the `spec-writer`
    agent for heavy drafting when useful.

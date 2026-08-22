@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Heart, Lock, Plus } from 'lucide-react';
 import type { TogetherCatalogEntry, TogetherPulseView, TogetherYnmStatus } from '@shared/schemas';
 import { Button, Heading, Inline, Select, Stack, Text } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { togetherWaitingCount, useTogetherStore } from '../../../stores/togetherStore';
 import { TogetherStartDialog, type StartPending } from './TogetherStartDialog';
@@ -234,7 +233,6 @@ export function Together(): JSX.Element {
             conversation here.
           </Text>
         </div>
-        <CrisisFooter />
       </div>
     );
   }
@@ -280,7 +278,7 @@ export function Together(): JSX.Element {
             />
           ) : null}
 
-          {/* Tabbed IA (58 §3.2a) — the sections above the crisis footer are grouped into tabs so the page
+          {/* Tabbed IA (58 §3.2a) — the sections are grouped into tabs so the page
               stops being a long busy scroll. The hero + footer stay outside, present on every tab. */}
           <div className={styles.tabs} role="tablist" aria-label="Together">
             {tabs.map((t) => (
@@ -399,8 +397,6 @@ export function Together(): JSX.Element {
           </section>
         </>
       ) : null}
-
-      <CrisisFooter />
     </div>
   );
 }

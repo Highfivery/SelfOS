@@ -512,46 +512,6 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
     expect(second.outcome).toBe('openCheckin');
   });
 
-  it('never spends during a crisis, and no-ops without a book/outline', async () => {
-    const fs = memFileSystem();
-    const bookId = await seedBook(fs);
-    let streamed = false;
-    const spy: ClaudeClient = {
-      send: () => Promise.resolve(''),
-      stream: () => {
-        streamed = true;
-        return Promise.resolve({ text: '', usage: USAGE });
-      },
-    };
-    const crisis = await runStoryInterviewCadence(deps(fs, spy), {
-      bookId,
-      auto: true,
-      crisis: true,
-    });
-    expect(crisis.outcome).toBe('crisis');
-    expect(streamed).toBe(false);
-
-    const fs2 = memFileSystem();
-    await savePerson(fs2, key, person);
-    const book = await createBook(fs2, key, {
-      personId: 'me',
-      type: 'biography',
-      title: 'Empty',
-      config: {
-        voice: 'third',
-        style: 'warm',
-        length: 'standard',
-        autoRefresh: true,
-        typeOptions: {},
-        sourceIds: [],
-      },
-      now,
-    });
-    const res = await runStoryInterviewCadence(deps(fs2, spy), { bookId: book.id, auto: true });
-    expect(res.outcome).toBe('noBook');
-    expect(streamed).toBe(false);
-  });
-
   it('the weekly cap throttles the manual path (no spend past the cap)', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);

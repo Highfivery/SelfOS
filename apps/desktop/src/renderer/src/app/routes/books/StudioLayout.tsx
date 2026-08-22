@@ -9,15 +9,13 @@ import {
   Text,
   TextInput,
 } from '../../../design-system/components';
-import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
 import styles from './Books.module.css';
-import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import { manuscriptMetrics } from '@selfos/core/books-metrics';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { BookManifest, StoryBookBundle } from '@shared/schemas';
 import { BookSwitcher } from './BookSwitcher';
@@ -151,19 +149,8 @@ export function StudioLayout({
     loadNewMaterial,
   ]);
 
-  // The crisis-quiet state (§8.2/§13.4): while the person's own signals show recurring distress, the
-  // biographer's auto cadences pause host-side — SURFACE that instead of letting the pause read as broken.
-  // Renderer-computed from the person's own approved insights (the Home CrisisSupportBanner precedent).
-  const activePersonIdForCrisis = useSessionStore((s) => s.activePerson?.id);
-  const insights = useInsightStore((s) => s.insights);
-  useEffect(() => {
-    void useInsightStore.getState().load();
-  }, [activePersonIdForCrisis]);
-  const crisisQuiet = useMemo(() => {
-    const own = insights.filter((i) => i.approved && i.subjectPersonId === activePersonIdForCrisis);
-    return aggregateCrisisSignal({ insights: own, nightmareNudge: false, now: new Date() })
-      .recurring;
-  }, [insights, activePersonIdForCrisis]);
+  // The signed-in person, used to resolve the OTHER partner of a shared pair book below.
+  const activePersonId = useSessionStore((s) => s.activePerson?.id);
 
   // Resolve the data URLs the chapter cards use as their background: each chapter's own illustration where it
   // has one, otherwise the book cover — so the grid gets richer as art is added (§3.1 redesign).
@@ -258,7 +245,7 @@ export function StudioLayout({
   }, [bookTypeView?.sharedWithPartner, loadHousehold]);
   const sharedPartnerName = (() => {
     if (!bookTypeView?.sharedWithPartner) return null;
-    const other = manifest.personId.split('~').find((id) => id !== activePersonIdForCrisis);
+    const other = manifest.personId.split('~').find((id) => id !== activePersonId);
     return householdPeople.find((p) => p.id === other)?.displayName ?? null;
   })();
   const countUnit = (n: number): string => `${n} ${n === 1 ? unit.one : unit.many}`;
@@ -369,12 +356,6 @@ export function StudioLayout({
           {staleCount > 0 ? (
             <Text size="sm" tone="tertiary">
               {staleCount} chapter{staleCount === 1 ? ' has' : 's have'} new material to fold in.
-            </Text>
-          ) : null}
-          {crisisQuiet ? (
-            <Text size="sm" tone="tertiary">
-              Your biographer is resting while things are heavy — support comes first. The book
-              waits for you; nothing is lost.
             </Text>
           ) : null}
           {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
@@ -500,7 +481,6 @@ export function StudioLayout({
           onFind={async () => {
             setInterviewBusy(true);
             try {
-              // Honest outcomes (§8.2): AI-off, the weekly cap, the back-off, and crisis each explain
               // themselves — never a vague "check back later" for a state the person could act on.
               const res = await runInterviewCheck(bookId);
               switch (res.outcome) {
@@ -512,8 +492,6 @@ export function StudioLayout({
                   return 'Nothing new to ask right now — your story is well covered.';
                 case 'aiOff':
                   return aiUnavailableMessage({ canManageAi });
-                case 'crisis':
-                  return 'Your biographer is resting while things are heavy — support comes first.';
                 case 'throttled':
                   if (res.throttleReason === 'weeklyCap')
                     return 'Your biographer has already taken stock twice this week — try again in a few days.';

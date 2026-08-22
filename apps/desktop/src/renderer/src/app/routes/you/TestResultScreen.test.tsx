@@ -135,10 +135,9 @@ const phq9: TestSummary = {
     moderate: 'Your answers suggest a fair amount of low mood has been weighing on you lately.',
     severe: 'Your answers suggest you’ve been going through a really heavy time.',
   },
-  crisisItems: [{ questionId: 'phq9-9', atOrAbove: 1 }],
 };
 
-function phqResult(opts: { band: string; crisisFlag?: boolean }): TestResult {
+function phqResult(opts: { band: string }): TestResult {
   return {
     id: 'wr1',
     schemaVersion: 1,
@@ -147,7 +146,6 @@ function phqResult(opts: { band: string; crisisFlag?: boolean }): TestResult {
     subjectPersonId: 'p1',
     answers: [],
     scores: [{ key: 'phq9.total', raw: 11, normalized: 0.41, band: opts.band }],
-    ...(opts.crisisFlag ? { crisisFlag: true } : {}),
     insightId: 'wi1',
     takenAt: '2026-06-26T10:00:00Z',
     createdAt: '2026-06-26T10:00:00Z',
@@ -183,18 +181,5 @@ describe('TestResultScreen — wellbeing (51 §3.3)', () => {
     expect(screen.queryByText('moderate')).not.toBeInTheDocument();
     expect(screen.queryByText(/you have/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/depression/i)).not.toBeInTheDocument();
-  });
-
-  it('leads with a warm, resources-first crisis banner when the result is crisis-flagged (§5.2)', () => {
-    installMockBridge({});
-    useTestStore.setState({
-      catalog: [phq9],
-      resultsByTest: { phq9: [phqResult({ band: 'severe', crisisFlag: true })] },
-      adultAcknowledged: false,
-      loaded: true,
-    });
-    renderWellbeing();
-    const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(/you don’t have to face it alone/i);
   });
 });

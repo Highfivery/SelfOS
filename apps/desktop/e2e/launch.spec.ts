@@ -2807,7 +2807,10 @@ test('challenges (52): co-create a challenge → propose-then-agree captures a t
     // common path, §7). Decrypt to prove no Challenge yet.
     await w.getByLabel('Message').fill('give me a challenge');
     await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText(/want to go for it/i)).toBeVisible();
+    // `.first()` is load-bearing: mid stream→persist handoff BOTH the streaming bubble and the saved
+    // message carry this text, so a bare match is a strict-mode violation. Observed failing at 1.3s in a
+    // full run while passing in isolation — the documented streaming-assertion rule, not a product bug.
+    await expect(w.getByText(/want to go for it/i).first()).toBeVisible();
     expect(await listChallenges(fs, key, 'owner-1')).toHaveLength(0);
 
     // Turn 2 — agree: the coach confirms + emits a private marker → "Challenge set ✓" (the marker never shows).

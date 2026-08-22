@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.62.0](https://github.com/Highfivery/SelfOS/compare/v0.61.1...v0.62.0) (2026-08-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove the crisis / distress system app-wide ([#562](https://github.com/Highfivery/SelfOS/issues/562))
+
+### Features
+
+* remove the crisis / distress system app-wide ([#562](https://github.com/Highfivery/SelfOS/issues/562)) ([0284c2f](https://github.com/Highfivery/SelfOS/commit/0284c2f23008f8fc7b12819d44411c7aea4f3e24))
+
 ## [0.61.1](https://github.com/Highfivery/SelfOS/compare/v0.61.0...v0.61.1) (2026-08-22)
 
 

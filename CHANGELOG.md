@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.1](https://github.com/Highfivery/SelfOS/compare/v0.61.0...v0.61.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **tests:** remove the traffic-light check-in, and clean what it already wrote (74) ([#560](https://github.com/Highfivery/SelfOS/issues/560)) ([3af2009](https://github.com/Highfivery/SelfOS/commit/3af2009d358ee37347ca05dd044ee7145a614fbe))
+
 ## [0.61.0](https://github.com/Highfivery/SelfOS/compare/v0.60.1...v0.61.0) (2026-08-21)
 
 

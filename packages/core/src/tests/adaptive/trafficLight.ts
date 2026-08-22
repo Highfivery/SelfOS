@@ -116,9 +116,10 @@ function differs(a: unknown, b: unknown): boolean {
 }
 
 /**
- * The living lexicon's free-text fields. Runs inside `resolveLexicon`, so every one of the 32 consumers that
- * reads a lexicon gets the cleaned copy, and the one caller that writes back (`orientationForMarking`)
- * persists it.
+ * The living lexicon's free-text fields. Runs inside `resolveLexicon`, which is the single door every read
+ * goes through — measured: 7 modules outside this one call `readLexicon` (`chatService`, the books, the
+ * emails, questionnaires, challenges, notes and the bridge) — so they all get the cleaned copy, and the one
+ * caller that writes back (`orientationForMarking`) persists it.
  */
 export function scrubLexiconProse(lexicon: EroticLexicon): {
   lexicon: EroticLexicon;

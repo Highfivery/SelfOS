@@ -181,6 +181,21 @@ describe('74 §3.6.40 — scrubbing a past take', () => {
     expect(after.turns?.[0]?.answer).toBeUndefined();
   });
 
+  it("UNSETS a take's voice too, for the same reason", () => {
+    const after = scrubResult(
+      result({
+        profile: {
+          registers: {},
+          contexts: {},
+          themes: [],
+          wantsToSay: [],
+          voice: 'Use the colour system.',
+        },
+      }),
+    ).result;
+    expect(after.profile?.voice).toBeUndefined();
+  });
+
   it('is a no-op — and returns the same object — for a take that never mentioned it', () => {
     const clean = result({ narrative: 'You want asking.', turns: [] });
     const out = scrubResult(clean);
@@ -217,6 +232,14 @@ describe('74 §3.6.40 — scrubbing the living lexicon prose', () => {
     expect(lexicon.voice).toBe('Low and close.');
     expect(lexicon.contexts['during']).toEqual({ heat: 0.9 });
     expect(lexicon.contexts['after']).toEqual({ heat: 0.3 });
+  });
+
+  it('UNSETS a voice whose every sentence named it — a conditional spread cannot clear what was spread in', () => {
+    const { lexicon } = scrubLexiconProse({
+      ...emptyLexicon('p1', NOW),
+      voice: 'Ask for a colour when it gets heavy.',
+    });
+    expect(lexicon.voice).toBeUndefined();
   });
 
   it('is a no-op for a lexicon that never mentioned it', () => {

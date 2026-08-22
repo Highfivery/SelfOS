@@ -139,16 +139,12 @@ export function scrubLexiconProse(lexicon: EroticLexicon): {
     differs(voice, lexicon.voice) ||
     differs(contexts, lexicon.contexts);
   if (!changed) return { lexicon, changed: false };
-  return {
-    lexicon: {
-      ...lexicon,
-      themes,
-      wantsToSay,
-      contexts,
-      ...(voice === undefined ? {} : { voice }),
-    },
-    changed: true,
-  };
+  // Built then deleted, never a conditional spread: `...lexicon` has already carried the OLD `voice` in, so
+  // spreading nothing when the scrub empties it leaves the original standing.
+  const next: EroticLexicon = { ...lexicon, themes, wantsToSay, contexts };
+  if (voice === undefined) delete next.voice;
+  else next.voice = voice;
+  return { lexicon: next, changed: true };
 }
 
 /**
@@ -213,13 +209,11 @@ export function scrubResult(result: TestResult): { result: TestResult; changed: 
       differs(contexts, profile.contexts)
     ) {
       changed = true;
-      next.profile = {
-        ...profile,
-        themes,
-        wantsToSay,
-        contexts,
-        ...(voice === undefined ? {} : { voice }),
-      };
+      // Same trap as the lexicon's: a conditional spread cannot UNSET what `...profile` already carried in.
+      const nextProfile = { ...profile, themes, wantsToSay, contexts };
+      if (voice === undefined) delete nextProfile.voice;
+      else nextProfile.voice = voice;
+      next.profile = nextProfile;
     }
   }
 

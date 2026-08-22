@@ -104,6 +104,22 @@ describe('the dirty-talk bank (74 §13)', () => {
     }
   });
 
+  it('has no traffic-light check-in left in it (74 §3.6.40)', () => {
+    /*
+     * The owner cut `colour?` and `green / amber / red` from the consent family on 2026-08-22 — he did not
+     * want the protocol offered as something to rate. Pinned by KEY, because that is what a stored mark is
+     * held against: re-adding either row under the same text would silently resurrect it in the workflow
+     * AND un-retire everyone's marks, since retirement here is derived from "family present, key absent".
+     */
+    for (const key of ['consent:colour', 'consent:green-amber-red']) {
+      expect(bankEntry(DIRTY_TALK_BANK, key), key).toBeUndefined();
+    }
+    // The family itself stays, and so does the ordinary stop-language in it — only the protocol went.
+    const consent = bankByFamily(DIRTY_TALK_BANK).get('consent') ?? [];
+    expect(consent.length).toBeGreaterThan(0);
+    expect(consent.map((e) => e.text)).toContain('say the word and I stop');
+  });
+
   it('keeps the taboo family framed as pre-agreed roleplay (74 §8.1)', () => {
     const taboo = DIRTY_TALK_BANK.families.find((family) => family.id === 'taboo');
     expect(taboo?.note).toMatch(/PRE-AGREED, SAFEWORDED ROLEPLAY/);

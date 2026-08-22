@@ -1261,8 +1261,6 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
       2: [
         "tell me if it's too much",
         'you can stop me',
-        { text: 'colour?', ex: 'colour? — the check-in mid-scene: green, amber, red' },
-        'green / amber / red',
         'say the word and I stop',
         'we can stop any time',
       ],

@@ -19,6 +19,7 @@ import {
   mergeLexicons,
   readLexicon,
   retireDeadKeys,
+  resolveLexicon,
   suppressedTexts,
   violatesBoundary,
   writeLexicon,
@@ -1196,5 +1197,94 @@ describe('74 §3.6.29 — the legacy word-boundary records are gone', () => {
     const read = await readLexicon(fs, KEY, 'p1', LATER);
     expect(read.boundaries.map((b) => b.kind)).toEqual(['theme']);
     expect(violatesBoundary(read, 'I love the way you look at me')).toBe(false);
+  });
+});
+
+describe('74 §3.6.40 — the traffic-light rows, and what happens to a mark on one', () => {
+  const COLOUR = 'consent:colour';
+  const LIGHTS = 'consent:green-amber-red';
+
+  /**
+   * A lexicon written BEFORE the cut: the entries existed, so they were marked like any other row. Built by
+   * hand rather than through `applyDirectionalMarks`, because the bank no longer has them to mark — which is
+   * exactly the state every existing vault is in.
+   */
+  function marked(): EroticLexicon {
+    const rows: LexiconEntry[] = [
+      {
+        key: COLOUR,
+        text: 'colour?',
+        kind: 'phrase',
+        family: 'consent',
+        tier: 2,
+        hear: 4,
+        say: 4,
+        hearState: 'love',
+        sayState: 'love',
+        source: 'test:old',
+      },
+      {
+        key: LIGHTS,
+        text: 'green / amber / red',
+        kind: 'phrase',
+        family: 'consent',
+        tier: 2,
+        hear: 0,
+        say: 0,
+        hearState: 'never',
+        sayState: 'never',
+        source: 'test:old',
+      },
+    ];
+    return { ...seeded(), entries: [...seeded().entries, ...rows] };
+  }
+
+  it('retires both marks outright, because the family is still in the bank and the keys are not', () => {
+    const { lexicon, changed } = retireDeadKeys(marked());
+    expect(changed).toBe(true);
+    expect(lexicon.entries.map((e) => e.key)).not.toContain(COLOUR);
+    expect(lexicon.entries.map((e) => e.key)).not.toContain(LIGHTS);
+    // Nothing else moved: this is a cut with no survivor, so no mark migrates anywhere (74 §3.6.25).
+    expect(lexicon.entries.map((e) => e.key)).toContain(GOOD_GIRL);
+    expect(lexicon.entries.map((e) => e.key)).toContain(CUNT);
+  });
+
+  it('releases the suppression the `never` was carrying, so nothing is left suppressing a word no row can lift', () => {
+    expect(suppressedTexts(marked())).toContain('green / amber / red');
+    const { lexicon } = retireDeadKeys(marked());
+    expect(suppressedTexts(lexicon)).not.toContain('green / amber / red');
+    // The other person's real boundaries are untouched.
+    expect(suppressedTexts(lexicon)).toContain('manwhore');
+  });
+
+  it('cleans it on the ONE read every consumer goes through, not just on the Tests screens', async () => {
+    /*
+     * The point of the §3.6.34 placement: `chatService`, the books, the emails, questionnaires, challenges
+     * and the steer all call `readLexicon` directly. If the cleaning only ran in `pruneUnshownMarks` they
+     * would each keep reading the retired rows out of the raw file.
+     */
+    const fs: FileSystem = memFileSystem();
+    await writeLexicon(fs, KEY, marked());
+    const read = await readLexicon(fs, KEY, 'p1', LATER);
+    expect(read.entries.map((e) => e.key)).not.toContain(COLOUR);
+    expect(read.entries.map((e) => e.key)).not.toContain(LIGHTS);
+  });
+
+  it('also clears the model-written prose the bank cut cannot reach', () => {
+    /*
+     * `wantsToSay` is the one that matters: it feeds `goalSuggestService` and becomes a `wants-to-say` fact
+     * on the derived Insight, and NO control in the app can remove an item from it — the only edits offered
+     * are `removeBoundary`, `clearNameSide` and the nuclear delete-all. Left alone it is the §3.2
+     * un-gettable-rid-of preference reached through the synthesis instead of through the bank.
+     */
+    const withProse: EroticLexicon = {
+      ...marked(),
+      themes: ['being asked', 'colour checks'],
+      wantsToSay: ['cock', 'green / amber / red'],
+    };
+    const resolved = resolveLexicon(withProse, LATER);
+    expect(resolved.changed).toBe(true);
+    expect(resolved.lexicon.wantsToSay).toEqual(['cock']);
+    expect(resolved.lexicon.themes).toEqual(['being asked']);
   });
 });

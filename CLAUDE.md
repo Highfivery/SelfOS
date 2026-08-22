@@ -561,6 +561,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-22 — **Fix (the traffic-light check-in is gone, including from what the app already wrote; owner-directed;
+  SPEC 74 §3.6.40; on `fix/drop-traffic-light-consent-rows`).** _"i just dont want users seeing options in the
+  worflow for it."_ Two rows cut from the `consent` family (F29): **`colour?`** and **`green / amber / red`**. The
+  family stays and every other row in it stays — the ordinary stop-language (`say the word and I stop`, `we can
+stop any time`) is untouched. **The rows needed no migration**: `retireCutMarks` derives retirement from
+  "family still in the bank, key gone" and `readLexicon` runs it on EVERY read, so a mark on either key retires
+  outright, its suppression is released with it, and `orientationForMarking` persists the compaction. Nothing was
+  added to `DIRTY_TALK_RETIREMENTS` — that map is for a cut with somewhere to GO, and nothing else in the bank
+  says what the protocol says. **The interesting half is what a bank cut CANNOT reach: free text**, because none
+  of it is keyed by an entry. Three kinds, all cleaned on the owner's instruction ("everything, including my own
+  answers"): the living lexicon's prose (`themes`/`wantsToSay`/`voice`/context notes) — a **pre-existing gap this
+  closes**, since no control in the app can remove an item from any of them (only `removeBoundary`,
+  `clearNameSide`, delete-all) and `wantsToSay` feeds `goalSuggestService` AND becomes a partner-shared Insight
+  fact, i.e. the §3.2 un-gettable-rid-of preference reached through the SYNTHESIS instead of the bank; a past
+  take (`narrative`/`lede`/`readings`/`profile`/`turns`); and the derived Insight's facts, which are only rebuilt
+  when a take completes. **Measured, not assumed, before the owner chose the broad `colour`/`color` matcher: the
+  word appears exactly ONCE in the entire bank** — the row being removed — so nothing structural was at risk and
+  the exposure is prose alone. **I also proposed a prompt constraint and he rejected it, correctly**: `REGISTER`
+  (injected into all five phases) requires taboo material to be "pre-agreed, **safeworded** roleplay", so banning
+  safeword language in the same prompt would have been §3.6.39 exactly — one rule written twice, the copies
+  disagreeing. Gate green: typecheck ×4, lint, format, **2587 core + 1814 desktop** unit, spec-74 E2E. Every new
+  guard **verified to fail when reverted** (restoring the two rows fails 4; neutering the prose scrub fails its
+  own), with the revert asserted to have applied before believing the result. **Lessons: (1) a bank cut is only
+  half a removal — marks are keyed and heal themselves, but the model-written PROSE derived from them is not
+  keyed by anything, so it survives every purge and, with no control able to edit it, becomes permanent. Ask
+  "what free text did this produce?" whenever content is retired. (2) The removed term ended in a QUESTION MARK,
+  which makes a naive sentence split actively harmful: it cuts "asked colour? mid-scene, which fits" in half and
+  the trailing fragment survives the filter. Fold a lowercase continuation back before filtering. (3) Vitest does
+  not typecheck (bitten again): `as TestResult['readings']` masked a `key`-vs-`kind` field error through a green
+  16-test run, and only `pnpm typecheck` caught it.**
+
 - 2026-08-21 — **Build (Notes — the owner writes to ONE person, and it goes out as SelfOS; SPEC 76 written,
   approved, BUILT; #552 spec, #553 + #555 the fixes it surfaced, #556 core + seam, this the surface).** The
   owner asked for a way to email members about new features, ask a questionnaire question, or suggest

@@ -9,6 +9,7 @@ import {
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import { bankEntry, toLexiconEntry, type Bank, type BankEntry } from './bank';
 import { LEXICON_BANKS } from './instruments/lexiconBanks';
+import { scrubLexiconProse } from './trafficLight';
 import { shownSides, type Orientation } from './orientation';
 
 /**
@@ -96,9 +97,13 @@ export function resolveLexicon(
   const deck = resetPreDirectionalDeckMarks(lexicon, now);
   const words = dropLegacyWordBoundaries(deck.lexicon, now);
   const dead = retireDeadKeys(words.lexicon);
+  // 74 §3.6.40 — the fourth. `retireDeadKeys` reaches every mark; nothing reaches the model-written PROSE
+  // (`themes`, `wantsToSay`, `voice`, context notes), which is not keyed by a bank entry and which no
+  // control in the app can remove an item from.
+  const prose = scrubLexiconProse(dead.lexicon);
   return {
-    lexicon: dead.lexicon,
-    changed: deck.changed || words.changed || dead.changed,
+    lexicon: prose.lexicon,
+    changed: deck.changed || words.changed || dead.changed || prose.changed,
   };
 }
 

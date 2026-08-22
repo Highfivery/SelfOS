@@ -838,19 +838,29 @@ test('onboarding attention (55): a completed profile with a NEW section surfaces
 
     // ~360px: the Home attention card renders with no horizontal overflow / inner scrollbar.
     await w.setViewportSize({ width: 360, height: 800 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
   }
@@ -1350,19 +1360,29 @@ test('home (53): the "For you" zone ranks recommendations, reflects momentum, di
 
     // 360px: the full surface renders with NO horizontal overflow — not page-level, not an inner scrollbar.
     await w.setViewportSize({ width: 360, height: 800 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -1460,19 +1480,29 @@ test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the 
     // overflow-Y only, so it is never a horizontal offender (60 §3.3/§9).
     await w.getByRole('link', { name: 'Home' }).click();
     await w.setViewportSize({ width: 360, height: 800 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -1658,19 +1688,29 @@ test('home (53 Slice B): the intimacy exercise surfaces once the 18+ ack is give
 
     // 360px: the full surface renders with no horizontal overflow / inner scrollbar.
     await w.setViewportSize({ width: 360, height: 800 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -2847,19 +2887,29 @@ test('intimacy guided sessions (48): a new explicit card runs + summarizes; 18+ 
 
     // No horizontal overflow / inner scrollbar at phone width with the expanded Intimacy group revealed.
     await w.setViewportSize({ width: 390, height: 780 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
     await w.setViewportSize({ width: 1100, height: 800 });
 
     // Start a new explicit chat exercise → its static opener renders (no model call), then a steered reply.
@@ -6170,19 +6220,29 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     await w.getByRole('link', { name: /Inbox/ }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.setViewportSize({ width: 360, height: 800 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -11777,19 +11837,29 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
 
     // No horizontal overflow / inner scrollbar at phone width on the result surface.
     await w.setViewportSize({ width: 360, height: 780 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -11919,19 +11989,29 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
 
     // No horizontal overflow / inner scrollbar at phone width on the result surface.
     await w.setViewportSize({ width: 360, height: 780 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
     await w.setViewportSize({ width: 1024, height: 800 });
 
     // The derived Insight is on disk, approved, source 'test', for the mood check-in — and its fact is never shared.
@@ -13361,19 +13441,29 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
 
     // ~360px: the new "Together commitments" surface renders with no horizontal overflow / inner scrollbar (§7/§12).
     await w.setViewportSize({ width: 360, height: 900 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
     await w.setViewportSize({ width: 1100, height: 800 });
 
     await w.getByRole('button', { name: 'Mark done' }).click();
@@ -13479,19 +13569,29 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
 
     // ~360px: no horizontal overflow / inner scrollbars (§7/§12).
     await w.setViewportSize({ width: 360, height: 900 });
-    const overflow = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${el.className}`);
-        }
-      });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(overflow.offenders).toEqual([]);
-    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    /*
+     * POLL, do not one-shot. A resize is followed by a reflow, and reading geometry in the same tick
+     * measures the wide layout inside a narrow box — a transient horizontal overflow that is not a real
+     * one. Under a loaded full-suite run that window is wide enough to fail (observed on the Home
+     * dashboard: `.contentInner` reported as an offender, while the same test passed in isolation).
+     * `expectNoInnerOverflow` already polls for exactly this reason; these sites had been reading once.
+     */
+    await expect
+      .poll(async () =>
+        w.evaluate(() => {
+          const offenders: string[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            const ox = getComputedStyle(el).overflowX;
+            if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+              offenders.push(`${el.tagName}.${el.className}`);
+            }
+          });
+          const main = document.querySelector('main');
+          const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+          return [...offenders, ...(mainOverflow > 1 ? [`MAIN overflow ${mainOverflow}`] : [])];
+        }),
+      )
+      .toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

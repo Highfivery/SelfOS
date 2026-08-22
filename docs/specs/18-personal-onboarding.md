@@ -1,5 +1,11 @@
 # 18 — Personal onboarding ("Getting to know you")
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Approved · **Built + on `main`** · _last updated 2026-06-23_ · **Amended 2026-06-15 (§14–§15):**
 > the all-chat interview was reworked into a **hybrid form/chat intake** — a short gated `core` of quick forms +
 > `invited` deep/sensitive sections, specific questions everywhere, an explicit branched intimacy block, useful

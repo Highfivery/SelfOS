@@ -1,5 +1,11 @@
 # 53 — Home dashboard uplift & personalized encouragement engine
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Built (Slice A + Slice B) · §11 resolved · _last updated 2026-06-26_
 >
 > The Home dashboard ([`17`](17-home-dashboard.md)) has accreted ~10 stacked cards (crisis banner, welcome,

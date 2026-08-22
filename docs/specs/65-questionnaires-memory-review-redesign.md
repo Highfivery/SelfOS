@@ -1,5 +1,11 @@
 # 65 — Questionnaires & Memory: review queue, per-item insight cards, humanized trends
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** **Built** — _last updated 2026-08-14_ (all four slices built 2026-07-17, plus a 2026-07-18 follow-up)
 >
 > **Decisions (2026-07-17, user):** the review queue goes **straight to "all caught up"** after the last item —

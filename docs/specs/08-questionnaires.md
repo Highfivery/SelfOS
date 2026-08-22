@@ -1,5 +1,11 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Built** (2026-06-15 audit fixes &
 > enhancements, §16 — ALL slices): §16.1–§16.4, §16.6, §16.7 **MERGED to `main`**; §16.5 explicit generation +
 > §16.5a shared owner-extensible `INTIMACY_TOPICS` (the constant + intake sync + owner Settings/inline UI)

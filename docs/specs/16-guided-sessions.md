@@ -1,5 +1,11 @@
 # 16 — Guided sessions (starters & structured exercises)
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Approved · **Built** · _last updated 2026-06-14_
 >
 > A session ([`05`](05-conversations.md)) starts from a blank page today. This spec turns the Sessions

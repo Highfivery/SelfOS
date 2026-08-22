@@ -1,5 +1,11 @@
 # 51 — Wellbeing & neurodivergence self-reflections
 
+> **⚠️ SUPERSEDED IN PART — 2026-08-22.** The **crisis / distress system was removed app-wide**
+> (see `CLAUDE.md` §1 and `docs/record-crisis-removal.md`). Any text below describing `crisisFlag`,
+> `distressSignal`, a `CrisisFooter` / `CrisisSupportBanner`, crisis aggregation, a nightmare nudge or
+> crisis routing is **historical**: it describes a system that no longer exists and **must not be
+> reimplemented**. The **not-medical positioning boundary is unaffected and still stands.**
+
 > **Status:** Built — _last updated 2026-06-26_
 >
 > A second battery on top of the [`50`](50-self-assessments.md) Tests engine: **non-diagnostic wellbeing &
@@ -8,9 +14,13 @@
 > in SelfOS they are reframed as **"reflections"/"check-ins"** that surface a gentle range, **always** beside the
 > line "this is a reflection, not a medical opinion — if it resonates, consider talking to a professional." This
 > is the **most safety-sensitive feature in the app**, so it gets its own spec specifically to make the safety
-> design (§8) front-and-centre: **crisis routing is mandatory and never optional**, and a positive self-harm /
-> suicide answer (PHQ-9 item 9) immediately surfaces crisis resources mid-check-in and feeds the existing
-> cross-insight crisis aggregation.
+> design (§8) front-and-centre.
+>
+> **As-built correction (2026-08-22):** the sentence that stood here — that crisis routing is mandatory and
+> never optional, and that PHQ-9 item 9 surfaces crisis resources mid-check-in and feeds a cross-insight
+> aggregation — **described a system that has been removed** (owner decision; item 9 went with it). It is
+> kept struck-through in the body below as design history. What remains is the non-diagnostic framing: a
+> gentle range, never a clinical band, always beside the not-medical line.
 
 Builds on [`50`](50-self-assessments.md) (the **Tests engine** — `TestDefinition`/`TestResult`/`scoreTest`/the
 **"You" hub**/`source: 'test'` Insight bridge; these instruments are just more `TestDefinition`s with a
@@ -39,14 +49,14 @@ with items + a declarative scoring spec → a per-person encrypted `TestResult` 
 `Insight` `source: 'test'`). What makes this battery different from spec-50's personality/relationship/intimacy
 tests is the **content and the safety handling**, not the machinery:
 
-| Dimension          | Spec-50 tests (Big Five / attachment / intimacy)       | This spec (51 — wellbeing reflections)                                                        |
-| ------------------ | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Source instruments | public-domain personality/relationship + original kink | **clinically-validated screeners** (PHQ-9, GAD-7, ASRS, AQ-10/RAADS-R) — **free to use**      |
-| Framing            | "a reflection, not a verdict" (already non-diagnostic) | **"a reflection, not a medical opinion"** — a strictly stronger non-diagnostic reframe (§8)   |
-| Crisis             | the always-present `CrisisFooter`; a heuristic flag    | **mandatory, item-level crisis routing** (PHQ-9 item 9) + the §40 cross-insight aggregation   |
-| Result display     | subscale bars + descriptor bands                       | a **gentle band/range in non-clinical language**, never the clinical label, never "you have"  |
-| Category           | `personality` / `relationships` / `intimacy`           | a **new `wellbeing` test category** (a clearly-separated "Reflections / check-ins" hub group) |
-| Re-take            | retakeable (trends)                                    | mood/anxiety **re-takeable to track over time** (the wellbeing trend); ADHD/autism: §11       |
+| Dimension          | Spec-50 tests (Big Five / attachment / intimacy)        | This spec (51 — wellbeing reflections)                                                                                                 |
+| ------------------ | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Source instruments | public-domain personality/relationship + original kink  | **clinically-validated screeners** (PHQ-9, GAD-7, ASRS, AQ-10/RAADS-R) — **free to use**                                               |
+| Framing            | "a reflection, not a verdict" (already non-diagnostic)  | **"a reflection, not a medical opinion"** — a strictly stronger non-diagnostic reframe (§8)                                            |
+| Crisis             | ~~the always-present `CrisisFooter`; a heuristic flag~~ | ~~**mandatory, item-level crisis routing** (PHQ-9 item 9) + the §40 cross-insight aggregation~~ **— REMOVED 2026-08-22, both columns** |
+| Result display     | subscale bars + descriptor bands                        | a **gentle band/range in non-clinical language**, never the clinical label, never "you have"                                           |
+| Category           | `personality` / `relationships` / `intimacy`            | a **new `wellbeing` test category** (a clearly-separated "Reflections / check-ins" hub group)                                          |
+| Re-take            | retakeable (trends)                                     | mood/anxiety **re-takeable to track over time** (the wellbeing trend); ADHD/autism: §11                                                |
 
 The clinical instruments **are validated screeners**, but **SelfOS does not screen** — a screener implies a
 clinical question ("does this person have depression?") with a downstream care pathway. SelfOS reframes them as a

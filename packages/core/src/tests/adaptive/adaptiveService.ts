@@ -22,10 +22,10 @@ import {
   writeLexicon,
 } from './lexicon';
 import { takeCarriesDistress } from './distress';
-import { scrubResult } from './trafficLight';
 import { recordTakeSaturation } from './saturation';
 import { scoreSpine } from './spine';
 import { nameFamilies } from './bank';
+import { scrubResult } from './trafficLight';
 import type { AdaptiveTestDefinition } from './types';
 import { getGuidancePrefs } from '../../conversations/guidanceService';
 import { buildProfileReadBlock } from './steer';
